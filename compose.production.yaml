@@ -1,0 +1,13 @@
+services:
+  postgres:
+    ports: !reset []
+    restart: always
+
+  backend:
+    restart: always
+
+  frontend:
+    restart: always
+
+  gateway:
+    restart: always
