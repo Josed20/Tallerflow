@@ -1,4 +1,6 @@
-# TallerFlow Sprint 1 Team Implementation Plan
+# TallerFlow Sprint 1 Team Implementation Plan (OBSOLETO)
+
+> **No iniciar estas tareas.** La arquitectura cambió a autenticación propia en Go, Vue 3 con TypeScript y despliegue en VPS. El Sprint 1 se regenerará tras aprobar la nueva especificación.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

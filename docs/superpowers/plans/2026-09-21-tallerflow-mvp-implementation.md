@@ -1,4 +1,6 @@
-# TallerFlow MVP Implementation Plan
+# TallerFlow MVP Implementation Plan (OBSOLETO)
+
+> **No ejecutar este plan.** Corresponde a la arquitectura anterior con Supabase y JavaScript. Se regenerará después de aprobar la nueva especificación.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
