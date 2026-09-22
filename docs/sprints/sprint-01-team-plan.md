@@ -11,6 +11,7 @@
 - Arquitectura: `docs/superpowers/specs/2026-09-21-tallerflow-mvp-design.md`
 - Hoja de ruta: `docs/superpowers/plans/2026-09-21-tallerflow-mvp-implementation.md`
 - Plan ejecutable: `docs/superpowers/plans/2026-09-21-tallerflow-phase-1-foundations.md`
+- Tareas humanas de José: `docs/sprints/sprint-01-human-handoff.md`
 
 ## 1. Alcance
 
