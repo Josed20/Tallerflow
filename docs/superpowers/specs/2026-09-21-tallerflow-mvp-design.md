@@ -1,6 +1,6 @@
 # TallerFlow MVP — Especificación de producto y arquitectura
 
-**Estado:** Propuesta escrita para revisión final
+**Estado:** Aprobada para planificación
 
 **Fecha:** 2026-09-21
 
