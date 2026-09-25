@@ -1,0 +1,641 @@
+openapi: 3.1.0
+info:
+  title: TallerFlow API
+  version: 0.1.0
+  description: API contract for TallerFlow Phase 1 secure foundations.
+servers:
+  - url: /
+    description: Same-origin deployment
+tags:
+  - name: Health
+  - name: Authentication
+  - name: Identity
+  - name: Workshops
+paths:
+  /health/live:
+    get:
+      tags: [Health]
+      operationId: healthLive
+      summary: Check whether the API process is alive
+      security: []
+      responses:
+        '200':
+          description: API process is alive.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveHealthResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /health/ready:
+    get:
+      tags: [Health]
+      operationId: healthReady
+      summary: Check whether the API and its dependencies are ready
+      security: []
+      responses:
+        '200':
+          description: API and required dependencies are ready.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyHealthResponse'
+        '503':
+          description: A required dependency is unavailable.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                unavailable:
+                  value:
+                    error:
+                      code: DEPENDENCY_UNAVAILABLE
+                      message: A required dependency is unavailable.
+                      details: {}
+                      request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/auth/login:
+    post:
+      tags: [Authentication]
+      operationId: login
+      summary: Start an opaque browser session
+      description: >-
+        Authenticates the user without revealing whether the account exists. On
+        success, the server writes the opaque session cookie and returns the
+        session's expiry and raw CSRF token for in-memory use by the client. The
+        server validates the request's Origin or Referer against its configured
+        allowed origin before evaluating credentials.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginInput'
+      responses:
+        '200':
+          description: Authentication succeeded and a session was created.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+            Set-Cookie:
+              $ref: '#/components/headers/SessionCookieSet'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          description: Email, account state, or password is invalid.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidCredentials:
+                  value:
+                    error:
+                      code: AUTH_INVALID_CREDENTIALS
+                      message: Email or password is incorrect.
+                      details: {}
+                      request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
+        '403':
+          description: Request origin is not allowed.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidOrigin:
+                  value:
+                    error:
+                      code: ORIGIN_INVALID
+                      message: El origen de la solicitud no está permitido.
+                      details: {}
+                      request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
+        '429':
+          description: Too many login attempts.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+            Retry-After:
+              description: Seconds until another attempt should be made.
+              schema:
+                type: integer
+                minimum: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/auth/logout:
+    post:
+      tags: [Authentication]
+      operationId: logout
+      summary: Revoke the current session
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      responses:
+        '200':
+          description: Session was revoked and its cookie was expired.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+            Set-Cookie:
+              $ref: '#/components/headers/SessionCookieCleared'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyResponse'
+        '401':
+          $ref: '#/components/responses/SessionInvalid'
+        '403':
+          $ref: '#/components/responses/CSRFInvalid'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/auth/session:
+    get:
+      tags: [Authentication]
+      operationId: getSession
+      summary: Restore the current browser session
+      description: >-
+        Returns the current session expiry, its raw CSRF token, and whether the
+        password must be replaced. It never returns session IDs or token hashes.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Current session is valid.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '401':
+          $ref: '#/components/responses/SessionInvalid'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/auth/change-password:
+    post:
+      tags: [Authentication]
+      operationId: changePassword
+      summary: Change the current user's password and rotate the session
+      description: >-
+        Revokes the user's other sessions, clears the mandatory-change flag,
+        rotates the current opaque session, and returns the replacement CSRF
+        token. Password confirmation is a client-side concern and is not sent.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordInput'
+      responses:
+        '200':
+          description: Password changed and current session rotated.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+            Set-Cookie:
+              $ref: '#/components/headers/SessionCookieSet'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/SessionInvalid'
+        '403':
+          $ref: '#/components/responses/CSRFInvalid'
+        '422':
+          description: Current password is wrong or the new password violates policy.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/me:
+    get:
+      tags: [Identity]
+      operationId: getMe
+      summary: Get the current user's tenant-aware profile
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Current user, workshop, role, and password state.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '401':
+          $ref: '#/components/responses/SessionInvalid'
+        '403':
+          description: >-
+            Password replacement is required, or the user does not resolve to
+            exactly one active workshop membership.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                passwordChangeRequired:
+                  value:
+                    error:
+                      code: PASSWORD_CHANGE_REQUIRED
+                      message: The password must be changed before accessing this resource.
+                      details: {}
+                      request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/workshops/current:
+    get:
+      tags: [Workshops]
+      operationId: getCurrentWorkshop
+      summary: Get the authenticated user's current workshop
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Current workshop resolved from the authenticated principal.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkshopResponse'
+        '401':
+          $ref: '#/components/responses/SessionInvalid'
+        '403':
+          description: The user does not resolve to exactly one active workshop membership.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                passwordChangeRequired:
+                  value:
+                    error:
+                      code: PASSWORD_CHANGE_REQUIRED
+                      message: The password must be changed before accessing this resource.
+                      details: {}
+                      request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
+        '404':
+          description: Workshop is not available in the current tenant context.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-tallerflow_session
+      description: >-
+        Opaque session token. The server sets this cookie with Secure, HttpOnly,
+        SameSite=Lax, and Path=/; browser code must not read or persist it.
+  parameters:
+    CSRFToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      description: >-
+        Raw token bound to the current session. Required on every authenticated
+        mutation and validated together with Origin or Referer.
+      schema:
+        type: string
+        minLength: 43
+        maxLength: 43
+  headers:
+    RequestID:
+      description: Unique identifier assigned to the request.
+      schema:
+        type: string
+        format: uuid
+    SessionCookieSet:
+      description: >-
+        Sets __Host-tallerflow_session with Secure, HttpOnly, SameSite=Lax, and
+        Path=/. Its value is an opaque token and is never returned in JSON.
+      schema:
+        type: string
+        example: __Host-tallerflow_session=opaque-token; Path=/; Secure; HttpOnly; SameSite=Lax
+    SessionCookieCleared:
+      description: Expires the opaque session cookie immediately.
+      schema:
+        type: string
+        example: __Host-tallerflow_session=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax
+  responses:
+    InvalidRequest:
+      description: Request body or parameters are invalid.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    SessionInvalid:
+      description: Session is missing, expired, revoked, or otherwise invalid.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+        Set-Cookie:
+          $ref: '#/components/headers/SessionCookieCleared'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalidSession:
+              value:
+                error:
+                  code: SESSION_INVALID
+                  message: The session is invalid or has expired.
+                  details: {}
+                  request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
+    CSRFInvalid:
+      description: CSRF token or request origin validation failed.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalidCSRF:
+              value:
+                error:
+                  code: CSRF_INVALID
+                  message: CSRF validation failed.
+                  details: {}
+                  request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
+    InternalError:
+      description: Unexpected server error.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    LoginInput:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          example: owner@tallerflow.pe
+        password:
+          type: string
+          minLength: 1
+          maxLength: 1048576
+          writeOnly: true
+    ChangePasswordInput:
+      type: object
+      additionalProperties: false
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+          minLength: 1
+          maxLength: 1048576
+          writeOnly: true
+        new_password:
+          type: string
+          minLength: 12
+          maxLength: 1048576
+          writeOnly: true
+          description: Must differ from the current password.
+    ApiError:
+      type: object
+      additionalProperties: false
+      required: [code, message, details, request_id]
+      properties:
+        code:
+          type: string
+          pattern: '^[A-Z][A-Z0-9_]*$'
+          example: SESSION_INVALID
+        message:
+          type: string
+          minLength: 1
+          example: The session is invalid or has expired.
+        details:
+          type: object
+          additionalProperties: true
+          description: Safe, machine-readable context; never contains secrets.
+        request_id:
+          type: string
+          format: uuid
+    SessionData:
+      type: object
+      additionalProperties: false
+      required: [expires_at, csrf_token, must_change_password]
+      properties:
+        expires_at:
+          type: string
+          format: date-time
+          description: UTC expiry of the current session, at most eight hours after creation.
+        csrf_token:
+          type: string
+          minLength: 43
+          maxLength: 43
+          description: >-
+            Raw CSRF token for this session. Keep only in memory and send it in
+            X-CSRF-Token on authenticated mutations.
+        must_change_password:
+          type: boolean
+          description: >-
+            When true, only session restoration, password change, and logout
+            flows are available until the password is replaced.
+    UserSummary:
+      type: object
+      additionalProperties: false
+      required: [id, name, email]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+          maxLength: 254
+    WorkshopSummary:
+      type: object
+      additionalProperties: false
+      required: [id, name, timezone]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        timezone:
+          type: string
+          minLength: 1
+          maxLength: 80
+          example: America/Lima
+    MeData:
+      type: object
+      additionalProperties: false
+      required: [id, name, email, workshop, role, must_change_password]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        workshop:
+          $ref: '#/components/schemas/WorkshopSummary'
+        role:
+          type: string
+          enum: [OWNER, ADMIN, OPERATOR]
+        must_change_password:
+          type: boolean
+    HealthData:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+    Meta:
+      type: object
+      additionalProperties: true
+      description: Optional response metadata.
+    EmptyData:
+      type: object
+      additionalProperties: false
+    LiveHealthResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          allOf:
+            - $ref: '#/components/schemas/HealthData'
+            - type: object
+              properties:
+                status:
+                  const: alive
+        meta:
+          $ref: '#/components/schemas/Meta'
+    ReadyHealthResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          allOf:
+            - $ref: '#/components/schemas/HealthData'
+            - type: object
+              properties:
+                status:
+                  const: ready
+        meta:
+          $ref: '#/components/schemas/Meta'
+    SessionResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/SessionData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    MeResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/MeData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    WorkshopResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/WorkshopSummary'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    EmptyResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/EmptyData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          $ref: '#/components/schemas/ApiError'

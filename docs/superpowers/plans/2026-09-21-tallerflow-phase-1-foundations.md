@@ -6,7 +6,7 @@
 
 **Architecture:** Vue se sirve como SPA y consume una API Go del mismo origen. Go administra contraseñas Argon2id, sesiones opacas, CSRF y permisos; PostgreSQL aplica Flyway y RLS como segunda barrera de aislamiento.
 
-**Tech Stack:** Go 1.27.x, Gin, GORM, PostgreSQL 18.x, Flyway 13.7.0, Vue 3, TypeScript, Vite, TanStack Query, Pinia, Tailwind CSS, Reka UI, Vitest, Playwright, Docker Compose v2 y Caddy 2.x.
+**Tech Stack:** Go 1.27.x, Gin, GORM, PostgreSQL 18.x, Flyway 13.7.0, Vue 3, TypeScript, Vite, TanStack Query, Pinia, Tailwind CSS, Reka UI, Vitest, Playwright, Docker Compose plugin y Caddy 2.x.
 
 **Spec:** `docs/superpowers/specs/2026-09-21-tallerflow-mvp-design.md`
 
@@ -81,7 +81,7 @@ Expected:
 
 - Go 1.27.x.
 - Node 24 LTS.
-- Docker Engine accesible y Compose v2.
+- Docker Engine accesible y `docker compose` funcional.
 - `main` sin cambios rastreados pendientes.
 
 El entorno revisado antes de este plan no tenía Go disponible y el daemon de Docker estaba apagado. La ejecución se detiene en preflight hasta corregir ambos requisitos; la documentación puede revisarse sin ellos.
@@ -111,8 +111,8 @@ El entorno revisado antes de este plan no tenía Go disponible y el daemon de Do
 
 ```powershell
 cd backend
-go mod init github.com/tallerflow/tallerflow/backend
-go get github.com/gin-gonic/gin github.com/google/uuid github.com/stretchr/testify
+go mod init github.com/Josed20/Tallerflow/backend
+go get github.com/gin-gonic/gin github.com/google/uuid github.com/stretchr/testify golang.org/x/crypto/argon2
 ```
 
 - [ ] **Step 2: Escribir la prueba fallida de configuración**
@@ -180,10 +180,10 @@ paths:
 
 ```powershell
 cd backend
-gofmt -w .
+go fmt ./...
 go test -race ./...
 go vet ./...
-git add backend
+git add . ../docs/contracts/openapi.yaml
 git commit -m "feat(platform): bootstrap Go API and health endpoint"
 ```
 
@@ -390,7 +390,7 @@ Agregar `database.Ping(ctx)` y conectar `GET /health/ready`; debe devolver `503 
 ```powershell
 cd backend
 go test -race ./platform/database ./platform/httpx
-git add platform cmd
+git add platform/database platform/httpx cmd/api
 git commit -m "feat(database): enforce tenant-scoped transactions"
 ```
 
@@ -515,7 +515,9 @@ func TestLoginDoesNotRevealAccountExistence(t *testing.T) {
     unknown := performLogin(t, router, "missing@example.com", "wrong")
     known := performLogin(t, router, "owner@example.com", "wrong")
     require.Equal(t, http.StatusUnauthorized, unknown.Code)
-    require.JSONEq(t, unknown.Body.String(), known.Body.String())
+    require.Equal(t, errorCode(unknown), errorCode(known))
+    require.Equal(t, errorMessage(unknown), errorMessage(known))
+    require.Equal(t, "AUTH_INVALID_CREDENTIALS", errorCode(unknown))
 }
 
 func TestLoginRateLimit(t *testing.T) {
@@ -540,7 +542,7 @@ type LoginInput struct {
 const SessionCookieName = "__Host-tallerflow_session"
 ```
 
-Definir el puerto `MembershipResolver` dentro del servicio de login. El login solo crea sesión cuando devuelve exactamente una membresía activa. En desarrollo, permitir un nombre `tallerflow_session` solo cuando `Environment=development`; producción debe negarse a iniciar si `Secure` se desactiva.
+Definir el puerto `MembershipResolver` dentro del servicio de login. El login solo crea sesión cuando devuelve exactamente una membresía activa. Validar `Origin` o `Referer` también en login y probar que un origen ajeno recibe `403 ORIGIN_INVALID`. En desarrollo, permitir un nombre `tallerflow_session` solo cuando `Environment=development`; producción debe negarse a iniciar si `Secure` se desactiva.
 
 - [ ] **Step 3: Escribir pruebas de sesión expirada y revocada**
 
@@ -554,6 +556,17 @@ func TestRequireSessionClearsExpiredCookie(t *testing.T) {
 ```
 
 Repetir para `revoked_at` no nulo.
+
+La sesión puede autenticarse durante el primer ingreso, pero `RequireSession` bloquea todas las rutas privadas con `403 PASSWORD_CHANGE_REQUIRED` mientras `must_change_password` sea verdadero. Las únicas excepciones son `GET /auth/session`, `POST /auth/change-password` y `POST /auth/logout`.
+
+```go
+func TestTemporaryPasswordCannotAccessProtectedAPI(t *testing.T) {
+    session := loginWithBootstrapPassword(t, router)
+    res := performWithSession(t, router, session, http.MethodGet, "/api/v1/me")
+    require.Equal(t, http.StatusForbidden, res.Code)
+    require.Equal(t, "PASSWORD_CHANGE_REQUIRED", errorCode(res))
+}
+```
 
 - [ ] **Step 4: Escribir pruebas CSRF**
 
@@ -569,7 +582,7 @@ Probar además origen ajeno y token correcto. Comparar tokens en tiempo constant
 
 - [ ] **Step 5: Implementar sesión y logout**
 
-`GET /auth/session` devuelve fecha de expiración y CSRF raw únicamente para la sesión actual. `POST /logout` revoca en PostgreSQL y expira la cookie.
+`GET /auth/session` devuelve `expires_at`, `csrf_token` y `must_change_password` para la sesión actual. El token CSRF raw se deriva de la cookie de sesión mediante HMAC-SHA-256 con una clave de propósito separado; solo su hash se almacena en PostgreSQL. Esto permite recuperarlo tras recargar la página sin guardar el valor raw en la base. `POST /logout` revoca en PostgreSQL y expira la cookie.
 
 - [ ] **Step 6: Probar cambio obligatorio de contraseña**
 
@@ -734,11 +747,10 @@ Crear usuario, credencial, taller, membresía OWNER y auditoría en una transacc
 
 - [ ] **Step 3: Implementar CLI sin filtrar contraseña**
 
-La contraseña entra por `TF_BOOTSTRAP_PASSWORD`, no por argumento ni log. Los argumentos solo contienen email, nombre y taller.
+La contraseña entra por stdin con `--password-stdin`, no por argumento ni log. Los argumentos solo contienen email, nombre y taller. El comando rechaza stdin vacío y no imprime la contraseña.
 
 ```powershell
-$env:TF_BOOTSTRAP_PASSWORD = "temporary-value"
-go run ./cmd/bootstrap --email owner@tallerflow.pe --name "Owner Demo" --workshop "Taller Demo"
+$env:TF_BOOTSTRAP_PASSWORD | go -C backend run ./cmd/bootstrap --password-stdin --email owner@tallerflow.pe --name "Owner Demo" --workshop "Taller Demo"
 ```
 
 - [ ] **Step 4: Probar idempotencia segura**
@@ -839,7 +851,7 @@ npm run type-check
 npm run lint
 npm run test:unit -- --run
 npm run build
-git add frontend
+git add .
 git commit -m "feat(frontend): add Vue TypeScript design foundation"
 ```
 
@@ -899,6 +911,8 @@ it('restores a server session without browser storage', async () => {
   expect(localStorage.length).toBe(0)
 })
 ```
+
+Si `/auth/session` devuelve `must_change_password: true`, `restore` no llama a `/me` y lleva al usuario a `/change-password`. Tras el cambio, una nueva sesión permite cargar `/me`.
 
 - [ ] **Step 3: Implementar store**
 
@@ -1085,26 +1099,21 @@ Playwright debe comprobar credenciales inválidas, doble envío, sesión expirad
 - [ ] **Step 3: Ejecutar recorrido limpio**
 
 ```powershell
-docker compose down -v
-docker compose up --build -d
-$env:TF_BOOTSTRAP_PASSWORD = $env:E2E_OWNER_PASSWORD
-docker compose exec backend /tallerflow-bootstrap --email owner@tallerflow.pe --name "Owner Demo" --workshop "Taller Demo"
-cd frontend
-npx playwright test e2e/auth.spec.ts
+docker compose -p tallerflow-e2e up --build -d
+$env:E2E_OWNER_PASSWORD | docker compose -p tallerflow-e2e exec -T backend /tallerflow-bootstrap --password-stdin --email owner@tallerflow.pe --name "Owner Demo" --workshop "Taller Demo"
+npm --prefix frontend exec playwright test e2e/auth.spec.ts
 ```
 
 - [ ] **Step 4: Ejecutar la puerta completa**
 
 ```powershell
-cd backend
-go test -race ./...
-go vet ./...
-cd ..\frontend
-npm run type-check
-npm run lint
-npm run test:unit -- --run
-npm run build
-npx playwright test
+go -C backend test -race ./...
+go -C backend vet ./...
+npm --prefix frontend run type-check
+npm --prefix frontend run lint
+npm --prefix frontend run test:unit -- --run
+npm --prefix frontend run build
+npm --prefix frontend exec playwright test
 ```
 
 - [ ] **Step 5: Documentar y confirmar**
