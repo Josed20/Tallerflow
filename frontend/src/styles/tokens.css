@@ -1,0 +1,14 @@
+:root {
+  font-family: Manrope, system-ui, sans-serif;
+  color: #0b1c30;
+  background: #f8f9ff;
+  --tf-primary: #00685f;
+  --tf-primary-hover: #008378;
+  --tf-surface: #ffffff;
+  --tf-surface-soft: #eff4ff;
+  --tf-text-muted: #3d4947;
+  --tf-border: #bcc9c6;
+  --tf-error: #ba1a1a;
+  --tf-error-bg: #ffdad6;
+  --tf-radius: 0.75rem;
+}
