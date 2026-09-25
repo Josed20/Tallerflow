@@ -13,6 +13,8 @@ services:
       DB_MIGRATION_PASSWORD: ${DB_MIGRATION_PASSWORD:-local-migrator-change-me}
       DB_APP_USER: ${DB_APP_USER:-tallerflow_app}
       DB_APP_PASSWORD: ${DB_APP_PASSWORD:-local-app-change-me}
+      DB_BOOTSTRAP_USER: ${DB_BOOTSTRAP_USER:-tallerflow_bootstrap}
+      DB_BOOTSTRAP_PASSWORD: ${DB_BOOTSTRAP_PASSWORD:-local-bootstrap-change-me}
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -46,8 +48,10 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgres://tallerflow_app:local-app-change-me@postgres:5432/tallerflow?sslmode=disable}
-      PORT: "8080"
+      TF_DATABASE_URL: ${TF_DATABASE_URL:-postgres://tallerflow_app:local-app-change-me@postgres:5432/tallerflow?sslmode=disable}
+      TF_HTTP_ADDRESS: ":8080"
+      TF_ENVIRONMENT: ${TF_ENVIRONMENT:-development}
+      TF_SESSION_PEPPER: ${TF_SESSION_PEPPER:-local-session-pepper-change-me}
     depends_on:
       flyway:
         condition: service_completed_successfully

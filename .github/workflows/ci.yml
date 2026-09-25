@@ -21,12 +21,19 @@ jobs:
       - name: Validate migrations
         run: docker compose run --rm flyway validate
       - name: Test constraints
-        run: docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_SUPERUSER" -d "$POSTGRES_DB" < database/tests/constraints.sql
+        run: docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_bootstrap -d "$POSTGRES_DB" < database/tests/constraints.sql
+        env:
+          POSTGRES_SUPERUSER: postgres
+          POSTGRES_DB: tallerflow
+      - name: Test identity contract and bootstrap privileges
+        run: docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_bootstrap -d "$POSTGRES_DB" < database/tests/identity_contract.sql
         env:
           POSTGRES_SUPERUSER: postgres
           POSTGRES_DB: tallerflow
       - name: Test tenant isolation
-        run: docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_SUPERUSER" -d "$POSTGRES_DB" < database/tests/rls.sql
+        run: |
+          docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_bootstrap -d "$POSTGRES_DB" < database/tests/rls_setup.sql
+          docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_app -d "$POSTGRES_DB" < database/tests/rls.sql
         env:
           POSTGRES_SUPERUSER: postgres
           POSTGRES_DB: tallerflow
