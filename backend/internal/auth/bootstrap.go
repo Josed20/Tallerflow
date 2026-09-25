@@ -11,7 +11,7 @@ import (
 
 var (
 	ErrBootstrapAlreadyExists = errors.New("BOOTSTRAP_ALREADY_EXISTS")
-	ErrBootstrapInvalidInput   = errors.New("BOOTSTRAP_INVALID_INPUT")
+	ErrBootstrapInvalidInput  = errors.New("BOOTSTRAP_INVALID_INPUT")
 )
 
 type BootstrapInput struct {
@@ -32,6 +32,7 @@ type BootstrapResult struct {
 // Implementations must roll back all writes (including audit) on any error.
 type BootstrapTx interface {
 	InsertUser(context.Context, string, string) (uuid.UUID, error)
+	ClaimInitialOwner(context.Context, uuid.UUID) error
 	InsertCredential(context.Context, uuid.UUID, string, bool) error
 	InsertWorkshop(context.Context, string, string) (uuid.UUID, error)
 	InsertMembership(context.Context, uuid.UUID, uuid.UUID, string) error
@@ -69,6 +70,9 @@ func (s *BootstrapService) CreateOwner(ctx context.Context, in BootstrapInput) (
 	err = s.store.WithinTransaction(ctx, func(tx BootstrapTx) error {
 		userID, err := tx.InsertUser(ctx, in.Email, in.Name)
 		if err != nil {
+			return err
+		}
+		if err := tx.ClaimInitialOwner(ctx, userID); err != nil {
 			return err
 		}
 		if err := tx.InsertCredential(ctx, userID, hash, true); err != nil {

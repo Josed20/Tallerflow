@@ -83,6 +83,29 @@ func TestBootstrapDoesNotChangeExistingOwner(t *testing.T) {
 	}
 }
 
+func TestBootstrapRejectsSecondOwnerWithDifferentEmail(t *testing.T) {
+	store := newBootstrapStoreFake()
+	service := NewBootstrapService(store, NewPasswordHasher(DefaultPasswordParams()))
+	first := BootstrapInput{
+		Email: "first-owner@tallerflow.pe", Name: "First Owner",
+		WorkshopName: "First Workshop", Password: "Temporary secure passphrase 9!",
+	}
+	if _, err := service.CreateOwner(context.Background(), first); err != nil {
+		t.Fatalf("first bootstrap failed: %v", err)
+	}
+
+	_, err := service.CreateOwner(context.Background(), BootstrapInput{
+		Email: "second-owner@tallerflow.pe", Name: "Second Owner",
+		WorkshopName: "Second Workshop", Password: "Another secure passphrase 10!",
+	})
+	if !errors.Is(err, ErrBootstrapAlreadyExists) {
+		t.Fatalf("second bootstrap error = %v, want ErrBootstrapAlreadyExists", err)
+	}
+	if len(store.state.users) != 1 || len(store.state.workshops) != 1 || len(store.state.memberships) != 1 || len(store.state.audit) != 1 {
+		t.Fatal("second bootstrap changed the initial owner state")
+	}
+}
+
 type bootstrapCredential struct {
 	passwordHash string
 	mustChange   bool
@@ -92,11 +115,12 @@ type bootstrapMembership struct {
 	role               string
 }
 type bootstrapState struct {
-	users       map[string]uuid.UUID
-	credentials map[uuid.UUID]bootstrapCredential
-	workshops   map[uuid.UUID]string
-	memberships []bootstrapMembership
-	audit       []string
+	bootstrapped bool
+	users        map[string]uuid.UUID
+	credentials  map[uuid.UUID]bootstrapCredential
+	workshops    map[uuid.UUID]string
+	memberships  []bootstrapMembership
+	audit        []string
 }
 type bootstrapStoreFake struct {
 	state          bootstrapState
@@ -111,7 +135,8 @@ func newBootstrapStoreFake() *bootstrapStoreFake {
 
 func (s *bootstrapStoreFake) WithinTransaction(ctx context.Context, fn func(BootstrapTx) error) error {
 	staged := bootstrapState{
-		users: map[string]uuid.UUID{}, credentials: map[uuid.UUID]bootstrapCredential{}, workshops: map[uuid.UUID]string{},
+		bootstrapped: s.state.bootstrapped,
+		users:        map[string]uuid.UUID{}, credentials: map[uuid.UUID]bootstrapCredential{}, workshops: map[uuid.UUID]string{},
 		memberships: append([]bootstrapMembership(nil), s.state.memberships...), audit: append([]string(nil), s.state.audit...),
 	}
 	for key, value := range s.state.users {
@@ -142,6 +167,13 @@ func (tx *bootstrapTxFake) InsertUser(_ context.Context, email, _ string) (uuid.
 	id := uuid.New()
 	tx.state.users[email] = id
 	return id, nil
+}
+func (tx *bootstrapTxFake) ClaimInitialOwner(_ context.Context, _ uuid.UUID) error {
+	if tx.state.bootstrapped {
+		return ErrBootstrapAlreadyExists
+	}
+	tx.state.bootstrapped = true
+	return nil
 }
 func (tx *bootstrapTxFake) InsertCredential(_ context.Context, userID uuid.UUID, passwordHash string, mustChange bool) error {
 	tx.state.credentials[userID] = bootstrapCredential{passwordHash, mustChange}

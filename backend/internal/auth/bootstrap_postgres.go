@@ -45,6 +45,11 @@ func (tx postgresBootstrapTx) InsertUser(ctx context.Context, email, name string
 	return id, err
 }
 
+func (tx postgresBootstrapTx) ClaimInitialOwner(ctx context.Context, userID uuid.UUID) error {
+	_, err := tx.tx.Exec(ctx, `INSERT INTO bootstrap_state (owner_user_id) VALUES ($1)`, userID)
+	return err
+}
+
 func (tx postgresBootstrapTx) InsertCredential(ctx context.Context, userID uuid.UUID, passwordHash string, mustChange bool) error {
 	_, err := tx.tx.Exec(ctx, `INSERT INTO user_credentials (user_id, password_hash, must_change_password) VALUES ($1, $2, $3)`, userID, passwordHash, mustChange)
 	return err
