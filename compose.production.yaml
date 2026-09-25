@@ -1,0 +1,23 @@
+services:
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?set a production PostgreSQL password}
+      DB_OWNER_PASSWORD: ${DB_OWNER_PASSWORD:?set a production owner password}
+      DB_MIGRATION_PASSWORD: ${DB_MIGRATION_PASSWORD:?set a production Flyway password}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD:?set a production application password}
+      DB_BOOTSTRAP_PASSWORD: ${DB_BOOTSTRAP_PASSWORD:?set a production bootstrap password}
+    ports: !reset []
+    restart: always
+
+  backend:
+    environment:
+      TF_DATABASE_URL: ${TF_DATABASE_URL:?set the application database URL}
+      TF_SESSION_PEPPER: ${TF_SESSION_PEPPER:?set a random session pepper}
+      TF_ENVIRONMENT: production
+    restart: always
+
+  frontend:
+    restart: always
+
+  gateway:
+    restart: always
