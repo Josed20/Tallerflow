@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"mime"
-	"net"
 	"net/http"
 	"net/mail"
 	"net/url"
@@ -84,7 +83,7 @@ func (h *Handler) Login(c *gin.Context) {
 		h.fail(c, http.StatusBadRequest, "INVALID_REQUEST", "The request is invalid.")
 		return
 	}
-	result, err := h.service.Login(c.Request.Context(), input.Email, input.Password, requestIP(c.Request))
+	result, err := h.service.Login(c.Request.Context(), input.Email, input.Password, requestIP(c))
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrInvalidCredentials):
@@ -243,12 +242,8 @@ func sessionData(session AuthSession) gin.H {
 	}
 }
 
-func requestIP(request *http.Request) string {
-	host, _, err := net.SplitHostPort(request.RemoteAddr)
-	if err != nil {
-		return request.RemoteAddr
-	}
-	return host
+func requestIP(c *gin.Context) string {
+	return strings.TrimSpace(c.ClientIP())
 }
 
 func decodeJSON(c *gin.Context, value any, maxBytes int64) error {

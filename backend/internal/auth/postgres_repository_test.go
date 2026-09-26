@@ -206,6 +206,33 @@ func preparedSessionFixture() NewSession {
 	}
 }
 
+func TestPostgresRepositoryLimiterUsesIPAndEmailBuckets(t *testing.T) {
+	repository, mock := newPostgresRepositoryFixture(t)
+	windowStart := testNow.Add(-15 * time.Minute)
+	query := `SELECT COUNT(*) FILTER (WHERE email = $1) AS email_ip_failures, COUNT(*) AS ip_failures FROM login_attempts WHERE succeeded = false AND ip_prefix = $2 AND attempted_at >= $3`
+	mock.ExpectQuery(regexp.QuoteMeta(query)).
+		WithArgs("owner@example.com", "192.0.2.0/24", windowStart).
+		WillReturnRows(sqlmock.NewRows([]string{"email_ip_failures", "ip_failures"}).AddRow(1, 5))
+
+	allowed, err := repository.Allow(context.Background(), " OWNER@Example.COM ", "192.0.2.0/24")
+
+	require.NoError(t, err)
+	require.False(t, allowed)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPostgresRepositoryLimiterRecordsNormalizedFailure(t *testing.T) {
+	repository, mock := newPostgresRepositoryFixture(t)
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO login_attempts (email, ip_prefix, succeeded, attempted_at) VALUES ($1, $2, false, $3)`)).
+		WithArgs("owner@example.com", "192.0.2.0/24", testNow).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	err := repository.RecordFailure(context.Background(), " OWNER@Example.COM ", "192.0.2.0/24")
+
+	require.NoError(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func newPostgresRepositoryFixture(t *testing.T) (*PostgresRepository, sqlmock.Sqlmock) {
 	t.Helper()
 	sqlDB, mock, err := sqlmock.New()

@@ -66,6 +66,28 @@ func TestNewHandlerRejectsInsecureProductionCookie(t *testing.T) {
 	}
 }
 
+func TestRequestIPIgnoresUntrustedForwardedFor(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	if err := router.SetTrustedProxies(nil); err != nil {
+		t.Fatal(err)
+	}
+	var got string
+	router.GET("/ip", func(c *gin.Context) {
+		got = requestIP(c)
+		c.Status(http.StatusNoContent)
+	})
+	request := httptest.NewRequest(http.MethodGet, "/ip", nil)
+	request.RemoteAddr = "192.0.2.44:54321"
+	request.Header.Set("X-Forwarded-For", "203.0.113.99")
+
+	router.ServeHTTP(httptest.NewRecorder(), request)
+
+	if got != "192.0.2.44" {
+		t.Fatalf("requestIP() = %q, want direct untrusted peer", got)
+	}
+}
+
 func TestLoginMapsCredentialFailureAndThrottleWithoutSettingCookie(t *testing.T) {
 	for _, tc := range []struct {
 		name, code string

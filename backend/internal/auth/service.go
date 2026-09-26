@@ -53,6 +53,11 @@ type LoginLimiter interface {
 	RecordFailure(context.Context, string, string) error
 }
 
+type PasswordHashing interface {
+	Hash(string) (string, error)
+	Verify(string, string) (bool, error)
+}
+
 type AuthSession struct {
 	Token              string
 	CSRFToken          string
@@ -64,14 +69,14 @@ type AuthService struct {
 	credentials CredentialRepository
 	memberships MembershipResolver
 	sessions    *SessionService
-	hasher      PasswordHasher
+	hasher      PasswordHashing
 	limiter     LoginLimiter
 	csrfSecret  []byte
 }
 
 // A purpose label in DeriveCSRFToken separates CSRF values from session-token
 // digests even though both use the server's session pepper.
-func NewAuthService(credentials CredentialRepository, memberships MembershipResolver, sessions *SessionService, hasher PasswordHasher, limiter LoginLimiter) *AuthService {
+func NewAuthService(credentials CredentialRepository, memberships MembershipResolver, sessions *SessionService, hasher PasswordHashing, limiter LoginLimiter) *AuthService {
 	service := &AuthService{credentials: credentials, memberships: memberships, sessions: sessions, hasher: hasher, limiter: limiter}
 	if sessions != nil {
 		service.csrfSecret = append([]byte(nil), sessions.pepper...)

@@ -180,6 +180,35 @@ func (r *PostgresRepository) ResolveActive(ctx context.Context, userID uuid.UUID
 	return memberships[0], nil
 }
 
+func (r *PostgresRepository) Allow(ctx context.Context, email, ip string) (bool, error) {
+	const query = `SELECT COUNT(*) FILTER (WHERE email = ?) AS email_ip_failures, COUNT(*) AS ip_failures FROM login_attempts WHERE succeeded = false AND ip_prefix = ? AND attempted_at >= ?`
+	var failures struct {
+		EmailIPFailures int64
+		IPFailures      int64
+	}
+	windowStart := r.clock().UTC().Add(-15 * time.Minute)
+	result := r.db.WithContext(ctx).Raw(query, strings.ToLower(strings.TrimSpace(email)), strings.TrimSpace(ip), windowStart).Scan(&failures)
+	if result.Error != nil {
+		return false, fmt.Errorf("check login limit: %w", result.Error)
+	}
+	if result.RowsAffected != 1 {
+		return false, errors.New("check login limit: no row returned")
+	}
+	return failures.IPFailures < 5 && failures.EmailIPFailures < 5, nil
+}
+
+func (r *PostgresRepository) RecordFailure(ctx context.Context, email, ip string) error {
+	const query = `INSERT INTO login_attempts (email, ip_prefix, succeeded, attempted_at) VALUES (?, ?, false, ?)`
+	result := r.db.WithContext(ctx).Exec(query, strings.ToLower(strings.TrimSpace(email)), strings.TrimSpace(ip), r.clock().UTC())
+	if result.Error != nil {
+		return fmt.Errorf("record login failure: %w", result.Error)
+	}
+	if result.RowsAffected != 1 {
+		return errors.New("record login failure: no row inserted")
+	}
+	return nil
+}
+
 func nullableString(value string) any {
 	if value == "" {
 		return nil

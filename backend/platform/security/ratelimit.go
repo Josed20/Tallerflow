@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 )
@@ -46,32 +47,52 @@ func NewMemoryLoginLimiter(secret []byte, now func() time.Time, window time.Dura
 func (l *MemoryLoginLimiter) Allow(_ context.Context, email, ip string) (bool, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	key := l.key(email, ip)
-	entry, ok := l.attempts[key]
-	if !ok || l.now().Sub(entry.first) >= l.window {
-		delete(l.attempts, key)
-		if !l.hasCapacity() {
+	now := l.now()
+	keys := l.keys(email, ip)
+	missing := 0
+	for _, key := range keys {
+		entry, ok := l.attempts[key]
+		if ok && now.Sub(entry.first) >= l.window {
+			delete(l.attempts, key)
+			ok = false
+		}
+		if ok && entry.failures >= l.maxFailures {
 			return false, nil
 		}
-		return true, nil
+		if !ok {
+			missing++
+		}
 	}
-	return entry.failures < l.maxFailures, nil
+	return l.hasCapacity(missing), nil
 }
 
 func (l *MemoryLoginLimiter) RecordFailure(_ context.Context, email, ip string) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	key := l.key(email, ip)
-	entry, ok := l.attempts[key]
-	if !ok || l.now().Sub(entry.first) >= l.window {
-		delete(l.attempts, key)
-		if !l.hasCapacity() {
-			return ErrLoginLimiterCapacity
+	now := l.now()
+	keys := l.keys(email, ip)
+	missing := 0
+	entries := make([]loginAttempt, len(keys))
+	for index, key := range keys {
+		entry, ok := l.attempts[key]
+		if ok && now.Sub(entry.first) >= l.window {
+			delete(l.attempts, key)
+			ok = false
 		}
-		entry = loginAttempt{first: l.now()}
+		if !ok {
+			missing++
+			entry = loginAttempt{first: now}
+		}
+		entries[index] = entry
 	}
-	entry.failures++
-	l.attempts[key] = entry
+	if !l.hasCapacity(missing) {
+		return ErrLoginLimiterCapacity
+	}
+	for index, key := range keys {
+		entry := entries[index]
+		entry.failures++
+		l.attempts[key] = entry
+	}
 	return nil
 }
 
@@ -79,8 +100,8 @@ var ErrLoginLimiterCapacity = errors.New("login limiter capacity reached")
 
 // hasCapacity is called with mu held. It removes expired entries only when
 // needed and fails closed once every live slot is in use.
-func (l *MemoryLoginLimiter) hasCapacity() bool {
-	if len(l.attempts) < l.maxEntries {
+func (l *MemoryLoginLimiter) hasCapacity(required int) bool {
+	if len(l.attempts)+required <= l.maxEntries {
 		return true
 	}
 	now := l.now()
@@ -89,11 +110,18 @@ func (l *MemoryLoginLimiter) hasCapacity() bool {
 			delete(l.attempts, key)
 		}
 	}
-	return len(l.attempts) < l.maxEntries
+	return len(l.attempts)+required <= l.maxEntries
 }
 
-func (l *MemoryLoginLimiter) key(email, ip string) [32]byte {
+func (l *MemoryLoginLimiter) keys(email, ip string) [2][32]byte {
+	email = strings.ToLower(strings.TrimSpace(email))
+	ip = strings.TrimSpace(ip)
+	return [2][32]byte{l.key(0, "", ip), l.key(1, email, ip)}
+}
+
+func (l *MemoryLoginLimiter) key(purpose byte, email, ip string) [32]byte {
 	mac := hmac.New(sha256.New, l.secret)
+	_, _ = mac.Write([]byte{purpose})
 	_, _ = mac.Write([]byte(email))
 	_, _ = mac.Write([]byte{0})
 	_, _ = mac.Write([]byte(ip))

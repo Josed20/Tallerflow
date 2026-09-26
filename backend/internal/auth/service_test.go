@@ -75,6 +75,26 @@ func TestLoginRateLimitsUnknownAccountsAfterFiveFailures(t *testing.T) {
 	}
 }
 
+func TestLoginReturns429BeforePasswordVerification(t *testing.T) {
+	hasher := &countingPasswordHasher{}
+	service := NewAuthService(
+		&loginCredentialRepo{},
+		&loginMemberships{count: 1},
+		NewSessionService(&fakeSessionRepository{}, testPepper, fixedClock(testNow), bytes.NewReader(make([]byte, 32))),
+		hasher,
+		&denyingLoginLimiter{},
+	)
+
+	_, err := service.Login(context.Background(), "owner@example.com", "password", "192.0.2.10")
+
+	if !errors.Is(err, ErrTooManyAttempts) {
+		t.Fatalf("Login() error = %v, want ErrTooManyAttempts", err)
+	}
+	if hasher.hashCalls != 0 || hasher.verifyCalls != 0 {
+		t.Fatalf("throttled login performed password work: hash=%d verify=%d", hasher.hashCalls, hasher.verifyCalls)
+	}
+}
+
 func TestChangePasswordTransactionFailurePreservesOldCredentialAndSession(t *testing.T) {
 	const oldPassword = "Temporary secure passphrase 9!"
 	const newPassword = "New owner passphrase 10!"
@@ -192,6 +212,26 @@ func (l *loginLimiter) Allow(_ context.Context, email, ip string) (bool, error) 
 func (l *loginLimiter) RecordFailure(_ context.Context, email, ip string) error {
 	l.attempts[email+"|"+ip]++
 	return nil
+}
+
+type denyingLoginLimiter struct{}
+
+func (*denyingLoginLimiter) Allow(context.Context, string, string) (bool, error) { return false, nil }
+func (*denyingLoginLimiter) RecordFailure(context.Context, string, string) error { return nil }
+
+type countingPasswordHasher struct {
+	hashCalls   int
+	verifyCalls int
+}
+
+func (h *countingPasswordHasher) Hash(string) (string, error) {
+	h.hashCalls++
+	return "hash", nil
+}
+
+func (h *countingPasswordHasher) Verify(string, string) (bool, error) {
+	h.verifyCalls++
+	return true, nil
 }
 
 type failingPasswordCredentialRepo struct {
