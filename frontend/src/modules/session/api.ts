@@ -6,9 +6,9 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, init: RequestInit): Promise<T> {
   const response = await fetch(path, {
+    ...init,
     credentials: 'include',
     headers: { Accept: 'application/json', ...(init.headers ?? {}) },
-    ...init,
   })
 
   if (!response.ok) throw new ApiError(response.status)
@@ -18,10 +18,13 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
 
 export const api = {
   get: <T>(path: string) => request<T>(path, { method: 'GET' }),
-  post: <T>(path: string, body?: unknown) =>
+  post: <T>(path: string, body?: unknown, csrfToken?: string) =>
     request<T>(path, {
       method: 'POST',
-      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      headers: {
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        ...(csrfToken === undefined ? {} : { 'X-CSRF-Token': csrfToken }),
+      },
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
 }
