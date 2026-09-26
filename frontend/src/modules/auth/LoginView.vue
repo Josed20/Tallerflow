@@ -20,7 +20,8 @@ const emailError = computed(() => attempted.value && !/^\S+@\S+\.\S+$/.test(emai
 const passwordError = computed(() => attempted.value && !password.value ? 'La contraseña es obligatoria.' : '')
 
 async function submit() {
-  attempted.value = true
+  if (submitting.value) return
+	attempted.value = true
   serverError.value = ''
   if (emailError.value || passwordError.value) return
 

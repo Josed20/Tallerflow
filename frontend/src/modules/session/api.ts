@@ -1,6 +1,12 @@
+import type { APIErrorEnvelope } from './types'
+
 export class ApiError extends Error {
-  constructor(public readonly status: number, message = 'No pudimos completar la solicitud.') {
-    super(message)
+  constructor(
+    public readonly status: number,
+    public readonly code = 'REQUEST_FAILED',
+    public readonly requestId = '',
+  ) {
+    super('No pudimos completar la solicitud.')
   }
 }
 
@@ -11,7 +17,10 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
     headers: { Accept: 'application/json', ...(init.headers ?? {}) },
   })
 
-  if (!response.ok) throw new ApiError(response.status)
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as APIErrorEnvelope | null
+    throw new ApiError(response.status, payload?.error?.code, payload?.error?.request_id)
+  }
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
 }

@@ -1,4 +1,4 @@
-export type SessionStatus = 'idle' | 'restoring' | 'authenticated' | 'anonymous'
+export type SessionStatus = 'idle' | 'restoring' | 'password-change-required' | 'authenticated' | 'anonymous'
 
 export interface SessionPrincipal {
   id: string
@@ -20,17 +20,32 @@ export interface AuthSessionPayload {
 }
 
 export interface ApiPrincipal {
-  userId: string
-  email: string
-  displayName: string
-  workshopId: string
-  role: string
+  data: {
+    userId: string
+    email: string
+    displayName: string
+    workshopId: string
+    role: string
+    passwordChangeRequired: boolean
+  }
 }
 
 export interface WorkshopAccess {
-  workshop: {
-    id: string
-    name: string
+  data: {
+    workshop: {
+      id: string
+      name: string
+      timezone: string
+    }
+    role: string
   }
-  role: string
+}
+
+export interface APIErrorEnvelope {
+  error: {
+    code: string
+    message: string
+    details: Record<string, unknown>
+    request_id: string
+  }
 }

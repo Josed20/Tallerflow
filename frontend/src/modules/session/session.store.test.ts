@@ -6,6 +6,8 @@ describe('session store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.unstubAllGlobals()
+    localStorage.clear()
+    sessionStorage.clear()
   })
 
   it('restores the authenticated principal from the auth and workshops contracts', async () => {
@@ -14,12 +16,16 @@ describe('session store', () => {
         data: { expires_at: '2026-09-26T01:00:00Z', csrf_token: 'csrf-1', must_change_password: false },
       }))
       .mockResolvedValueOnce(jsonResponse({
-        userId: 'owner-1', email: 'owner@taller.pe', displayName: 'Lucero', workshopId: 'workshop-1',
-        role: 'OWNER', passwordChangeRequired: false,
+        data: {
+          userId: 'owner-1', email: 'owner@taller.pe', displayName: 'Lucero', workshopId: 'workshop-1',
+          role: 'OWNER', passwordChangeRequired: false,
+        },
       }))
       .mockResolvedValueOnce(jsonResponse({
-        workshop: { id: 'workshop-1', name: 'Taller San Martín', slug: 'taller-san-martin', isActive: true },
-        role: 'OWNER',
+        data: {
+          workshop: { id: 'workshop-1', name: 'Taller San Martín', timezone: 'America/Lima' },
+          role: 'OWNER',
+        },
       }))
     vi.stubGlobal('fetch', fetchMock)
     const session = useSessionStore()
@@ -38,6 +44,7 @@ describe('session store', () => {
       '/api/v1/workshops/current',
     ])
     expect(localStorage.length).toBe(0)
+    expect(sessionStorage.length).toBe(0)
   })
 
   it('keeps a mandatory password-change session authenticated without loading protected profile data', async () => {
@@ -51,6 +58,7 @@ describe('session store', () => {
 
     expect(session.isAuthenticated).toBe(true)
     expect(session.requiresPasswordChange).toBe(true)
+    expect(session.status).toBe('password-change-required')
     expect(session.principal).toBeNull()
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/v1/auth/session')
@@ -65,15 +73,19 @@ describe('session store', () => {
         data: { expires_at: '2026-09-26T02:00:00Z', csrf_token: 'csrf-2', must_change_password: false },
       }))
       .mockResolvedValueOnce(jsonResponse({
-        data: { expires_at: '2026-09-26T02:00:00Z', csrf_token: 'csrf-2', must_change_password: false },
+        data: {
+          userId: 'owner-1', email: 'owner@taller.pe', displayName: 'Lucero', workshopId: 'workshop-1',
+          role: 'OWNER', passwordChangeRequired: false,
+        },
       }))
       .mockResolvedValueOnce(jsonResponse({
-        userId: 'owner-1', email: 'owner@taller.pe', displayName: 'Lucero', workshopId: 'workshop-1',
-        role: 'OWNER', passwordChangeRequired: false,
+        data: {
+          workshop: { id: 'workshop-1', name: 'Taller San Martín', timezone: 'America/Lima' },
+          role: 'OWNER',
+        },
       }))
       .mockResolvedValueOnce(jsonResponse({
-        workshop: { id: 'workshop-1', name: 'Taller San Martín', slug: 'taller-san-martin', isActive: true },
-        role: 'OWNER',
+        data: {},
       }))
     vi.stubGlobal('fetch', fetchMock)
     const session = useSessionStore()
@@ -93,6 +105,13 @@ describe('session store', () => {
     })
     expect(session.requiresPasswordChange).toBe(false)
     expect(session.principal?.workshop.name).toBe('Taller San Martín')
+    await session.logout()
+    expect(fetchMock).toHaveBeenNthCalledWith(5, '/api/v1/auth/logout', {
+      credentials: 'include',
+      headers: { Accept: 'application/json', 'X-CSRF-Token': 'csrf-2' },
+      method: 'POST',
+      body: undefined,
+    })
   })
 
   it('sends the current CSRF token when logging out', async () => {
@@ -101,12 +120,16 @@ describe('session store', () => {
         data: { expires_at: '2026-09-26T01:00:00Z', csrf_token: 'csrf-1', must_change_password: false },
       }))
       .mockResolvedValueOnce(jsonResponse({
-        userId: 'owner-1', email: 'owner@taller.pe', displayName: 'Lucero', workshopId: 'workshop-1',
-        role: 'OWNER', passwordChangeRequired: false,
+        data: {
+          userId: 'owner-1', email: 'owner@taller.pe', displayName: 'Lucero', workshopId: 'workshop-1',
+          role: 'OWNER', passwordChangeRequired: false,
+        },
       }))
       .mockResolvedValueOnce(jsonResponse({
-        workshop: { id: 'workshop-1', name: 'Taller San Martín', slug: 'taller-san-martin', isActive: true },
-        role: 'OWNER',
+        data: {
+          workshop: { id: 'workshop-1', name: 'Taller San Martín', timezone: 'America/Lima' },
+          role: 'OWNER',
+        },
       }))
       .mockResolvedValueOnce(jsonResponse({ data: {} }))
     vi.stubGlobal('fetch', fetchMock)
@@ -122,6 +145,21 @@ describe('session store', () => {
       body: undefined,
     })
     expect(session.isAuthenticated).toBe(false)
+  })
+
+  it('clears all in-memory state after a 401 restoration response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: { code: 'SESSION_INVALID', message: 'expired', details: {}, request_id: 'request-1' },
+    }), { status: 401, headers: { 'Content-Type': 'application/json' } })))
+    const session = useSessionStore()
+
+    await session.restore()
+
+    expect(session.status).toBe('anonymous')
+    expect(session.isAuthenticated).toBe(false)
+    expect(session.principal).toBeNull()
+    expect(localStorage.length).toBe(0)
+    expect(sessionStorage.length).toBe(0)
   })
 })
 

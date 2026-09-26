@@ -17,6 +17,7 @@ const serverError = ref('')
 const newPasswordError = computed(() => attempted.value && newPassword.value.length < 12 ? 'Usa al menos 12 caracteres.' : '')
 
 async function submit() {
+  if (submitting.value) return
   attempted.value = true
   serverError.value = ''
   if (!currentPassword.value || newPasswordError.value) return
@@ -39,7 +40,7 @@ async function submit() {
     <form class="auth-form" novalidate @submit.prevent="submit">
       <UiAlert v-if="serverError" :message="serverError" />
       <UiField id="current-password" v-model="currentPassword" label="Contraseña actual" type="password" autocomplete="current-password" :error="attempted && !currentPassword ? 'La contraseña actual es obligatoria.' : ''" />
-      <UiField id="new-password" v-model="newPassword" label="Nueva contraseña" type="password" autocomplete="new-password" :error="newPasswordError" />
+      <UiField id="new-password" v-model="newPassword" label="Nueva contraseña" type="password" autocomplete="new-password" description="Usa al menos 12 caracteres." :error="newPasswordError" />
       <UiButton type="submit" :loading="submitting">Actualizar contraseña</UiButton>
     </form>
   </AuthLayout>

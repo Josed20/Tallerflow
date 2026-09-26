@@ -7,6 +7,7 @@ defineProps<{
   autocomplete?: string
   error?: string
   placeholder?: string
+  description?: string
 }>()
 
 defineEmits<{ 'update:modelValue': [value: string] }>()
@@ -22,9 +23,10 @@ defineEmits<{ 'update:modelValue': [value: string] }>()
       :autocomplete="autocomplete"
       :placeholder="placeholder"
       :aria-invalid="Boolean(error)"
-      :aria-describedby="error ? `${id}-error` : undefined"
+      :aria-describedby="[description ? `${id}-description` : '', error ? `${id}-error` : ''].filter(Boolean).join(' ') || undefined"
       @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
     />
+    <p v-if="description" :id="`${id}-description`" class="ui-field__description">{{ description }}</p>
     <p v-if="error" :id="`${id}-error`" class="ui-field__error" role="alert">{{ error }}</p>
   </div>
 </template>

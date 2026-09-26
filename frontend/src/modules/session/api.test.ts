@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { api } from './api'
+import { ApiError, api } from './api'
 
 describe('same-origin API client', () => {
   it('sends session requests with browser cookies and no bearer token', async () => {
@@ -18,5 +18,14 @@ describe('same-origin API client', () => {
       headers: { Accept: 'application/json' },
       method: 'GET',
     })
+  })
+
+  it('preserves the backend error code and request id without exposing auth headers', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: { code: 'AUTH_RATE_LIMITED', message: 'Too many attempts.', details: {}, request_id: 'request-7' },
+    }), { status: 429, headers: { 'Content-Type': 'application/json' } })))
+
+	await expect(api.post('/api/v1/auth/login', { email: 'owner@example.com', password: 'secret' }))
+		.rejects.toMatchObject({ status: 429, code: 'AUTH_RATE_LIMITED', requestId: 'request-7' } satisfies Partial<ApiError>)
   })
 })

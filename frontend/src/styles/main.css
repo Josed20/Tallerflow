@@ -20,6 +20,7 @@ h1 { margin: 0; font-size: 1.5rem; line-height: 1.35; letter-spacing: -.02em; }
 .ui-field label { color: #0b1c30; font-size: .8125rem; font-weight: 600; }
 .ui-field input { width: 100%; min-height: 44px; padding: .625rem .75rem; border: 1px solid var(--tf-border); border-radius: .5rem; outline: none; background: var(--tf-surface-soft); color: #0b1c30; }
 .ui-field input:focus { border-color: var(--tf-primary); background: #fff; box-shadow: 0 0 0 3px rgb(0 104 95 / 16%); }
+.ui-field__description { margin: 0; color: var(--tf-text-muted); font-size: .8125rem; }
 .ui-field__error { margin: 0; color: var(--tf-error); font-size: .8125rem; }
 .ui-alert { margin: 0; padding: .75rem; border-radius: .5rem; color: #93000a; background: var(--tf-error-bg); font-size: .875rem; }
 .ui-button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: .5rem; border: 0; border-radius: .5rem; padding: .625rem 1rem; color: #fff; background: var(--tf-primary); box-shadow: 0 1px 2px rgb(11 28 48 / 12%); font-weight: 700; cursor: pointer; }

@@ -21,59 +21,66 @@ export const useSessionStore = defineStore('session', () => {
       applySession(session)
       if (mustChangePassword.value) {
         principal.value = null
-        status.value = 'authenticated'
         return
       }
-      const [apiPrincipal, access] = await Promise.all([
-        api.get<ApiPrincipal>('/api/v1/me'),
-        api.get<WorkshopAccess>('/api/v1/workshops/current'),
-      ])
-      principal.value = {
-        id: apiPrincipal.userId,
-        email: apiPrincipal.email,
-        displayName: apiPrincipal.displayName,
-        role: access.role,
-        workshop: { id: access.workshop.id, name: access.workshop.name },
-        mustChangePassword: false,
-      }
-      status.value = 'authenticated'
+      await loadPrincipal()
     } catch {
-      principal.value = null
-      csrfToken.value = null
-      mustChangePassword.value = false
-      status.value = 'anonymous'
+      clearSession()
     } finally {
       restored.value = true
     }
   }
 
   async function login(email: string, password: string) {
-    await api.post('/api/v1/auth/login', { email, password })
-    restored.value = false
-    await restore()
+    const result = await api.post<AuthSessionPayload>('/api/v1/auth/login', { email, password })
+    applySession(result)
+    restored.value = true
+    if (!mustChangePassword.value) await loadPrincipal()
   }
 
   async function changePassword(currentPassword: string, newPassword: string) {
-    await api.post('/api/v1/auth/change-password', {
+    const result = await api.post<AuthSessionPayload>('/api/v1/auth/change-password', {
       current_password: currentPassword,
       new_password: newPassword,
     }, csrfToken.value ?? undefined)
-    restored.value = false
-    await restore()
+    applySession(result)
+    restored.value = true
+    if (!mustChangePassword.value) await loadPrincipal()
   }
 
   async function logout() {
     await api.post('/api/v1/auth/logout', undefined, csrfToken.value ?? undefined)
-    principal.value = null
-    csrfToken.value = null
-    mustChangePassword.value = false
-    status.value = 'anonymous'
+    clearSession()
     restored.value = true
   }
 
   function applySession(session: AuthSessionPayload) {
     csrfToken.value = session.data.csrf_token
     mustChangePassword.value = session.data.must_change_password
+    status.value = mustChangePassword.value ? 'password-change-required' : 'authenticated'
+  }
+
+  async function loadPrincipal() {
+    const [apiPrincipal, access] = await Promise.all([
+      api.get<ApiPrincipal>('/api/v1/me'),
+      api.get<WorkshopAccess>('/api/v1/workshops/current'),
+    ])
+    principal.value = {
+      id: apiPrincipal.data.userId,
+      email: apiPrincipal.data.email,
+      displayName: apiPrincipal.data.displayName,
+      role: access.data.role,
+      workshop: { id: access.data.workshop.id, name: access.data.workshop.name },
+      mustChangePassword: false,
+    }
+    status.value = 'authenticated'
+  }
+
+  function clearSession() {
+    principal.value = null
+    csrfToken.value = null
+    mustChangePassword.value = false
+    status.value = 'anonymous'
   }
 
   return { principal, status, restored, isAuthenticated, requiresPasswordChange, restore, login, changePassword, logout }
