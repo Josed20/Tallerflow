@@ -1,0 +1,130 @@
+package auth
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+type PostgresRepository struct {
+	db    *gorm.DB
+	clock func() time.Time
+}
+
+func NewPostgresRepository(db *gorm.DB, clock func() time.Time) (*PostgresRepository, error) {
+	if db == nil {
+		return nil, errors.New("database is required")
+	}
+	if clock == nil {
+		clock = time.Now
+	}
+	return &PostgresRepository{db: db, clock: clock}, nil
+}
+
+func (r *PostgresRepository) FindByEmail(ctx context.Context, email string) (*Credential, error) {
+	const query = `SELECT u.id AS user_id, c.password_hash, (u.status = 'ACTIVE') AS active, c.must_change_password FROM users AS u JOIN user_credentials AS c ON c.user_id = u.id WHERE u.email = ? LIMIT 1`
+	return r.findCredential(ctx, query, strings.ToLower(strings.TrimSpace(email)))
+}
+
+func (r *PostgresRepository) FindByUserID(ctx context.Context, userID uuid.UUID) (*Credential, error) {
+	const query = `SELECT u.id AS user_id, c.password_hash, (u.status = 'ACTIVE') AS active, c.must_change_password FROM users AS u JOIN user_credentials AS c ON c.user_id = u.id WHERE u.id = ? LIMIT 1`
+	return r.findCredential(ctx, query, userID)
+}
+
+func (r *PostgresRepository) findCredential(ctx context.Context, query string, argument any) (*Credential, error) {
+	var credential Credential
+	result := r.db.WithContext(ctx).Raw(query, argument).Scan(&credential)
+	if result.Error != nil {
+		return nil, fmt.Errorf("find credential: %w", result.Error)
+	}
+	if result.RowsAffected != 1 {
+		return nil, ErrCredentialNotFound
+	}
+	return &credential, nil
+}
+
+func (r *PostgresRepository) Insert(ctx context.Context, created NewSession) (Session, error) {
+	const query = `INSERT INTO user_sessions (user_id, token_hash, csrf_token_hash, expires_at, created_at, last_seen_at, ip_prefix, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, user_id, expires_at, revoked_at`
+	var session Session
+	result := r.db.WithContext(ctx).Raw(query,
+		created.UserID, created.TokenHash[:], created.CSRFTokenHash[:], created.ExpiresAt,
+		created.CreatedAt, created.CreatedAt, nullableString(created.Metadata.IPPrefix), nullableString(created.Metadata.UserAgent),
+	).Scan(&session)
+	if result.Error != nil {
+		return Session{}, fmt.Errorf("insert session: %w", result.Error)
+	}
+	if result.RowsAffected != 1 {
+		return Session{}, errors.New("insert session: no row returned")
+	}
+	return session, nil
+}
+
+func (r *PostgresRepository) FindActiveByTokenHash(ctx context.Context, digest [32]byte, now time.Time) (Session, error) {
+	const query = `SELECT id, user_id, expires_at, revoked_at FROM user_sessions WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > ? LIMIT 1`
+	var session Session
+	result := r.db.WithContext(ctx).Raw(query, digest[:], now).Scan(&session)
+	if result.Error != nil {
+		return Session{}, fmt.Errorf("find active session: %w", result.Error)
+	}
+	if result.RowsAffected != 1 {
+		return Session{}, ErrSessionInvalid
+	}
+	return session, nil
+}
+
+func (r *PostgresRepository) Revoke(ctx context.Context, sessionID uuid.UUID, revokedAt time.Time) error {
+	const query = `UPDATE user_sessions SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL`
+	if err := r.db.WithContext(ctx).Exec(query, revokedAt, sessionID).Error; err != nil {
+		return fmt.Errorf("revoke session: %w", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepository) RevokeAllForUser(ctx context.Context, userID uuid.UUID, revokedAt time.Time) error {
+	const query = `UPDATE user_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`
+	if err := r.db.WithContext(ctx).Exec(query, revokedAt, userID).Error; err != nil {
+		return fmt.Errorf("revoke user sessions: %w", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepository) ChangePasswordAndRevokeSessions(ctx context.Context, userID uuid.UUID, passwordHash string, changedAt time.Time) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := tx.Exec(`UPDATE user_credentials SET password_hash = ?, must_change_password = false, password_changed_at = ?, updated_at = ? WHERE user_id = ?`, passwordHash, changedAt, changedAt, userID)
+		if result.Error != nil {
+			return fmt.Errorf("update credential: %w", result.Error)
+		}
+		if result.RowsAffected != 1 {
+			return ErrCredentialNotFound
+		}
+		if err := tx.Exec(`UPDATE user_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`, changedAt, userID).Error; err != nil {
+			return fmt.Errorf("revoke user sessions: %w", err)
+		}
+		return nil
+	})
+}
+
+func (r *PostgresRepository) ResolveActive(ctx context.Context, userID uuid.UUID) (ActiveMembership, error) {
+	const query = `SELECT workshop_id, role FROM resolve_active_memberships(?)`
+	var memberships []ActiveMembership
+	result := r.db.WithContext(ctx).Raw(query, userID).Scan(&memberships)
+	if result.Error != nil {
+		return ActiveMembership{}, fmt.Errorf("resolve active membership: %w", result.Error)
+	}
+	if len(memberships) != 1 {
+		return ActiveMembership{}, ErrInvalidCredentials
+	}
+	return memberships[0], nil
+}
+
+func nullableString(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
+}

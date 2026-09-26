@@ -121,8 +121,11 @@ func (r *loginCredentialRepo) FindByEmail(_ context.Context, _ string) (*Credent
 
 type loginMemberships struct{ count int }
 
-func (m *loginMemberships) ResolveActive(_ context.Context, _ uuid.UUID) (int, error) {
-	return m.count, nil
+func (m *loginMemberships) ResolveActive(_ context.Context, _ uuid.UUID) (ActiveMembership, error) {
+	if m.count != 1 {
+		return ActiveMembership{}, ErrInvalidCredentials
+	}
+	return ActiveMembership{WorkshopID: uuid.New(), Role: "OWNER"}, nil
 }
 
 // A stateful port fixture gives the service a real boundary: failures must be

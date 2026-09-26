@@ -38,3 +38,8 @@ type RawSession struct {
 	ExpiresAt time.Time
 	Session   Session
 }
+
+type ActiveMembership struct {
+	WorkshopID uuid.UUID
+	Role       string
+}

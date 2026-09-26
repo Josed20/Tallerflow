@@ -48,7 +48,7 @@ type PasswordCredentialRepository interface {
 }
 
 type MembershipResolver interface {
-	ResolveActive(context.Context, uuid.UUID) (int, error)
+	ResolveActive(context.Context, uuid.UUID) (ActiveMembership, error)
 }
 
 type LoginLimiter interface {
@@ -123,11 +123,11 @@ func (s *AuthService) Login(ctx context.Context, email, password, clientIP strin
 	if !valid {
 		return AuthSession{}, s.recordInvalidLogin(ctx, email, clientIP)
 	}
-	count, err := s.memberships.ResolveActive(ctx, credential.UserID)
+	_, err = s.memberships.ResolveActive(ctx, credential.UserID)
 	if err != nil {
-		return AuthSession{}, err
-	}
-	if count != 1 {
+		if !errors.Is(err, ErrInvalidCredentials) {
+			return AuthSession{}, err
+		}
 		return AuthSession{}, s.recordInvalidLogin(ctx, email, clientIP)
 	}
 	if len(s.csrfSecret) == 0 {
