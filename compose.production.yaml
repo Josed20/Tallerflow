@@ -13,6 +13,8 @@ services:
     environment:
       TF_DATABASE_URL: ${TF_DATABASE_URL:?set the application database URL}
       TF_SESSION_PEPPER: ${TF_SESSION_PEPPER:?set a random session pepper}
+      TF_ALLOWED_ORIGIN: ${TF_ALLOWED_ORIGIN:?set the public HTTPS origin}
+      TF_TRUSTED_PROXIES: ${TF_TRUSTED_PROXIES:-172.16.0.0/12}
       TF_ENVIRONMENT: production
     restart: always
 
@@ -21,3 +23,7 @@ services:
 
   gateway:
     restart: always
+
+  bootstrap:
+    environment:
+      TF_BOOTSTRAP_DATABASE_URL: ${TF_BOOTSTRAP_DATABASE_URL:?set the bootstrap database URL}

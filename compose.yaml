@@ -7,13 +7,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-tallerflow}
       POSTGRES_USER: ${POSTGRES_SUPERUSER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:-local-postgres-change-me}
-      DB_OWNER_USER: ${DB_OWNER_USER:-tallerflow_owner}
       DB_OWNER_PASSWORD: ${DB_OWNER_PASSWORD:-local-owner-change-me}
-      DB_MIGRATION_USER: ${DB_MIGRATION_USER:-tallerflow_migrator}
       DB_MIGRATION_PASSWORD: ${DB_MIGRATION_PASSWORD:-local-migrator-change-me}
-      DB_APP_USER: ${DB_APP_USER:-tallerflow_app}
       DB_APP_PASSWORD: ${DB_APP_PASSWORD:-local-app-change-me}
-      DB_BOOTSTRAP_USER: ${DB_BOOTSTRAP_USER:-tallerflow_bootstrap}
       DB_BOOTSTRAP_PASSWORD: ${DB_BOOTSTRAP_PASSWORD:-local-bootstrap-change-me}
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
@@ -32,7 +28,7 @@ services:
     command: -connectRetries=30 -validateMigrationNaming=true migrate
     environment:
       FLYWAY_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-tallerflow}
-      FLYWAY_USER: ${DB_MIGRATION_USER:-tallerflow_migrator}
+      FLYWAY_USER: tallerflow_migrator
       FLYWAY_PASSWORD: ${DB_MIGRATION_PASSWORD:-local-migrator-change-me}
       FLYWAY_LOCATIONS: filesystem:/flyway/sql
     volumes:
@@ -52,6 +48,8 @@ services:
       TF_HTTP_ADDRESS: ":8080"
       TF_ENVIRONMENT: ${TF_ENVIRONMENT:-development}
       TF_SESSION_PEPPER: ${TF_SESSION_PEPPER:-local-session-pepper-change-me}
+      TF_ALLOWED_ORIGIN: ${TF_ALLOWED_ORIGIN:-http://localhost:8080}
+      TF_TRUSTED_PROXIES: ${TF_TRUSTED_PROXIES:-172.16.0.0/12}
     depends_on:
       flyway:
         condition: service_completed_successfully
@@ -61,6 +59,23 @@ services:
     tmpfs:
       - /tmp
     restart: unless-stopped
+
+  bootstrap:
+    profiles: ["tools"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    entrypoint: ["/bootstrap"]
+    environment:
+      TF_BOOTSTRAP_DATABASE_URL: ${TF_BOOTSTRAP_DATABASE_URL:-postgres://tallerflow_bootstrap:local-bootstrap-change-me@postgres:5432/tallerflow?sslmode=disable}
+    depends_on:
+      flyway:
+        condition: service_completed_successfully
+    stdin_open: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: "no"
 
   frontend:
     profiles: ["app"]
