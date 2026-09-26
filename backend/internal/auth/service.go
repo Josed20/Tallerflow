@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Josed20/Tallerflow/backend/platform/httpx"
 	"github.com/Josed20/Tallerflow/backend/platform/security"
 	"github.com/google/uuid"
 )
@@ -28,6 +29,8 @@ var nonexistentCredentialHash struct {
 
 type Credential struct {
 	UserID             uuid.UUID
+	Email              string
+	DisplayName        string
 	PasswordHash       string
 	Active             bool
 	MustChangePassword bool
@@ -63,6 +66,7 @@ type AuthSession struct {
 	CSRFToken          string
 	ExpiresAt          time.Time
 	MustChangePassword bool
+	Principal          httpx.Principal
 }
 
 type AuthService struct {
@@ -125,7 +129,7 @@ func (s *AuthService) Login(ctx context.Context, email, password, clientIP strin
 	if !valid {
 		return AuthSession{}, s.recordInvalidLogin(ctx, email, clientIP)
 	}
-	_, err = s.memberships.ResolveActive(ctx, credential.UserID)
+	membership, err := s.memberships.ResolveActive(ctx, credential.UserID)
 	if err != nil {
 		if !errors.Is(err, ErrInvalidCredentials) {
 			return AuthSession{}, err
@@ -142,7 +146,7 @@ func (s *AuthService) Login(ctx context.Context, email, password, clientIP strin
 		}
 		return AuthSession{}, err
 	}
-	return s.authSession(raw.Token, raw.ExpiresAt, credential.MustChangePassword), nil
+	return s.authSession(raw.Token, raw.ExpiresAt, s.principal(credential, membership), credential.MustChangePassword), nil
 }
 
 func (s *AuthService) recordInvalidLogin(ctx context.Context, email, clientIP string) error {
@@ -176,7 +180,14 @@ func (s *AuthService) Restore(ctx context.Context, rawToken string) (AuthSession
 	if credential == nil || !credential.Active {
 		return AuthSession{}, ErrSessionInvalid
 	}
-	return s.authSession(rawToken, session.ExpiresAt, credential.MustChangePassword), nil
+	membership, err := s.memberships.ResolveActive(ctx, credential.UserID)
+	if err != nil {
+		if errors.Is(err, ErrInvalidCredentials) {
+			return AuthSession{}, ErrSessionInvalid
+		}
+		return AuthSession{}, err
+	}
+	return s.authSession(rawToken, session.ExpiresAt, s.principal(credential, membership), credential.MustChangePassword), nil
 }
 
 func (s *AuthService) Logout(ctx context.Context, rawToken string) error {
@@ -223,6 +234,13 @@ func (s *AuthService) ChangePassword(ctx context.Context, rawToken, currentPassw
 	if reused {
 		return AuthSession{}, ErrPasswordReuse
 	}
+	membership, err := s.memberships.ResolveActive(ctx, credential.UserID)
+	if err != nil {
+		if errors.Is(err, ErrInvalidCredentials) {
+			return AuthSession{}, ErrSessionInvalid
+		}
+		return AuthSession{}, err
+	}
 	newHash, err := s.hasher.Hash(newPassword)
 	if err != nil {
 		return AuthSession{}, err
@@ -234,7 +252,7 @@ func (s *AuthService) ChangePassword(ctx context.Context, rawToken, currentPassw
 		}
 		return AuthSession{}, err
 	}
-	return s.authSession(raw.Token, raw.ExpiresAt, false), nil
+	return s.authSession(raw.Token, raw.ExpiresAt, s.principal(credential, membership), false), nil
 }
 
 func (s *AuthService) passwordStore() (PasswordCredentialRepository, error) {
@@ -245,9 +263,17 @@ func (s *AuthService) passwordStore() (PasswordCredentialRepository, error) {
 	return store, nil
 }
 
-func (s *AuthService) authSession(rawToken string, expiresAt time.Time, mustChange bool) AuthSession {
+func (s *AuthService) authSession(rawToken string, expiresAt time.Time, principal httpx.Principal, mustChange bool) AuthSession {
+	principal.PasswordChangeRequired = mustChange
 	return AuthSession{
 		Token: rawToken, CSRFToken: security.DeriveCSRFToken(s.csrfSecret, rawToken),
-		ExpiresAt: expiresAt.UTC(), MustChangePassword: mustChange,
+		ExpiresAt: expiresAt.UTC(), MustChangePassword: mustChange, Principal: principal,
+	}
+}
+
+func (s *AuthService) principal(credential *Credential, membership ActiveMembership) httpx.Principal {
+	return httpx.Principal{
+		UserID: credential.UserID, Email: credential.Email, DisplayName: credential.DisplayName,
+		WorkshopID: membership.WorkshopID, Role: membership.Role,
 	}
 }

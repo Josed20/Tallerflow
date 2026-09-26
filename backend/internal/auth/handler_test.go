@@ -10,7 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Josed20/Tallerflow/backend/platform/httpx"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 const (
@@ -177,16 +179,27 @@ func TestMandatoryPasswordChangeGatesPrivateRouteAndRotatesSession(t *testing.T)
 	}
 }
 
+func TestRequireSessionStoresPrincipalInGin(t *testing.T) {
+	fixture := newHandlerFixture(t, false)
+	response := fixture.request(http.MethodGet, "/api/v1/private", "", "", "", handlerToken)
+
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), fixture.useCases.principal.UserID.String()) {
+		t.Fatalf("private response = %d %s", response.Code, response.Body.String())
+	}
+}
+
 type handlerUseCases struct {
 	invalid    bool
 	mustChange bool
 	token      string
 	csrf       string
 	loginErr   error
+	principal  httpx.Principal
 }
 
 func (u *handlerUseCases) session() AuthSession {
-	return AuthSession{Token: u.token, CSRFToken: u.csrf, ExpiresAt: testNow.Add(8 * time.Hour), MustChangePassword: u.mustChange}
+	u.principal.PasswordChangeRequired = u.mustChange
+	return AuthSession{Token: u.token, CSRFToken: u.csrf, ExpiresAt: testNow.Add(8 * time.Hour), MustChangePassword: u.mustChange, Principal: u.principal}
 }
 
 func (u *handlerUseCases) Login(_ context.Context, _, _ string, _ string) (AuthSession, error) {
@@ -232,7 +245,9 @@ type handlerFixture struct {
 func newHandlerFixture(t *testing.T, mustChange bool) *handlerFixture {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
-	u := &handlerUseCases{token: handlerToken, csrf: handlerCSRF, mustChange: mustChange}
+	u := &handlerUseCases{token: handlerToken, csrf: handlerCSRF, mustChange: mustChange, principal: httpx.Principal{
+		UserID: uuid.New(), WorkshopID: uuid.New(), Email: "owner@example.com", DisplayName: "Owner", Role: "OWNER",
+	}}
 	handler, err := NewHandler(u, HandlerConfig{AllowedOrigin: handlerOrigin, Environment: "production", Secure: true})
 	if err != nil {
 		t.Fatal(err)
@@ -240,7 +255,12 @@ func newHandlerFixture(t *testing.T, mustChange bool) *handlerFixture {
 	router := gin.New()
 	RegisterRoutes(router, handler)
 	router.GET("/api/v1/private", handler.RequireSession(), func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"data": gin.H{"ok": true}})
+		principal, err := httpx.PrincipalFromGin(c)
+		if err != nil {
+			c.Status(http.StatusInternalServerError)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"user_id": principal.UserID}})
 	})
 	return &handlerFixture{router: router, useCases: u}
 }

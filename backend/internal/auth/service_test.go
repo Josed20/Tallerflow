@@ -75,6 +75,26 @@ func TestLoginRateLimitsUnknownAccountsAfterFiveFailures(t *testing.T) {
 	}
 }
 
+func TestRestoreBuildsAuthenticatedPrincipal(t *testing.T) {
+	credential := Credential{UserID: testUserID, Email: "owner@example.com", DisplayName: "Owner", PasswordHash: "unused", Active: true}
+	workshopID := uuid.New()
+	credentials := &failingPasswordCredentialRepo{credential: credential}
+	memberships := &loginMemberships{count: 1, membership: ActiveMembership{WorkshopID: workshopID, Role: "OWNER"}}
+	sessions := &fakeSessionRepository{found: Session{ID: testSessionID, UserID: testUserID, ExpiresAt: testNow.Add(time.Hour)}}
+	service := NewAuthService(credentials, memberships,
+		NewSessionService(sessions, testPepper, fixedClock(testNow), bytes.NewReader(make([]byte, 32))),
+		NewPasswordHasher(DefaultPasswordParams()), &loginLimiter{attempts: make(map[string]int)})
+
+	restored, err := service.Restore(context.Background(), "opaque-token")
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored.Principal.UserID != testUserID || restored.Principal.WorkshopID != workshopID || restored.Principal.Email != credential.Email || restored.Principal.DisplayName != credential.DisplayName || restored.Principal.Role != "OWNER" {
+		t.Fatalf("restored principal = %+v", restored.Principal)
+	}
+}
+
 func TestLoginReturns429BeforePasswordVerification(t *testing.T) {
 	hasher := &countingPasswordHasher{}
 	service := NewAuthService(
@@ -192,11 +212,17 @@ func (r *loginCredentialRepo) FindByEmail(_ context.Context, _ string) (*Credent
 	return r.credential, nil
 }
 
-type loginMemberships struct{ count int }
+type loginMemberships struct {
+	count      int
+	membership ActiveMembership
+}
 
 func (m *loginMemberships) ResolveActive(_ context.Context, _ uuid.UUID) (ActiveMembership, error) {
 	if m.count != 1 {
 		return ActiveMembership{}, ErrInvalidCredentials
+	}
+	if m.membership.WorkshopID != uuid.Nil {
+		return m.membership, nil
 	}
 	return ActiveMembership{WorkshopID: uuid.New(), Role: "OWNER"}, nil
 }

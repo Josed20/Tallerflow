@@ -88,6 +88,9 @@ func TestRecoveryDoesNotLogSecretsAndReturnsAPIError(t *testing.T) {
 	require.NotContains(t, recoveryLog.String(), "csrf-secret-value")
 	require.NotContains(t, recoveryLog.String(), "Cookie:")
 	require.NotContains(t, recoveryLog.String(), "X-Csrf-Token:")
+	require.Contains(t, recoveryLog.String(), "panic recovered")
+	require.Contains(t, recoveryLog.String(), res.Header().Get(RequestIDHeader))
+	require.NotContains(t, recoveryLog.String(), "test panic")
 }
 
 func TestHealthReadyReturnsReadyWhenPingSucceeds(t *testing.T) {

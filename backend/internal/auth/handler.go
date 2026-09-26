@@ -173,7 +173,7 @@ func (h *Handler) RequireSession() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		c.Set("auth_session", result)
+		httpx.SetPrincipal(c, result.Principal)
 		c.Next()
 	}
 }

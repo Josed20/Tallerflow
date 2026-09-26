@@ -1,6 +1,8 @@
 package httpx
 
 import (
+	"fmt"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -33,6 +35,7 @@ func Recovery() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {
 			if recover() != nil {
+				_, _ = fmt.Fprintf(gin.DefaultErrorWriter, "panic recovered request_id=%s\n", RequestIDFromContext(c))
 				RespondError(c, 500, "INTERNAL_ERROR", "An unexpected error occurred.")
 			}
 		}()

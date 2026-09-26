@@ -15,20 +15,20 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-const credentialSelect = `SELECT u.id AS user_id, c.password_hash, (u.status = 'ACTIVE') AS active, c.must_change_password FROM users AS u JOIN user_credentials AS c ON c.user_id = u.id WHERE u.email = $1 LIMIT 1`
+const credentialSelect = `SELECT u.id AS user_id, u.email::text AS email, u.name AS display_name, c.password_hash, (u.status = 'ACTIVE') AS active, c.must_change_password FROM users AS u JOIN user_credentials AS c ON c.user_id = u.id WHERE u.email = $1 LIMIT 1`
 
 func TestPostgresRepositoryNormalizesCredentialEmail(t *testing.T) {
 	repository, mock := newPostgresRepositoryFixture(t)
 	userID := uuid.New()
 	mock.ExpectQuery(regexp.QuoteMeta(credentialSelect)).
 		WithArgs("owner@example.com").
-		WillReturnRows(sqlmock.NewRows([]string{"user_id", "password_hash", "active", "must_change_password"}).
-			AddRow(userID, "argon-hash", true, true))
+		WillReturnRows(sqlmock.NewRows([]string{"user_id", "email", "display_name", "password_hash", "active", "must_change_password"}).
+			AddRow(userID, "owner@example.com", "Owner", "argon-hash", true, true))
 
 	credential, err := repository.FindByEmail(context.Background(), "  OWNER@Example.COM ")
 
 	require.NoError(t, err)
-	require.Equal(t, &Credential{UserID: userID, PasswordHash: "argon-hash", Active: true, MustChangePassword: true}, credential)
+	require.Equal(t, &Credential{UserID: userID, Email: "owner@example.com", DisplayName: "Owner", PasswordHash: "argon-hash", Active: true, MustChangePassword: true}, credential)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 

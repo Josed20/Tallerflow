@@ -1,49 +1,58 @@
 package workshops
 
 import (
-	"encoding/json"
+	"context"
+	"errors"
 	"net/http"
 
 	"github.com/Josed20/Tallerflow/backend/platform/httpx"
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
-type Handler struct {
-	service *Service
+type Resolver interface {
+	Resolve(context.Context, uuid.UUID, uuid.UUID) (Access, error)
 }
 
-func NewHandler(service *Service) *Handler { return &Handler{service: service} }
+type Handler struct {
+	service Resolver
+}
+
+func NewHandler(service Resolver) *Handler { return &Handler{service: service} }
 
 // RegisterRoutes lets the central router owner compose this module.
-func RegisterRoutes(mux *http.ServeMux, handler *Handler) {
-	mux.HandleFunc("GET /api/v1/me", handler.Me)
-	mux.HandleFunc("GET /api/v1/workshops/current", handler.Current)
+func RegisterRoutes(routes gin.IRouter, handler *Handler, requireSession gin.HandlerFunc) {
+	routes.GET("/api/v1/me", requireSession, handler.Me)
+	routes.GET("/api/v1/workshops/current", requireSession, handler.Current)
 }
 
-func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
-	principal, err := httpx.PrincipalFromContext(r.Context())
+func (h *Handler) Me(c *gin.Context) {
+	principal, err := httpx.PrincipalFromGin(c)
 	if err != nil {
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		httpx.RespondError(c, http.StatusUnauthorized, "SESSION_INVALID", "The session is invalid or has expired.")
 		return
 	}
-	writeJSON(w, http.StatusOK, principal)
+	c.JSON(http.StatusOK, gin.H{"data": principal})
 }
 
-func (h *Handler) Current(w http.ResponseWriter, r *http.Request) {
-	principal, err := httpx.PrincipalFromContext(r.Context())
+func (h *Handler) Current(c *gin.Context) {
+	principal, err := httpx.PrincipalFromGin(c)
 	if err != nil {
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		httpx.RespondError(c, http.StatusUnauthorized, "SESSION_INVALID", "The session is invalid or has expired.")
 		return
 	}
-	access, err := h.service.Resolve(r.Context(), principal.UserID, principal.WorkshopID)
-	if err != nil {
-		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+	if h.service == nil {
+		httpx.RespondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "An unexpected error occurred.")
 		return
 	}
-	writeJSON(w, http.StatusOK, access)
-}
-
-func writeJSON(w http.ResponseWriter, status int, value any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(value)
+	access, err := h.service.Resolve(c.Request.Context(), principal.UserID, principal.WorkshopID)
+	if err != nil {
+		if errors.Is(err, ErrMembershipNotFound) || errors.Is(err, ErrMembershipInvalid) {
+			httpx.RespondError(c, http.StatusForbidden, "WORKSHOP_FORBIDDEN", "The current workshop is not available.")
+		} else {
+			httpx.RespondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "An unexpected error occurred.")
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": access})
 }

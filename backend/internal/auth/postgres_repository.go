@@ -27,12 +27,12 @@ func NewPostgresRepository(db *gorm.DB, clock func() time.Time) (*PostgresReposi
 }
 
 func (r *PostgresRepository) FindByEmail(ctx context.Context, email string) (*Credential, error) {
-	const query = `SELECT u.id AS user_id, c.password_hash, (u.status = 'ACTIVE') AS active, c.must_change_password FROM users AS u JOIN user_credentials AS c ON c.user_id = u.id WHERE u.email = ? LIMIT 1`
+	const query = `SELECT u.id AS user_id, u.email::text AS email, u.name AS display_name, c.password_hash, (u.status = 'ACTIVE') AS active, c.must_change_password FROM users AS u JOIN user_credentials AS c ON c.user_id = u.id WHERE u.email = ? LIMIT 1`
 	return r.findCredential(ctx, query, strings.ToLower(strings.TrimSpace(email)))
 }
 
 func (r *PostgresRepository) FindByUserID(ctx context.Context, userID uuid.UUID) (*Credential, error) {
-	const query = `SELECT u.id AS user_id, c.password_hash, (u.status = 'ACTIVE') AS active, c.must_change_password FROM users AS u JOIN user_credentials AS c ON c.user_id = u.id WHERE u.id = ? LIMIT 1`
+	const query = `SELECT u.id AS user_id, u.email::text AS email, u.name AS display_name, c.password_hash, (u.status = 'ACTIVE') AS active, c.must_change_password FROM users AS u JOIN user_credentials AS c ON c.user_id = u.id WHERE u.id = ? LIMIT 1`
 	return r.findCredential(ctx, query, userID)
 }
 
