@@ -87,11 +87,10 @@ func TestChangePasswordTransactionFailurePreservesOldCredentialAndSession(t *tes
 	transactionFailure := errors.New("revoke sessions failed inside transaction")
 	credentials := &failingPasswordCredentialRepo{
 		credential: Credential{UserID: testUserID, PasswordHash: oldHash, Active: true, MustChangePassword: true},
-		fail:       transactionFailure,
 	}
 	sessionRepo := &fakeSessionRepository{found: Session{
 		ID: testSessionID, UserID: testUserID, ExpiresAt: testNow.Add(time.Hour),
-	}}
+	}, changePasswordAndInsertErr: transactionFailure}
 	service := NewAuthService(credentials, &loginMemberships{count: 1},
 		NewSessionService(sessionRepo, testPepper, fixedClock(testNow), bytes.NewReader(make([]byte, 32))),
 		hasher, &loginLimiter{attempts: make(map[string]int)})
@@ -110,6 +109,60 @@ func TestChangePasswordTransactionFailurePreservesOldCredentialAndSession(t *tes
 	restored, err := service.Restore(context.Background(), rawToken)
 	if err != nil || !restored.MustChangePassword {
 		t.Fatalf("old session was lost after rolled-back password change: session = %+v, error = %v", restored, err)
+	}
+}
+
+func TestLoginRejectsCredentialChangedAfterVerification(t *testing.T) {
+	const password = "Correct horse battery staple 7!"
+	hasher := NewPasswordHasher(DefaultPasswordParams())
+	hash, err := hasher.Hash(password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessions := &fakeSessionRepository{insertErr: ErrCredentialChanged, insertForCredentialErr: ErrCredentialChanged}
+	service := NewAuthService(
+		&loginCredentialRepo{credential: &Credential{UserID: testUserID, PasswordHash: hash, Active: true}},
+		&loginMemberships{count: 1},
+		NewSessionService(sessions, testPepper, fixedClock(testNow), bytes.NewReader(make([]byte, 32))),
+		hasher,
+		&loginLimiter{attempts: make(map[string]int)},
+	)
+
+	_, err = service.Login(context.Background(), "owner@example.com", password, "192.0.2.10")
+
+	if !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("Login() error = %v, want generic ErrInvalidCredentials", err)
+	}
+	if sessions.inserted != nil && sessions.insertForCredentialHash == "" {
+		t.Fatal("login used a non-atomic session insert")
+	}
+}
+
+func TestPasswordChangeRevokesAndCreatesSessionAtomically(t *testing.T) {
+	const oldPassword = "Temporary secure passphrase 9!"
+	const newPassword = "New owner passphrase 10!"
+	const rawToken = "3fUHx2rXJ0l6R1l-VV5I8JH8sRj2r0N-fzpZ08O1ZJc"
+	hasher := NewPasswordHasher(DefaultPasswordParams())
+	oldHash, err := hasher.Hash(oldPassword)
+	if err != nil {
+		t.Fatal(err)
+	}
+	credentials := &failingPasswordCredentialRepo{credential: Credential{UserID: testUserID, PasswordHash: oldHash, Active: true, MustChangePassword: true}}
+	sessions := &fakeSessionRepository{found: Session{ID: testSessionID, UserID: testUserID, ExpiresAt: testNow.Add(time.Hour)}}
+	service := NewAuthService(credentials, &loginMemberships{count: 1},
+		NewSessionService(sessions, testPepper, fixedClock(testNow), bytes.NewReader(make([]byte, 32))),
+		hasher, &loginLimiter{attempts: make(map[string]int)})
+
+	rotated, err := service.ChangePassword(context.Background(), rawToken, oldPassword, newPassword)
+
+	if err != nil {
+		t.Fatalf("ChangePassword() error = %v", err)
+	}
+	if sessions.passwordExpectedHash != oldHash || sessions.passwordReplacementHash == "" {
+		t.Fatal("password change did not use the atomic credential/session operation")
+	}
+	if sessions.inserted == nil || sessions.inserted.UserID != testUserID || rotated.Token == "" {
+		t.Fatal("password change did not atomically prepare the replacement session")
 	}
 }
 
@@ -143,7 +196,6 @@ func (l *loginLimiter) RecordFailure(_ context.Context, email, ip string) error 
 
 type failingPasswordCredentialRepo struct {
 	credential Credential
-	fail       error
 }
 
 func (r *failingPasswordCredentialRepo) FindByEmail(_ context.Context, _ string) (*Credential, error) {
@@ -152,8 +204,4 @@ func (r *failingPasswordCredentialRepo) FindByEmail(_ context.Context, _ string)
 
 func (r *failingPasswordCredentialRepo) FindByUserID(_ context.Context, _ uuid.UUID) (*Credential, error) {
 	return &r.credential, nil
-}
-
-func (r *failingPasswordCredentialRepo) ChangePasswordAndRevokeSessions(_ context.Context, _ uuid.UUID, _ string, _ time.Time) error {
-	return r.fail
 }

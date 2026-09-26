@@ -168,22 +168,52 @@ func sessionDigest(pepper []byte, rawToken string) [32]byte {
 }
 
 type fakeSessionRepository struct {
-	inserted  *NewSession
-	found     Session
-	findErr   error
-	findHash  [32]byte
-	findNow   time.Time
-	revokedID uuid.UUID
-	revokedAt time.Time
+	inserted                   *NewSession
+	insertErr                  error
+	insertForCredentialHash    string
+	insertForCredentialErr     error
+	passwordExpectedHash       string
+	passwordReplacementHash    string
+	passwordChangedAt          time.Time
+	changePasswordAndInsertErr error
+	found                      Session
+	findErr                    error
+	findHash                   [32]byte
+	findNow                    time.Time
+	revokedID                  uuid.UUID
+	revokedAt                  time.Time
 }
 
 func (r *fakeSessionRepository) Insert(_ context.Context, in NewSession) (Session, error) {
 	r.inserted = &in
+	if r.insertErr != nil {
+		return Session{}, r.insertErr
+	}
 	return Session{
 		ID:        testSessionID,
 		UserID:    in.UserID,
 		ExpiresAt: in.ExpiresAt,
 	}, nil
+}
+
+func (r *fakeSessionRepository) InsertForCredential(_ context.Context, verifiedHash string, in NewSession) (Session, error) {
+	r.insertForCredentialHash = verifiedHash
+	if r.insertForCredentialErr != nil {
+		return Session{}, r.insertForCredentialErr
+	}
+	r.inserted = &in
+	return Session{ID: testSessionID, UserID: in.UserID, ExpiresAt: in.ExpiresAt}, nil
+}
+
+func (r *fakeSessionRepository) ChangePasswordAndInsert(_ context.Context, _ uuid.UUID, expectedHash, replacementHash string, changedAt time.Time, in NewSession) (Session, error) {
+	r.passwordExpectedHash = expectedHash
+	r.passwordReplacementHash = replacementHash
+	r.passwordChangedAt = changedAt
+	if r.changePasswordAndInsertErr != nil {
+		return Session{}, r.changePasswordAndInsertErr
+	}
+	r.inserted = &in
+	return Session{ID: testSessionID, UserID: in.UserID, ExpiresAt: in.ExpiresAt}, nil
 }
 
 func (r *fakeSessionRepository) FindActiveByTokenHash(_ context.Context, hash [32]byte, now time.Time) (Session, error) {

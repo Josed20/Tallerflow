@@ -42,9 +42,6 @@ type CredentialRepository interface {
 type PasswordCredentialRepository interface {
 	CredentialRepository
 	FindByUserID(context.Context, uuid.UUID) (*Credential, error)
-	// The adapter updates the hash, clears must-change, and revokes all user
-	// sessions in one database transaction. An error leaves all three intact.
-	ChangePasswordAndRevokeSessions(context.Context, uuid.UUID, string, time.Time) error
 }
 
 type MembershipResolver interface {
@@ -133,11 +130,11 @@ func (s *AuthService) Login(ctx context.Context, email, password, clientIP strin
 	if len(s.csrfSecret) == 0 {
 		return AuthSession{}, errors.New("CSRF secret is not configured")
 	}
-	if err := s.sessions.RevokeAllForUser(ctx, credential.UserID); err != nil {
-		return AuthSession{}, err
-	}
-	raw, err := s.sessions.Create(ctx, credential.UserID, SessionMetadata{})
+	raw, err := s.sessions.CreateForCredential(ctx, credential.UserID, credential.PasswordHash, SessionMetadata{})
 	if err != nil {
+		if errors.Is(err, ErrCredentialChanged) {
+			return AuthSession{}, s.recordInvalidLogin(ctx, email, clientIP)
+		}
 		return AuthSession{}, err
 	}
 	return s.authSession(raw.Token, raw.ExpiresAt, credential.MustChangePassword), nil
@@ -225,11 +222,11 @@ func (s *AuthService) ChangePassword(ctx context.Context, rawToken, currentPassw
 	if err != nil {
 		return AuthSession{}, err
 	}
-	if err := store.ChangePasswordAndRevokeSessions(ctx, session.UserID, newHash, s.sessions.clock().UTC()); err != nil {
-		return AuthSession{}, err
-	}
-	raw, err := s.sessions.Create(ctx, session.UserID, SessionMetadata{})
+	raw, err := s.sessions.ChangePasswordAndCreate(ctx, session.UserID, credential.PasswordHash, newHash, SessionMetadata{})
 	if err != nil {
+		if errors.Is(err, ErrCredentialChanged) {
+			return AuthSession{}, ErrPasswordInvalid
+		}
 		return AuthSession{}, err
 	}
 	return s.authSession(raw.Token, raw.ExpiresAt, false), nil

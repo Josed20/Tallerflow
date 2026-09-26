@@ -10,6 +10,7 @@ import (
 var (
 	ErrSessionInvalid       = errors.New("session is invalid")
 	ErrSessionConfiguration = errors.New("session service is not configured")
+	ErrCredentialChanged    = errors.New("credential changed during authentication")
 )
 
 type SessionMetadata struct {

@@ -49,9 +49,35 @@ func (r *PostgresRepository) findCredential(ctx context.Context, query string, a
 }
 
 func (r *PostgresRepository) Insert(ctx context.Context, created NewSession) (Session, error) {
+	return insertSession(r.db.WithContext(ctx), created)
+}
+
+func (r *PostgresRepository) InsertForCredential(ctx context.Context, verifiedHash string, created NewSession) (Session, error) {
+	var session Session
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		storedHash, err := lockCredentialHash(tx, created.UserID)
+		if err != nil {
+			return err
+		}
+		if storedHash != verifiedHash {
+			return ErrCredentialChanged
+		}
+		if err := revokeActiveSessions(tx, created.UserID, created.CreatedAt); err != nil {
+			return err
+		}
+		session, err = insertSession(tx, created)
+		return err
+	})
+	if err != nil {
+		return Session{}, err
+	}
+	return session, nil
+}
+
+func insertSession(db *gorm.DB, created NewSession) (Session, error) {
 	const query = `INSERT INTO user_sessions (user_id, token_hash, csrf_token_hash, expires_at, created_at, last_seen_at, ip_prefix, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, user_id, expires_at, revoked_at`
 	var session Session
-	result := r.db.WithContext(ctx).Raw(query,
+	result := db.Raw(query,
 		created.UserID, created.TokenHash[:], created.CSRFTokenHash[:], created.ExpiresAt,
 		created.CreatedAt, created.CreatedAt, nullableString(created.Metadata.IPPrefix), nullableString(created.Metadata.UserAgent),
 	).Scan(&session)
@@ -93,20 +119,52 @@ func (r *PostgresRepository) RevokeAllForUser(ctx context.Context, userID uuid.U
 	return nil
 }
 
-func (r *PostgresRepository) ChangePasswordAndRevokeSessions(ctx context.Context, userID uuid.UUID, passwordHash string, changedAt time.Time) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := tx.Exec(`UPDATE user_credentials SET password_hash = ?, must_change_password = false, password_changed_at = ?, updated_at = ? WHERE user_id = ?`, passwordHash, changedAt, changedAt, userID)
+func (r *PostgresRepository) ChangePasswordAndInsert(ctx context.Context, userID uuid.UUID, expectedHash, replacementHash string, changedAt time.Time, created NewSession) (Session, error) {
+	var session Session
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		storedHash, err := lockCredentialHash(tx, userID)
+		if err != nil {
+			return err
+		}
+		if storedHash != expectedHash {
+			return ErrCredentialChanged
+		}
+		result := tx.Exec(`UPDATE user_credentials SET password_hash = ?, must_change_password = false, password_changed_at = ?, updated_at = ? WHERE user_id = ?`, replacementHash, changedAt, changedAt, userID)
 		if result.Error != nil {
 			return fmt.Errorf("update credential: %w", result.Error)
 		}
 		if result.RowsAffected != 1 {
 			return ErrCredentialNotFound
 		}
-		if err := tx.Exec(`UPDATE user_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`, changedAt, userID).Error; err != nil {
-			return fmt.Errorf("revoke user sessions: %w", err)
+		if err := revokeActiveSessions(tx, userID, changedAt); err != nil {
+			return err
 		}
-		return nil
+		session, err = insertSession(tx, created)
+		return err
 	})
+	if err != nil {
+		return Session{}, err
+	}
+	return session, nil
+}
+
+func lockCredentialHash(tx *gorm.DB, userID uuid.UUID) (string, error) {
+	var passwordHash string
+	result := tx.Raw(`SELECT password_hash FROM user_credentials WHERE user_id = ? FOR UPDATE`, userID).Scan(&passwordHash)
+	if result.Error != nil {
+		return "", fmt.Errorf("lock credential: %w", result.Error)
+	}
+	if result.RowsAffected != 1 {
+		return "", ErrCredentialChanged
+	}
+	return passwordHash, nil
+}
+
+func revokeActiveSessions(tx *gorm.DB, userID uuid.UUID, revokedAt time.Time) error {
+	if err := tx.Exec(`UPDATE user_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`, revokedAt, userID).Error; err != nil {
+		return fmt.Errorf("revoke user sessions: %w", err)
+	}
+	return nil
 }
 
 func (r *PostgresRepository) ResolveActive(ctx context.Context, userID uuid.UUID) (ActiveMembership, error) {

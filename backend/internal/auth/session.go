@@ -40,13 +40,49 @@ func NewSessionService(repository SessionRepository, pepper []byte, clock func()
 }
 
 func (s *SessionService) Create(ctx context.Context, userID uuid.UUID, metadata SessionMetadata) (RawSession, error) {
-	if err := s.validateConfiguration(); err != nil {
+	token, created, err := s.prepare(userID, metadata)
+	if err != nil {
 		return RawSession{}, err
+	}
+	session, err := s.repository.Insert(ctx, created)
+	if err != nil {
+		return RawSession{}, err
+	}
+	return RawSession{Token: token, ExpiresAt: created.ExpiresAt, Session: session}, nil
+}
+
+func (s *SessionService) CreateForCredential(ctx context.Context, userID uuid.UUID, verifiedHash string, metadata SessionMetadata) (RawSession, error) {
+	token, created, err := s.prepare(userID, metadata)
+	if err != nil {
+		return RawSession{}, err
+	}
+	session, err := s.repository.InsertForCredential(ctx, verifiedHash, created)
+	if err != nil {
+		return RawSession{}, err
+	}
+	return RawSession{Token: token, ExpiresAt: created.ExpiresAt, Session: session}, nil
+}
+
+func (s *SessionService) ChangePasswordAndCreate(ctx context.Context, userID uuid.UUID, expectedHash, replacementHash string, metadata SessionMetadata) (RawSession, error) {
+	token, created, err := s.prepare(userID, metadata)
+	if err != nil {
+		return RawSession{}, err
+	}
+	session, err := s.repository.ChangePasswordAndInsert(ctx, userID, expectedHash, replacementHash, created.CreatedAt, created)
+	if err != nil {
+		return RawSession{}, err
+	}
+	return RawSession{Token: token, ExpiresAt: created.ExpiresAt, Session: session}, nil
+}
+
+func (s *SessionService) prepare(userID uuid.UUID, metadata SessionMetadata) (string, NewSession, error) {
+	if err := s.validateConfiguration(); err != nil {
+		return "", NewSession{}, err
 	}
 
 	token, err := security.RandomToken(s.random, sessionTokenBytes)
 	if err != nil {
-		return RawSession{}, err
+		return "", NewSession{}, err
 	}
 	now := s.clock().UTC()
 	csrfTokenHash := sha256.Sum256([]byte(security.DeriveCSRFToken(s.pepper, token)))
@@ -58,11 +94,7 @@ func (s *SessionService) Create(ctx context.Context, userID uuid.UUID, metadata 
 		CreatedAt:     now,
 		ExpiresAt:     now.Add(sessionLifetime),
 	}
-	session, err := s.repository.Insert(ctx, created)
-	if err != nil {
-		return RawSession{}, err
-	}
-	return RawSession{Token: token, ExpiresAt: created.ExpiresAt, Session: session}, nil
+	return token, created, nil
 }
 
 func (s *SessionService) Authenticate(ctx context.Context, rawToken string) (Session, error) {

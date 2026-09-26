@@ -153,6 +153,59 @@ func TestPostgresRepositoryRejectsZeroOrMultipleActiveMemberships(t *testing.T) 
 	}
 }
 
+func TestLoginSessionRollbackPreservesPreviousSessions(t *testing.T) {
+	repository, mock := newPostgresRepositoryFixture(t)
+	insertFailure := errors.New("insert failed")
+	prepared := preparedSessionFixture()
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT password_hash FROM user_credentials WHERE user_id = $1 FOR UPDATE`)).
+		WithArgs(prepared.UserID).
+		WillReturnRows(sqlmock.NewRows([]string{"password_hash"}).AddRow("verified-hash"))
+	mock.ExpectExec(regexp.QuoteMeta(`UPDATE user_sessions SET revoked_at = $1 WHERE user_id = $2 AND revoked_at IS NULL`)).
+		WithArgs(prepared.CreatedAt, prepared.UserID).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery("INSERT INTO user_sessions").WillReturnError(insertFailure)
+	mock.ExpectRollback()
+
+	_, err := repository.InsertForCredential(context.Background(), "verified-hash", prepared)
+
+	require.ErrorIs(t, err, insertFailure)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPasswordRotationRollbackPreservesOldCredential(t *testing.T) {
+	repository, mock := newPostgresRepositoryFixture(t)
+	insertFailure := errors.New("insert failed")
+	prepared := preparedSessionFixture()
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT password_hash FROM user_credentials WHERE user_id = $1 FOR UPDATE`)).
+		WithArgs(prepared.UserID).
+		WillReturnRows(sqlmock.NewRows([]string{"password_hash"}).AddRow("old-hash"))
+	mock.ExpectExec("UPDATE user_credentials SET password_hash").
+		WithArgs("new-hash", prepared.CreatedAt, prepared.CreatedAt, prepared.UserID).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta(`UPDATE user_sessions SET revoked_at = $1 WHERE user_id = $2 AND revoked_at IS NULL`)).
+		WithArgs(prepared.CreatedAt, prepared.UserID).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery("INSERT INTO user_sessions").WillReturnError(insertFailure)
+	mock.ExpectRollback()
+
+	_, err := repository.ChangePasswordAndInsert(context.Background(), prepared.UserID, "old-hash", "new-hash", prepared.CreatedAt, prepared)
+
+	require.ErrorIs(t, err, insertFailure)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func preparedSessionFixture() NewSession {
+	return NewSession{
+		UserID:        testUserID,
+		TokenHash:     [32]byte{1},
+		CSRFTokenHash: [32]byte{2},
+		CreatedAt:     testNow,
+		ExpiresAt:     testNow.Add(8 * time.Hour),
+	}
+}
+
 func newPostgresRepositoryFixture(t *testing.T) (*PostgresRepository, sqlmock.Sqlmock) {
 	t.Helper()
 	sqlDB, mock, err := sqlmock.New()
