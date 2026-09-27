@@ -48,6 +48,12 @@ export const useSessionStore = defineStore('session', () => {
     if (!mustChangePassword.value) await loadPrincipal()
   }
 
+  async function acceptSession(session: AuthSessionPayload) {
+    applySession(session)
+    restored.value = true
+    if (!mustChangePassword.value) await loadPrincipal()
+  }
+
   async function logout() {
     await api.post('/api/v1/auth/logout', undefined, csrfToken.value ?? undefined)
     clearSession()
@@ -83,5 +89,5 @@ export const useSessionStore = defineStore('session', () => {
     status.value = 'anonymous'
   }
 
-  return { principal, status, restored, isAuthenticated, requiresPasswordChange, restore, login, changePassword, logout }
+  return { principal, status, restored, isAuthenticated, requiresPasswordChange, restore, login, changePassword, acceptSession, logout }
 })

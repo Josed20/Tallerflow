@@ -161,6 +161,29 @@ describe('session store', () => {
     expect(localStorage.length).toBe(0)
     expect(sessionStorage.length).toBe(0)
   })
+
+  it('accepts an onboarding session in memory and loads its principal', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        data: {
+          userId: 'owner-web', email: 'owner@web.test', displayName: 'Owner Web', workshopId: 'workshop-web',
+          role: 'OWNER', passwordChangeRequired: false,
+        },
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        data: { workshop: { id: 'workshop-web', name: 'Taller Web', timezone: 'America/Lima' }, role: 'OWNER' },
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+    const session = useSessionStore()
+
+    await session.acceptSession({ data: { expires_at: '2026-09-28T01:00:00Z', csrf_token: 'csrf-web', must_change_password: false } })
+
+    expect(session.isAuthenticated).toBe(true)
+    expect(session.principal?.workshop.name).toBe('Taller Web')
+    expect(session.restored).toBe(true)
+    expect(localStorage.length).toBe(0)
+    expect(sessionStorage.length).toBe(0)
+  })
 })
 
 function jsonResponse(body: unknown) {
