@@ -51,7 +51,15 @@ export const useSessionStore = defineStore('session', () => {
   async function acceptSession(session: AuthSessionPayload) {
     applySession(session)
     restored.value = true
-    if (!mustChangePassword.value) await loadPrincipal()
+    if (!mustChangePassword.value) {
+      try {
+        await loadPrincipal()
+      } catch (error) {
+        clearSession()
+        restored.value = true
+        throw error
+      }
+    }
   }
 
   async function logout() {

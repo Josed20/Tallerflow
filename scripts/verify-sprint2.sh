@@ -31,8 +31,10 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 cd "$root"
+"$root/scripts/verify-sprint1.sh"
 docker compose --profile app --profile tools down --volumes --remove-orphans
 go -C backend test -race ./...
+go -C backend vet ./...
 npm --prefix frontend ci --no-audit
 npm --prefix frontend test
 npm --prefix frontend run build

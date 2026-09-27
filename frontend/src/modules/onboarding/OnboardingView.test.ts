@@ -8,7 +8,8 @@ import { useOnboardingStore } from './onboarding.store'
 async function renderView() {
   const pinia = createPinia()
   const router = createRouter({ history: createMemoryHistory(), routes: [
-    { path: '/onboarding', component: OnboardingView }, { path: '/app', component: { template: '<div>App</div>' } },
+    { path: '/onboarding', component: OnboardingView }, { path: '/login', component: { template: '<div>Login</div>' } },
+    { path: '/app', component: { template: '<div>App</div>' } },
   ] })
   await router.push('/onboarding')
   await router.isReady()
@@ -60,6 +61,20 @@ describe('OnboardingView', () => {
     expect(alert.getAttribute('aria-live')).toBe('assertive')
     expect(alert.textContent).toContain('No pudimos crear el taller')
     expect(alert.textContent).not.toContain('database secret')
+  })
+
+  it('leaves a stale claimed form and sends the visitor to login', async () => {
+    const { pinia, router } = await renderView()
+    const onboarding = useOnboardingStore(pinia)
+    vi.spyOn(onboarding, 'create').mockImplementation(async () => {
+      onboarding.availability = 'claimed'
+      throw new Error('already claimed')
+    })
+    await fillValidForm('Secure password 123!')
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Crear mi taller' }))
+
+    await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/login'))
   })
 })
 

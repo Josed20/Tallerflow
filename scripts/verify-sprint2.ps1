@@ -33,11 +33,16 @@ $env:E2E_OWNER_PASSWORD = 'Permanent secure passphrase 27!'
 
 Push-Location $root
 try {
+    powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\verify-sprint1.ps1')
+    Assert-NativeSuccess 'Sprint 1 authentication regression suite'
+
     docker compose --profile app --profile tools down --volumes --remove-orphans
     Assert-NativeSuccess 'Initial isolated Compose cleanup'
 
     docker run --rm --volume "${backendPath}:/src" --workdir /src golang:1.27-bookworm go test -race ./...
     Assert-NativeSuccess 'Backend race tests'
+    docker run --rm --volume "${backendPath}:/src" --workdir /src golang:1.27-bookworm go vet ./...
+    Assert-NativeSuccess 'Backend static analysis'
     npm --prefix frontend ci --no-audit
     Assert-NativeSuccess 'Frontend dependency installation'
     npm --prefix frontend test

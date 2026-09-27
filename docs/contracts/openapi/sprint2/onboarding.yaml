@@ -25,7 +25,8 @@ paths:
   /api/v1/onboarding/workshop:
     post:
       operationId: onboardingCreateWorkshop
-      summary: Atomically create the first workshop, OWNER and browser session
+      summary: Create the first workshop, OWNER and browser session
+      description: The identity graph is committed atomically. Session creation follows that commit; if it fails, the OWNER remains valid and can sign in normally.
       security: []
       requestBody:
         required: true

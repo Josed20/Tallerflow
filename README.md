@@ -73,7 +73,7 @@ En Linux o CI:
 ./scripts/verify-sprint2.sh
 ```
 
-La verificación parte tres veces de volúmenes vacíos y ejecuta pruebas Go con detector de carreras, unitarias y build de Vue, contratos OpenAPI y SQL, una carrera real de dos altas contra PostgreSQL y el recorrido Chromium de onboarding a 360 px. Confirma que queda un solo grafo `OWNER`, una sola sesión, ningún secreto en el almacenamiento del navegador y que una instalación reclamada ya no permite repetir el alta.
+La verificación ejecuta primero la regresión integral del Sprint 1 (bootstrap CLI, login, cambio obligatorio, CSRF, logout y throttling). Después parte tres veces de volúmenes vacíos y ejecuta pruebas Go con detector de carreras y análisis estático, unitarias y build de Vue, contratos OpenAPI y SQL, una carrera real de dos altas contra PostgreSQL y el recorrido Chromium de onboarding a 360 px. Confirma que queda un solo grafo `OWNER`, una sola sesión, ningún secreto en el almacenamiento del navegador y que una instalación reclamada ya no permite repetir el alta.
 
 Usa el proyecto Compose aislado `tallerflow_sprint2_verify`, PostgreSQL en `127.0.0.1:55434` y la aplicación en `http://localhost:18081`. Al terminar elimina únicamente sus contenedores y volumen descartable.
 

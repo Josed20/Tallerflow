@@ -36,7 +36,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sprint2-compose-logs
-          path: sprint2-compose.log
+          path: |
+            sprint1-compose.log
+            sprint2-compose.log
           if-no-files-found: ignore
       - name: Upload Playwright evidence on failure
         if: failure()

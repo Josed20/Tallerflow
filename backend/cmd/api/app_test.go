@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -91,6 +92,15 @@ func TestBuildApplicationClosesDatabase(t *testing.T) {
 	require.NoError(t, app.close())
 	require.NoError(t, mock.ExpectationsWereMet())
 	require.True(t, bootstrapClosed)
+}
+
+func TestBuildPostgresOnboardingModuleDoesNotExposeInvalidDatabaseURL(t *testing.T) {
+	const secret = "bootstrap-secret-fixture"
+	_, err := buildPostgresOnboardingModule("postgres://bootstrap:"+secret+"@%zz/tallerflow", nil)
+
+	require.Error(t, err)
+	require.ErrorContains(t, err, "TF_BOOTSTRAP_DATABASE_URL")
+	require.False(t, strings.Contains(err.Error(), secret), "configuration error leaked the bootstrap password: %v", err)
 }
 
 func applicationConfig() config.Config {

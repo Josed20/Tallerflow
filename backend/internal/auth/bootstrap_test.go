@@ -135,6 +135,9 @@ func TestWebBootstrapCreatesPermanentCredentialThenAppSession(t *testing.T) {
 	if sessionRepository.inserted == nil || sessionRepository.inserted.UserID != result.UserID {
 		t.Fatalf("web bootstrap did not persist exactly one session: %+v", sessionRepository.inserted)
 	}
+	if sessionRepository.insertForCredentialHash != credential.passwordHash {
+		t.Fatal("web bootstrap did not bind the session insert to the committed credential")
+	}
 	if sessionRepository.inserted.Metadata.IPPrefix != "203.0.113.0/24" {
 		t.Fatal("web bootstrap lost session metadata")
 	}
@@ -143,10 +146,29 @@ func TestWebBootstrapCreatesPermanentCredentialThenAppSession(t *testing.T) {
 	}
 }
 
+func TestWebBootstrapDoesNotCreateSessionAfterConcurrentCredentialChange(t *testing.T) {
+	store := newBootstrapStoreFake()
+	service := NewBootstrapServiceWithClock(store, NewPasswordHasher(DefaultPasswordParams()), fixedClock(testNow))
+	sessionRepository := &fakeSessionRepository{insertForCredentialErr: ErrCredentialChanged}
+	sessions := NewSessionService(sessionRepository, testPepper, fixedClock(testNow), bytes.NewReader(bytes.Repeat([]byte{9}, 32)))
+
+	_, err := service.CreateWebOwner(context.Background(), BootstrapInput{
+		Email: "owner@tallerflow.pe", Name: "Owner Demo", WorkshopName: "Taller Demo",
+		Password: "Permanent secure passphrase 9!",
+	}, SessionMetadata{}, sessions)
+
+	if !errors.Is(err, ErrCredentialChanged) {
+		t.Fatalf("CreateWebOwner() error = %v, want ErrCredentialChanged", err)
+	}
+	if sessionRepository.inserted != nil {
+		t.Fatal("web bootstrap created a session for a stale credential")
+	}
+}
+
 func TestWebBootstrapLeavesValidClaimedOwnerWhenAppSessionInsertFails(t *testing.T) {
 	store := newBootstrapStoreFake()
 	service := NewBootstrapServiceWithClock(store, NewPasswordHasher(DefaultPasswordParams()), fixedClock(testNow))
-	sessions := NewSessionService(&fakeSessionRepository{insertErr: errors.New("session insert failed")}, testPepper, fixedClock(testNow), bytes.NewReader(bytes.Repeat([]byte{8}, 32)))
+	sessions := NewSessionService(&fakeSessionRepository{insertForCredentialErr: errors.New("session insert failed")}, testPepper, fixedClock(testNow), bytes.NewReader(bytes.Repeat([]byte{8}, 32)))
 
 	_, err := service.CreateWebOwner(context.Background(), BootstrapInput{
 		Email: "owner@tallerflow.pe", Name: "Owner Demo", WorkshopName: "Taller Demo",

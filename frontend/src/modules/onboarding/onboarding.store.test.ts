@@ -44,7 +44,55 @@ describe('onboarding store', () => {
     expect(session.isAuthenticated).toBe(true)
     expect(session.principal?.id).toBe('owner-web')
   })
+
+  it('marks a stale onboarding screen as claimed after a conflict', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({
+      error: { code: 'ONBOARDING_UNAVAILABLE', message: 'claimed', details: {}, request_id: crypto.randomUUID() },
+    }, 409)))
+    const onboarding = useOnboardingStore()
+
+    await expect(onboarding.create(validInput())).rejects.toThrow()
+
+    expect(onboarding.availability).toBe('claimed')
+    expect(onboarding.loaded).toBe(true)
+  })
+
+  it('refreshes availability after an uncertain server failure', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ error: { code: 'INTERNAL_ERROR', message: 'error', details: {}, request_id: crypto.randomUUID() } }, 500))
+      .mockResolvedValueOnce(jsonResponse({ data: { available: false } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const onboarding = useOnboardingStore()
+
+    await expect(onboarding.create(validInput())).rejects.toThrow()
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(onboarding.availability).toBe('claimed')
+  })
+
+  it('keeps claimed state when principal loading fails after the owner was created', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ data: { expires_at: '2026-09-28T01:00:00Z', csrf_token: 'csrf-web', must_change_password: false } }, 201))
+      .mockResolvedValueOnce(jsonResponse({ error: { code: 'INTERNAL_ERROR', message: 'error', details: {}, request_id: crypto.randomUUID() } }, 500))
+      .mockResolvedValueOnce(jsonResponse({ data: { workshop: { id: 'unused', name: 'unused', timezone: 'America/Lima' }, role: 'OWNER' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const onboarding = useOnboardingStore()
+    const session = useSessionStore()
+
+    await expect(onboarding.create(validInput())).rejects.toThrow()
+
+    expect(onboarding.availability).toBe('claimed')
+    expect(onboarding.loaded).toBe(true)
+    expect(session.isAuthenticated).toBe(false)
+  })
 })
+
+function validInput() {
+  return {
+    workshop_name: 'Taller Web', owner_name: 'Owner Web', email: 'owner@web.test',
+    password: 'Secure password 123!', password_confirmation: 'Secure password 123!',
+  }
+}
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })

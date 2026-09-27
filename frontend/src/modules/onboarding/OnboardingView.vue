@@ -58,6 +58,10 @@ async function submit() {
     })
     await router.replace('/app')
   } catch {
+    if (onboarding.availability === 'claimed') {
+      await router.replace('/login')
+      return
+    }
     serverError.value = 'No pudimos crear el taller. Inténtalo nuevamente en unos minutos.'
   } finally {
     submitting.value = false

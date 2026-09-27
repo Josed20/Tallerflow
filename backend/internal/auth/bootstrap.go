@@ -69,18 +69,19 @@ func NewBootstrapServiceWithClock(store BootstrapStore, hasher PasswordHasher, c
 }
 
 func (s *BootstrapService) CreateOwner(ctx context.Context, in BootstrapInput) (BootstrapResult, error) {
-	return s.createOwner(ctx, in, true)
+	result, _, err := s.createOwner(ctx, in, true)
+	return result, err
 }
 
 func (s *BootstrapService) CreateWebOwner(ctx context.Context, in BootstrapInput, metadata SessionMetadata, sessions *SessionService) (WebBootstrapResult, error) {
 	if sessions == nil {
 		return WebBootstrapResult{}, errors.New("bootstrap service is not configured")
 	}
-	result, err := s.createOwner(ctx, in, false)
+	result, verifiedHash, err := s.createOwner(ctx, in, false)
 	if err != nil {
 		return WebBootstrapResult{}, err
 	}
-	created, err := sessions.Create(ctx, result.UserID, metadata)
+	created, err := sessions.CreateForCredential(ctx, result.UserID, verifiedHash, metadata)
 	if err != nil {
 		return WebBootstrapResult{}, fmt.Errorf("create onboarding session: %w", err)
 	}
@@ -90,20 +91,20 @@ func (s *BootstrapService) CreateWebOwner(ctx context.Context, in BootstrapInput
 	}, nil
 }
 
-func (s *BootstrapService) createOwner(ctx context.Context, in BootstrapInput, mustChangePassword bool) (BootstrapResult, error) {
+func (s *BootstrapService) createOwner(ctx context.Context, in BootstrapInput, mustChangePassword bool) (BootstrapResult, string, error) {
 	var result BootstrapResult
 	if s == nil || s.store == nil || s.clock == nil {
-		return result, errors.New("bootstrap service is not configured")
+		return result, "", errors.New("bootstrap service is not configured")
 	}
 	in.Email = strings.ToLower(strings.TrimSpace(in.Email))
 	in.Name = strings.TrimSpace(in.Name)
 	in.WorkshopName = strings.TrimSpace(in.WorkshopName)
 	if in.Email == "" || !strings.Contains(in.Email, "@") || in.Name == "" || in.WorkshopName == "" || len(in.Password) < 12 || len(in.Password) > 1<<20 {
-		return result, ErrBootstrapInvalidInput
+		return result, "", ErrBootstrapInvalidInput
 	}
 	hash, err := s.hasher.Hash(in.Password)
 	if err != nil {
-		return result, fmt.Errorf("hash initial credential: %w", err)
+		return result, "", fmt.Errorf("hash initial credential: %w", err)
 	}
 	err = s.store.WithinTransaction(ctx, func(tx BootstrapTx) error {
 		userID, err := tx.InsertUser(ctx, in.Email, in.Name)
@@ -137,7 +138,7 @@ func (s *BootstrapService) createOwner(ctx context.Context, in BootstrapInput, m
 		return nil
 	})
 	if err != nil {
-		return BootstrapResult{}, err
+		return BootstrapResult{}, "", err
 	}
-	return result, nil
+	return result, hash, nil
 }

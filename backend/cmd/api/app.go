@@ -147,7 +147,7 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 func buildPostgresOnboardingModule(databaseURL string, sessions *auth.SessionService) (onboardingModule, error) {
 	pool, err := pgxpool.New(context.Background(), databaseURL)
 	if err != nil {
-		return onboardingModule{}, err
+		return onboardingModule{}, errors.New("TF_BOOTSTRAP_DATABASE_URL is invalid")
 	}
 	bootstrap := auth.NewBootstrapService(auth.NewPostgresBootstrapStore(pool), auth.NewPasswordHasher(auth.DefaultPasswordParams()))
 	creator := onboarding.OwnerCreatorFunc(func(ctx context.Context, input auth.BootstrapInput, metadata auth.SessionMetadata) (auth.WebBootstrapResult, error) {
