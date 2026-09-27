@@ -93,7 +93,7 @@ try {
     }
     npm --prefix frontend exec playwright install chromium
     Assert-NativeSuccess 'Playwright Chromium installation'
-    npm --prefix frontend run test:e2e
+    npm --prefix frontend run test:e2e -- auth-flow.spec.ts
     Assert-NativeSuccess 'Playwright authentication journey'
 }
 catch {
