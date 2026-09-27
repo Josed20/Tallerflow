@@ -27,8 +27,8 @@ Fuentes de verdad:
 - Producto y arquitectura: `docs/superpowers/specs/2026-09-21-tallerflow-mvp-design.md`.
 - Contrato de identidad: `docs/contracts/identity-persistence.md`.
 - Contrato HTTP actual: `docs/contracts/openapi.yaml`.
-- Plan productivo de órdenes: `docs/superpowers/plans/2026-09-22-tallerflow-orders-production-autoplan.md`.
-- Auditoría de usuario: `.gstack/qa-reports/qa-report-localhost-2026-09-27-full.md`.
+- Cierre técnico del Sprint 1: `docs/superpowers/plans/2026-09-26-sprint-1-final-integration.md`.
+- Hallazgos de usuario incorporados en esta especificación: falta de onboarding, recuperación, 404 real y prevención de doble envío.
 
 Decisiones preservadas:
 
@@ -81,8 +81,8 @@ Ramas:
 Límites compartidos:
 
 - Cada módulo exporta sus rutas; solo José realiza el cableado final en `backend/cmd/api/app.go` y `frontend/src/app/router.ts` durante integración.
-- Cada persona entrega el fragmento OpenAPI de su módulo. José consolida el archivo único sin reinterpretar los contratos aprobados.
-- Las migraciones se reservan antes de abrir ramas: Lucero `V3`, Michelle `V4` y `V5`, Stefano `V6`. Nadie reutiliza ni renombra una versión aplicada.
+- Cada persona entrega un fragmento OpenAPI autocontenido en `docs/contracts/openapi/sprint2/{onboarding|recovery|orders|team}.yaml`, con `operationId` y nombres de esquema prefijados por módulo, y lo valida en su rama junto con pruebas de contrato HTTP. José consolida el archivo único sin reinterpretar los contratos aprobados ni obligar a una rama a consumir otra.
+- Las migraciones se reservan antes de abrir ramas: Michelle `V3` y `V4`, Stefano `V5`. Lucero reutiliza la tabla `password_reset_tokens` creada por V1 y no modifica una migración aplicada. Nadie reutiliza ni renombra una versión aplicada.
 - Cada rama usa un proyecto Compose o volumen distinto. No se comparte una base migrada parcialmente.
 - Los módulos no importan implementaciones internas de otro dominio. Se comunican mediante principal autenticado, interfaces y DTO documentados.
 - Los cambios en archivos compartidos se mantienen mínimos y se integran al final; no son requisito para desarrollar o probar el módulo aislado.
@@ -109,7 +109,7 @@ Límites compartidos:
 - `409`: conflicto, repetición incompatible o versión obsoleta.
 - `422`: regla de negocio o validación semántica.
 - `429`: límite temporal.
-- Toda mutación same-origin exige CSRF, salvo endpoints públicos documentados de onboarding y recuperación.
+- Toda mutación same-origin exige CSRF, salvo los endpoints públicos documentados de onboarding, recuperación y consumo de invitaciones. El consumo de invitaciones se protege con token aleatorio de un solo uso, validación estricta de `Origin`/`Host`, rate limit y respuestas anti-enumeración; no depende de una sesión previa para obtener CSRF.
 - Los endpoints públicos tienen rate limit por IP y respuestas que no revelan existencia de usuarios o recursos.
 
 ## 6. José — onboarding, contratos e integración
@@ -129,7 +129,7 @@ scripts/verify-sprint2.*
 
 ### Tareas
 
-- [ ] `J-01` Definir en OpenAPI los DTO y códigos de onboarding.
+- [ ] `J-01` Definir y validar `docs/contracts/openapi/sprint2/onboarding.yaml`, incluidos DTO y códigos de onboarding; documentar el comando común con el que los otros módulos validan sus fragmentos autocontenidos.
 - [ ] `J-02` Implementar consulta pública de disponibilidad sin revelar datos del taller o OWNER.
 - [ ] `J-03` Implementar creación transaccional del primer taller, usuario, credencial, membresía OWNER y evento de auditoría mediante el repositorio restringido de bootstrap.
 - [ ] `J-04` Mantener separadas las conexiones `tallerflow_app` y `tallerflow_bootstrap`; la API normal no recibe permisos elevados y el endpoint público deja de admitir creación después de reclamar `bootstrap_state`.
@@ -141,7 +141,7 @@ scripts/verify-sprint2.*
 - [ ] `J-10` Crear una sesión opaca después del onboarding y dirigir al nuevo OWNER a `/app` sin marcar cambio obligatorio de la contraseña que acaba de elegir.
 - [ ] `J-11` Redirigir una instalación vacía desde `/login` hacia onboarding y una instalación reclamada desde `/onboarding` hacia login.
 - [ ] `J-12` Consolidar rutas backend, frontend y OpenAPI de las cuatro ramas sin cambiar sus contratos.
-- [ ] `J-13` Crear `scripts/verify-sprint2.ps1` y `.sh` para ejecutar la demo desde volúmenes vacíos.
+- [ ] `J-13` Crear `scripts/verify-sprint2.ps1` y `.sh` para ejecutar la demo desde volúmenes vacíos y actualizar `.github/workflows/ci.yml` para ejecutarlos con PostgreSQL, correo de prueba, fixtures y evidencias del recorrido de Sprint 2.
 - [ ] `J-14` Ejecutar el recorrido final E2E y registrar evidencia de integración.
 
 ### Pruebas obligatorias
@@ -168,15 +168,15 @@ Una persona sin conocimientos técnicos abre una instalación vacía, crea el ta
 backend/internal/passwordreset/
 frontend/src/modules/password-reset/
 frontend/src/modules/not-found/
-database/migrations/V3__password_reset_tokens.sql
+database/tests/password_reset_*.sql
 infra/mail/
 compose.mail.yaml
 ```
 
 ### Tareas
 
-- [ ] `L-01` Definir en OpenAPI solicitud y consumo de recuperación con respuestas anti-enumeración.
-- [ ] `L-02` Crear `password_reset_tokens` con hash del token, expiración, consumo único, usuario y auditoría.
+- [ ] `L-01` Definir y validar `docs/contracts/openapi/sprint2/recovery.yaml` para solicitud y consumo de recuperación con respuestas anti-enumeración.
+- [ ] `L-02` Reutilizar sin modificar la tabla `password_reset_tokens` creada por V1; verificar sus constraints, índice, grants y aislamiento con pruebas SQL, y documentar cualquier extensión aditiva realmente necesaria para una migración futura coordinada.
 - [ ] `L-03` Implementar generación criptográfica y almacenar únicamente el hash.
 - [ ] `L-04` Implementar solicitud que responde igual exista o no el correo.
 - [ ] `L-05` Entregar el enlace mediante una interfaz `PasswordResetDelivery`; usar Mailpit mediante `compose.mail.yaml` para desarrollo y un adaptador SMTP configurable para producción, sin credenciales en el repositorio ni tokens en logs.
@@ -205,7 +205,7 @@ Un usuario recupera el acceso con un enlace temporal y una URL errónea nunca se
 
 **Objetivo individual:** entregar la primera operación productiva visible de TallerFlow.
 
-**Plan detallado vinculante:** `docs/superpowers/plans/2026-09-22-tallerflow-orders-production-autoplan.md`.
+**Base funcional vinculante:** secciones 12–16 de `docs/superpowers/specs/2026-09-21-tallerflow-mvp-design.md` y las decisiones acotadas de esta especificación.
 
 **Propiedad principal:**
 
@@ -216,13 +216,13 @@ backend/internal/dashboard/
 frontend/src/modules/clients/
 frontend/src/modules/orders/
 frontend/src/modules/dashboard/
-database/migrations/V4__clients.sql
-database/migrations/V5__orders_and_stages.sql
+database/migrations/V3__clients.sql
+database/migrations/V4__orders_and_stages.sql
 ```
 
 ### Tareas
 
-- [ ] `M-01` Incorporar a OpenAPI clientes, órdenes, etapas, cursor, ETag, idempotencia y dashboard.
+- [ ] `M-01` Definir y validar `docs/contracts/openapi/sprint2/orders.yaml` con clientes, órdenes, etapas, cursor, ETag, idempotencia y dashboard.
 - [ ] `M-02` Crear clientes con estado activo/inactivo, sin eliminación física y con RLS.
 - [ ] `M-03` Crear contador y código secuencial único por taller bajo bloqueo transaccional.
 - [ ] `M-04` Crear órdenes `ACTIVE` con cliente, producto, especificación, cantidad, unidad y fechas coherentes.
@@ -261,22 +261,22 @@ OWNER o ADMIN crea cliente y orden, consulta el semáforo y detalle, y confirma 
 backend/internal/team/
 frontend/src/modules/team/
 frontend/src/modules/invitations/
-database/migrations/V6__team_invitations.sql
+database/migrations/V5__team_invitations.sql
 database/tests/team_*.sql
 ```
 
 ### Tareas
 
-- [ ] `S-01` Definir en OpenAPI lista de miembros, invitación, aceptación y cambio de membresía.
-- [ ] `S-02` Crear `team_invitations` con hash de token, taller, correo normalizado, rol, expiración, creador y consumo.
-- [ ] `S-03` Añadir constraints, índices, grants y RLS para invitaciones y membresías.
+- [ ] `S-01` Definir y validar `docs/contracts/openapi/sprint2/team.yaml` con lista de miembros, invitación, aceptación, contraseña inicial para usuario nuevo y cambio de membresía.
+- [ ] `S-02` Crear en V5 `team_invitations` con hash de token, taller, correo normalizado, rol, expiración, creador y consumo.
+- [ ] `S-03` Añadir constraints, índices, grants y RLS; imponer en PostgreSQL una sola fila de `workshop_members` por `user_id` durante este Sprint para impedir pertenencia a dos talleres incluso bajo concurrencia.
 - [ ] `S-04` Implementar lista de miembros del taller actual sin exponer otros talleres.
 - [ ] `S-05` Permitir que OWNER invite `ADMIN` u `OPERATOR`; ADMIN solo puede invitar `OPERATOR`.
 - [ ] `S-06` Generar un enlace de invitación mostrado una sola vez; almacenar únicamente el hash.
-- [ ] `S-07` Implementar aceptación transaccional para un usuario nuevo o reactivación segura dentro del mismo taller; rechazar sin enumeración un correo que ya pertenece a otro taller.
+- [ ] `S-07` Implementar la aceptación como endpoint público transaccional: para un usuario nuevo solicita nombre y contraseña, reutiliza el hasher Argon2id y crea usuario, credencial y membresía en una sola transacción; para una membresía inactiva del mismo taller la reactiva sin cambiar la credencial. Exigir token de un solo uso, validar `Origin`/`Host`, aplicar rate limit, serializar por correo/usuario y rechazar sin enumeración un correo que ya pertenece a otro taller. No depende del módulo de recuperación de Lucero.
 - [ ] `S-08` Impedir invitaciones duplicadas activas y membresías duplicadas.
 - [ ] `S-09` Permitir activar o desactivar miembros sin eliminación física.
-- [ ] `S-10` Impedir que se desactive o degrade al último OWNER activo.
+- [ ] `S-10` Impedir que se desactive o degrade al último OWNER activo mediante bloqueo transaccional de las membresías OWNER o una escritura SQL condicional que preserve el invariante bajo solicitudes concurrentes.
 - [ ] `S-11` Crear `/app/team` y `/join` con lista, invitación, copia de enlace, estados vacío/error y confirmaciones.
 - [ ] `S-12` Añadir pruebas SQL, Go, Vue y E2E de roles, expiración, repetición y aislamiento.
 
@@ -286,7 +286,9 @@ database/tests/team_*.sql
 - ADMIN no crea otro ADMIN ni OWNER.
 - Token crudo no aparece en base o logs y solo se consume una vez.
 - Invitación vencida o alterada no crea usuario ni membresía.
+- Dos aceptaciones concurrentes para el mismo correo desde talleres distintos producen como máximo una membresía y nunca dejan un usuario sin credencial.
 - No se puede eliminar el último OWNER activo.
+- Dos degradaciones o desactivaciones concurrentes nunca dejan al taller sin OWNER activo.
 - Otro taller recibe `404` neutro.
 - Vista de equipo funciona con teclado y a 360 px.
 
@@ -301,9 +303,9 @@ El OWNER incorpora y administra miembros sin compartir contraseñas y sin romper
 | Persona | Resultado verificable |
 |---|---|
 | José | OpenAPI base de onboarding y fixture de OWNER |
-| Lucero | V3 y contratos de recuperación/404 |
-| Michelle | V4/V5 y contratos de clientes/órdenes |
-| Stefano | V6 y contratos de equipo/invitaciones |
+| Lucero | pruebas de la tabla V1 existente y contratos de recuperación/404 |
+| Michelle | V3/V4 y contratos de clientes/órdenes |
+| Stefano | V5 y contratos de equipo/invitaciones |
 
 Puerta: los cuatro módulos compilan y sus migraciones funcionan desde una base V1/V2 aislada.
 
@@ -332,7 +334,7 @@ Puerta: pruebas Vue, accesibilidad y E2E del módulo pasan de forma aislada.
 ### Días 9–10 — integración y demo
 
 - Fusionar las ramas en una rama de integración creada desde `main` actualizado.
-- Aplicar V3, V4, V5 y V6 desde una base vacía y ejecutar `flyway validate`.
+- Aplicar V3, V4 y V5 desde una base vacía y ejecutar `flyway validate`.
 - Consolidar OpenAPI, rutas y navegación.
 - Ejecutar backend, frontend, SQL, Playwright y verificación Compose.
 - Repetir la demo completa en escritorio y 360 px.
@@ -379,9 +381,9 @@ Checklist de cada PR:
 El desarrollo es paralelo. El orden siguiente solo controla la integración y las migraciones:
 
 1. Crear `codex/s2-sprint2-integration` desde `main` actualizado.
-2. Integrar Lucero y verificar V3.
-3. Integrar Michelle y verificar V4/V5.
-4. Integrar Stefano y verificar V6.
+2. Integrar Lucero y verificar la compatibilidad de recuperación con V1/V2.
+3. Integrar Michelle y verificar V3/V4.
+4. Integrar Stefano y verificar V5.
 5. Integrar José y consolidar router, navegación, OpenAPI y scripts.
 6. Ejecutar la matriz completa desde volúmenes vacíos.
 7. Abrir PR de integración hacia `main` y exigir CI verde.
@@ -427,7 +429,7 @@ Los comandos se ejecutan desde el directorio correspondiente según el script de
 - [ ] OWNER administra miembros y no puede perder el último OWNER activo.
 - [ ] Otro taller nunca obtiene datos y recibe 404 neutro cuando corresponde.
 - [ ] OpenAPI coincide con handlers y cliente frontend.
-- [ ] Flyway migra y valida una base vacía con V1–V6.
+- [ ] Flyway migra y valida una base vacía con V1–V5.
 - [ ] Todas las pruebas y builds pasan localmente y en CI.
 - [ ] La demo completa se repite a 360 px y escritorio desde volúmenes vacíos.
 - [ ] No quedan defectos críticos o altos abiertos.
