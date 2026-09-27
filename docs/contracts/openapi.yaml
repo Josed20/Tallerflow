@@ -11,11 +11,62 @@ tags:
     description: Process and dependency health checks.
   - name: Authentication
     description: Browser session, password rotation and logout operations.
+  - name: Onboarding
+    description: Public claim flow for the first workshop OWNER.
   - name: Identity
     description: Tenant-aware authenticated identity.
   - name: Workshops
     description: Access to the workshop bound to the current session.
 paths:
+  /api/v1/onboarding/status:
+    get:
+      tags: [Onboarding]
+      operationId: onboardingGetStatus
+      summary: Check whether the installation can be claimed
+      security: []
+      responses:
+        '200':
+          description: Availability without workshop or owner data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnboardingStatusResponse'
+        '429':
+          $ref: '#/components/responses/OnboardingRateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/onboarding/workshop:
+    post:
+      tags: [Onboarding]
+      operationId: onboardingCreateWorkshop
+      summary: Create the first workshop, OWNER and browser session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OnboardingCreateInput'
+      responses:
+        '201':
+          description: Installation claimed and browser session created.
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SessionCookieSet'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '403':
+          $ref: '#/components/responses/CSRFInvalid'
+        '409':
+          $ref: '#/components/responses/OnboardingUnavailable'
+        '422':
+          $ref: '#/components/responses/OnboardingValidationFailed'
+        '429':
+          $ref: '#/components/responses/OnboardingRateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /health/live:
     get:
       tags: [Health]
@@ -383,6 +434,29 @@ components:
         type: string
         example: __Host-tallerflow_session=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax
   responses:
+    OnboardingUnavailable:
+      description: The installation has already been claimed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    OnboardingValidationFailed:
+      description: One or more onboarding fields are invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    OnboardingRateLimited:
+      description: Too many onboarding requests.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     InvalidRequest:
       description: Request body or parameters are invalid.
       headers:
@@ -438,6 +512,47 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
   schemas:
+    OnboardingCreateInput:
+      type: object
+      additionalProperties: false
+      required: [workshop_name, owner_name, email, password, password_confirmation]
+      properties:
+        workshop_name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        owner_name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          minLength: 12
+          maxLength: 1048576
+          writeOnly: true
+        password_confirmation:
+          type: string
+          minLength: 12
+          maxLength: 1048576
+          writeOnly: true
+    OnboardingStatusData:
+      type: object
+      additionalProperties: false
+      required: [available]
+      properties:
+        available:
+          type: boolean
+    OnboardingStatusResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/OnboardingStatusData'
     LoginInput:
       type: object
       additionalProperties: false

@@ -1,0 +1,142 @@
+openapi: 3.1.0
+info:
+  title: TallerFlow Onboarding API
+  version: 0.2.0
+  description: Self-contained contract for claiming the first workshop OWNER.
+servers:
+  - url: /
+paths:
+  /api/v1/onboarding/status:
+    get:
+      operationId: onboardingGetStatus
+      summary: Check whether the installation can be claimed
+      security: []
+      responses:
+        '200':
+          description: Public availability without workshop or owner data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnboardingStatusResponse'
+        '429':
+          $ref: '#/components/responses/OnboardingRateLimited'
+        '500':
+          $ref: '#/components/responses/OnboardingInternalError'
+  /api/v1/onboarding/workshop:
+    post:
+      operationId: onboardingCreateWorkshop
+      summary: Atomically create the first workshop, OWNER and browser session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OnboardingCreateInput'
+      responses:
+        '201':
+          description: The installation was claimed and an opaque session cookie was set.
+          headers:
+            Set-Cookie:
+              description: Opaque HttpOnly SameSite=Lax session cookie scoped to Path=/.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnboardingSessionResponse'
+        '403':
+          $ref: '#/components/responses/OnboardingOriginInvalid'
+        '409':
+          $ref: '#/components/responses/OnboardingUnavailable'
+        '422':
+          $ref: '#/components/responses/OnboardingValidationFailed'
+        '429':
+          $ref: '#/components/responses/OnboardingRateLimited'
+        '500':
+          $ref: '#/components/responses/OnboardingInternalError'
+components:
+  responses:
+    OnboardingOriginInvalid:
+      description: Request origin is not allowed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/OnboardingErrorResponse' }
+    OnboardingUnavailable:
+      description: The installation has already been claimed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/OnboardingErrorResponse' }
+    OnboardingValidationFailed:
+      description: One or more fields are invalid.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/OnboardingErrorResponse' }
+    OnboardingRateLimited:
+      description: Too many onboarding requests.
+      headers:
+        Retry-After:
+          schema: { type: integer, minimum: 1 }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/OnboardingErrorResponse' }
+    OnboardingInternalError:
+      description: Unexpected server error.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/OnboardingErrorResponse' }
+  schemas:
+    OnboardingCreateInput:
+      type: object
+      additionalProperties: false
+      required: [workshop_name, owner_name, email, password, password_confirmation]
+      properties:
+        workshop_name: { type: string, minLength: 1, maxLength: 160 }
+        owner_name: { type: string, minLength: 1, maxLength: 160 }
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, minLength: 12, maxLength: 1048576, writeOnly: true }
+        password_confirmation: { type: string, minLength: 12, maxLength: 1048576, writeOnly: true }
+    OnboardingStatusData:
+      type: object
+      additionalProperties: false
+      required: [available]
+      properties:
+        available: { type: boolean }
+    OnboardingStatusResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/OnboardingStatusData' }
+    OnboardingSessionData:
+      type: object
+      additionalProperties: false
+      required: [expires_at, csrf_token, must_change_password]
+      properties:
+        expires_at: { type: string, format: date-time }
+        csrf_token: { type: string, minLength: 43, maxLength: 43 }
+        must_change_password: { type: boolean, const: false }
+    OnboardingSessionResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/OnboardingSessionData' }
+    OnboardingError:
+      type: object
+      additionalProperties: false
+      required: [code, message, details, request_id]
+      properties:
+        code: { type: string, pattern: '^[A-Z][A-Z0-9_]*$' }
+        message: { type: string, minLength: 1 }
+        details:
+          type: object
+          additionalProperties: true
+          description: Safe field errors or context; never contains submitted secrets.
+        request_id: { type: string, format: uuid }
+    OnboardingErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error: { $ref: '#/components/schemas/OnboardingError' }
