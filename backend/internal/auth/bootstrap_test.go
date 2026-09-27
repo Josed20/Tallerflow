@@ -1,10 +1,13 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
+	"time"
 
+	"github.com/Josed20/Tallerflow/backend/platform/security"
 	"github.com/google/uuid"
 )
 
@@ -106,9 +109,62 @@ func TestBootstrapRejectsSecondOwnerWithDifferentEmail(t *testing.T) {
 	}
 }
 
+func TestWebBootstrapCreatesPermanentCredentialThenAppSession(t *testing.T) {
+	store := newBootstrapStoreFake()
+	service := NewBootstrapServiceWithClock(store, NewPasswordHasher(DefaultPasswordParams()), fixedClock(testNow))
+	randomBytes := bytes.Repeat([]byte{7}, 32)
+	sessionRepository := &fakeSessionRepository{}
+	sessions := NewSessionService(sessionRepository, testPepper, fixedClock(testNow), bytes.NewReader(randomBytes))
+	input := BootstrapInput{
+		Email: " Web.Owner@TallerFlow.pe ", Name: " Web Owner ",
+		WorkshopName: " Taller Web ", Password: "Permanent secure passphrase 9!",
+	}
+
+	result, err := service.CreateWebOwner(context.Background(), input, SessionMetadata{IPPrefix: "203.0.113.0/24", UserAgent: "browser"}, sessions)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.MustChangePassword || result.Token == "" || result.CSRFToken == "" || !result.ExpiresAt.Equal(testNow.Add(8*time.Hour)) {
+		t.Fatalf("unexpected web bootstrap result: %+v", result)
+	}
+	credential := store.state.credentials[result.UserID]
+	if credential.mustChange || credential.passwordChangedAt == nil || !credential.passwordChangedAt.Equal(testNow) {
+		t.Fatalf("web credential was not marked final at creation: %+v", credential)
+	}
+	if sessionRepository.inserted == nil || sessionRepository.inserted.UserID != result.UserID {
+		t.Fatalf("web bootstrap did not persist exactly one session: %+v", sessionRepository.inserted)
+	}
+	if sessionRepository.inserted.Metadata.IPPrefix != "203.0.113.0/24" {
+		t.Fatal("web bootstrap lost session metadata")
+	}
+	if result.CSRFToken != security.DeriveCSRFToken(testPepper, result.Token) {
+		t.Fatal("web bootstrap returned an unbound CSRF token")
+	}
+}
+
+func TestWebBootstrapLeavesValidClaimedOwnerWhenAppSessionInsertFails(t *testing.T) {
+	store := newBootstrapStoreFake()
+	service := NewBootstrapServiceWithClock(store, NewPasswordHasher(DefaultPasswordParams()), fixedClock(testNow))
+	sessions := NewSessionService(&fakeSessionRepository{insertErr: errors.New("session insert failed")}, testPepper, fixedClock(testNow), bytes.NewReader(bytes.Repeat([]byte{8}, 32)))
+
+	_, err := service.CreateWebOwner(context.Background(), BootstrapInput{
+		Email: "owner@tallerflow.pe", Name: "Owner Demo", WorkshopName: "Taller Demo",
+		Password: "Permanent secure passphrase 9!",
+	}, SessionMetadata{}, sessions)
+
+	if err == nil {
+		t.Fatal("CreateWebOwner() succeeded despite a session insertion failure")
+	}
+	if !store.state.bootstrapped || len(store.state.users) != 1 || len(store.state.credentials) != 1 || len(store.state.workshops) != 1 || len(store.state.memberships) != 1 || len(store.state.audit) != 1 {
+		t.Fatalf("session failure corrupted the committed owner identity: %+v", store.state)
+	}
+}
+
 type bootstrapCredential struct {
-	passwordHash string
-	mustChange   bool
+	passwordHash      string
+	mustChange        bool
+	passwordChangedAt *time.Time
 }
 type bootstrapMembership struct {
 	userID, workshopID uuid.UUID
@@ -175,8 +231,8 @@ func (tx *bootstrapTxFake) ClaimInitialOwner(_ context.Context, _ uuid.UUID) err
 	tx.state.bootstrapped = true
 	return nil
 }
-func (tx *bootstrapTxFake) InsertCredential(_ context.Context, userID uuid.UUID, passwordHash string, mustChange bool) error {
-	tx.state.credentials[userID] = bootstrapCredential{passwordHash, mustChange}
+func (tx *bootstrapTxFake) InsertCredential(_ context.Context, userID uuid.UUID, passwordHash string, mustChange bool, passwordChangedAt *time.Time) error {
+	tx.state.credentials[userID] = bootstrapCredential{passwordHash, mustChange, passwordChangedAt}
 	return nil
 }
 func (tx *bootstrapTxFake) InsertWorkshop(_ context.Context, name, timezone string) (uuid.UUID, error) {

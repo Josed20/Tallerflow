@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -50,8 +51,8 @@ func (tx postgresBootstrapTx) ClaimInitialOwner(ctx context.Context, userID uuid
 	return err
 }
 
-func (tx postgresBootstrapTx) InsertCredential(ctx context.Context, userID uuid.UUID, passwordHash string, mustChange bool) error {
-	_, err := tx.tx.Exec(ctx, `INSERT INTO user_credentials (user_id, password_hash, must_change_password) VALUES ($1, $2, $3)`, userID, passwordHash, mustChange)
+func (tx postgresBootstrapTx) InsertCredential(ctx context.Context, userID uuid.UUID, passwordHash string, mustChange bool, passwordChangedAt *time.Time) error {
+	_, err := tx.tx.Exec(ctx, `INSERT INTO user_credentials (user_id, password_hash, must_change_password, password_changed_at) VALUES ($1, $2, $3, $4)`, userID, passwordHash, mustChange, passwordChangedAt)
 	return err
 }
 

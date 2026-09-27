@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Deliver the web onboarding path for the first workshop OWNER, create its authenticated session atomically, and make the empty-installation demo reproducible in CI.
+**Goal:** Deliver the web onboarding path for the first workshop OWNER, create its authenticated session, and make the empty-installation demo reproducible in CI.
 
 **Architecture:** A new `internal/onboarding` module owns public status and HTTP transport. It reuses the existing Argon2id bootstrap and session primitives, while the API opens a second, narrowly privileged PostgreSQL connection for onboarding only. The Vue router queries onboarding availability before resolving login, and the verification script proves the flow from empty volumes.
 
@@ -23,8 +23,8 @@
 
 ## Review Focus
 
-- Two simultaneous onboarding submissions with different emails must leave exactly one user, workshop, OWNER membership, credential, audit event and session.
-- A failure while inserting any identity/session row must roll back the whole onboarding transaction and leave availability true.
+- Two simultaneous onboarding submissions with different emails must leave exactly one user, workshop, OWNER membership, credential and audit event; the winner receives one session.
+- A failure while inserting any identity row must roll back the whole onboarding transaction; a later app-role session failure must leave a valid claimed OWNER able to log in.
 - Malformed, oversized and cross-origin requests must fail before hashing or database writes and never echo submitted secrets.
 - A stale availability response must not bypass the database singleton; the losing POST must return the same neutral conflict response.
 - Router status/network failures must not form redirect loops or hide an already authenticated session.
@@ -48,7 +48,7 @@
 - [ ] Add the standalone OpenAPI 3.1 onboarding fragment and merge the same paths/schemas into the root contract.
 - [ ] Validate both contracts with `npx --yes @redocly/cli@2.11.1 lint` and commit.
 
-### Task 2: Make initial-owner persistence support a permanent credential and atomic session
+### Task 2: Make initial-owner persistence support a permanent credential and browser session
 
 **Files:**
 - Modify: `backend/internal/auth/bootstrap.go`
@@ -56,15 +56,14 @@
 - Modify: `backend/internal/auth/bootstrap_test.go`
 - Modify: `backend/internal/auth/session.go`
 - Modify: `backend/internal/auth/session_test.go`
-- Modify: `database/migrations/V2__grants_and_tenant_rls.sql`
 
 **Interfaces:**
 - Produces: `BootstrapService.CreateWebOwner(ctx, BootstrapInput, SessionMetadata, *SessionService) (WebBootstrapResult, error)`; CLI `CreateOwner` behavior remains unchanged.
 - Produces: `SessionService.Prepare(userID, metadata) (PreparedSession, error)` where `PreparedSession` contains raw token, raw CSRF token and the hashed `NewSession` row.
 
-- [ ] Add failing tests for permanent credentials, `password_changed_at`, session persistence, rollback on session failure and unchanged CLI semantics.
+- [ ] Add failing tests for permanent credentials, `password_changed_at`, session persistence, identity rollback and unchanged CLI semantics.
 - [ ] Run focused auth tests and confirm each fails for missing web-owner/session behavior.
-- [ ] Extend the bootstrap transaction port and pgx adapter to insert the credential timestamp and prepared session in the same transaction; grant only the required session INSERT privilege to `tallerflow_bootstrap`.
+- [ ] Extend the bootstrap transaction port and pgx adapter to insert the credential timestamp, then create the browser session through the existing app-role session repository after the identity transaction commits.
 - [ ] Refactor `SessionService` around `Prepare` while preserving existing `Create`, then make all auth tests green.
 - [ ] Run `go test ./internal/auth/...` and commit.
 
