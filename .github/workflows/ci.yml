@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  sprint-1:
+  sprint-2:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -29,14 +29,14 @@ jobs:
         run: npm --prefix frontend ci --no-audit
       - name: Install Playwright Chromium
         run: npm --prefix frontend exec playwright install --with-deps chromium
-      - name: Verify Sprint 1 from empty isolated volumes
-        run: ./scripts/verify-sprint1.sh
+      - name: Verify Sprint 2 from empty isolated volumes
+        run: ./scripts/verify-sprint2.sh
       - name: Upload Compose logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: sprint1-compose-logs
-          path: sprint1-compose.log
+          name: sprint2-compose-logs
+          path: sprint2-compose.log
           if-no-files-found: ignore
       - name: Upload Playwright evidence on failure
         if: failure()

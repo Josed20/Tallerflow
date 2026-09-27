@@ -1,8 +1,8 @@
 # TallerFlow
 
-Cimientos seguros del Sprint 1 para la plataforma de trazabilidad de talleres de confección.
+Cimientos seguros de los Sprints 1 y 2 para la plataforma de trazabilidad de talleres de confección.
 
-El recorrido integrado permite crear el primer `OWNER`, iniciar sesión, reemplazar la contraseña temporal, consultar el usuario y taller actuales, cerrar la sesión y aislar los datos por taller.
+El recorrido integrado permite crear desde la web el primer taller y su `OWNER`, entrar directamente con una sesión segura, consultar el usuario y taller actuales, cerrar la sesión y aislar los datos por taller. El bootstrap por CLI del Sprint 1 se conserva para operación y recuperación.
 
 ## Requisitos
 
@@ -28,7 +28,15 @@ PostgreSQL y Flyway se ejecutan en contenedores; no necesitan instalación local
    docker compose run --rm flyway validate
    ```
 
-3. Crea el único `OWNER` inicial. La contraseña se lee por stdin y no aparece como argumento ni en la salida:
+3. Construye e inicia la aplicación completa:
+
+   ```powershell
+   docker compose --profile app up -d --build --wait
+   ```
+
+4. Abre [http://localhost:8080](http://localhost:8080). Si la instalación está vacía, TallerFlow muestra automáticamente el formulario para crear el primer taller y su `OWNER`. La contraseña ingresada es definitiva y la sesión comienza al terminar.
+
+Como alternativa operativa, todavía puedes crear el único `OWNER` inicial por CLI. La contraseña se lee por stdin y no aparece como argumento ni en la salida:
 
    ```powershell
    $bootstrapPassword = Read-Host 'Contraseña temporal del OWNER' -AsSecureString
@@ -49,13 +57,25 @@ PostgreSQL y Flyway se ejecutan en contenedores; no necesitan instalación local
 
    La primera ejecución devuelve `OWNER_BOOTSTRAPPED`. Cualquier intento posterior se rechaza con `BOOTSTRAP_ALREADY_EXISTS`. El primer login obliga a cambiar la contraseña.
 
-4. Construye e inicia la aplicación completa:
+Caddy sirve Vue y la API bajo el mismo origen. Los health checks son `/health/live` y `/health/ready`.
 
-   ```powershell
-   docker compose --profile app up -d --build --wait
-   ```
+## Verificación completa del Sprint 2
 
-La aplicación queda disponible en [http://localhost:8080](http://localhost:8080). Caddy sirve Vue y la API bajo el mismo origen. Los health checks son `/health/live` y `/health/ready`.
+En Windows:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify-sprint2.ps1
+```
+
+En Linux o CI:
+
+```sh
+./scripts/verify-sprint2.sh
+```
+
+La verificación parte tres veces de volúmenes vacíos y ejecuta pruebas Go con detector de carreras, unitarias y build de Vue, contratos OpenAPI y SQL, una carrera real de dos altas contra PostgreSQL y el recorrido Chromium de onboarding a 360 px. Confirma que queda un solo grafo `OWNER`, una sola sesión, ningún secreto en el almacenamiento del navegador y que una instalación reclamada ya no permite repetir el alta.
+
+Usa el proyecto Compose aislado `tallerflow_sprint2_verify`, PostgreSQL en `127.0.0.1:55434` y la aplicación en `http://localhost:18081`. Al terminar elimina únicamente sus contenedores y volumen descartable.
 
 ## Verificación completa del Sprint 1
 
