@@ -45,6 +45,7 @@ services:
       dockerfile: Dockerfile
     environment:
       TF_DATABASE_URL: ${TF_DATABASE_URL:-postgres://tallerflow_app:local-app-change-me@postgres:5432/tallerflow?sslmode=disable}
+      TF_BOOTSTRAP_DATABASE_URL: ${TF_BOOTSTRAP_DATABASE_URL:-postgres://tallerflow_bootstrap:local-bootstrap-change-me@postgres:5432/tallerflow?sslmode=disable}
       TF_HTTP_ADDRESS: ":8080"
       TF_ENVIRONMENT: ${TF_ENVIRONMENT:-development}
       TF_SESSION_PEPPER: ${TF_SESSION_PEPPER:-local-session-pepper-change-me}

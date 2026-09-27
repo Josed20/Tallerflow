@@ -2,17 +2,21 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/Josed20/Tallerflow/backend/internal/auth"
+	"github.com/Josed20/Tallerflow/backend/internal/onboarding"
 	"github.com/Josed20/Tallerflow/backend/internal/workshops"
 	"github.com/Josed20/Tallerflow/backend/platform/config"
 	"github.com/Josed20/Tallerflow/backend/platform/database"
 	"github.com/Josed20/Tallerflow/backend/platform/httpx"
+	"github.com/Josed20/Tallerflow/backend/platform/security"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"gorm.io/gorm"
 )
 
@@ -23,8 +27,17 @@ type application struct {
 }
 
 type applicationDependencies struct {
-	openDatabase func(string) (*gorm.DB, error)
+	openDatabase          func(string) (*gorm.DB, error)
+	buildOnboardingModule onboardingModuleBuilder
 }
+
+type onboardingModule struct {
+	service onboarding.UseCases
+	ping    func(context.Context) error
+	close   func() error
+}
+
+type onboardingModuleBuilder func(string, *auth.SessionService) (onboardingModule, error)
 
 type applicationOption func(*applicationDependencies)
 
@@ -36,8 +49,16 @@ func withDatabaseOpener(open func(string) (*gorm.DB, error)) applicationOption {
 	}
 }
 
+func withOnboardingModuleBuilder(build onboardingModuleBuilder) applicationOption {
+	return func(dependencies *applicationDependencies) {
+		if build != nil {
+			dependencies.buildOnboardingModule = build
+		}
+	}
+}
+
 func buildApplication(cfg config.Config, options ...applicationOption) (*application, error) {
-	dependencies := applicationDependencies{openDatabase: database.Open}
+	dependencies := applicationDependencies{openDatabase: database.Open, buildOnboardingModule: buildPostgresOnboardingModule}
 	for _, option := range options {
 		if option != nil {
 			option(&dependencies)
@@ -69,6 +90,19 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 		return nil, fmt.Errorf("create workshop service: %w", err)
 	}
 	sessions := auth.NewSessionService(repository, []byte(cfg.SessionPepper), time.Now, nil)
+	onboardingModule, err := dependencies.buildOnboardingModule(cfg.BootstrapDatabaseURL, sessions)
+	if err != nil {
+		return nil, fmt.Errorf("create onboarding module: %w", err)
+	}
+	closeOnboarding := onceClose(onboardingModule.close)
+	closeApplication := onceClose(func() error {
+		return errors.Join(closeOnboarding(), closeDatabase())
+	})
+	defer func() {
+		if failed {
+			_ = closeApplication()
+		}
+	}()
 	authService := auth.NewAuthService(repository, repository, sessions, auth.NewPasswordHasher(auth.DefaultPasswordParams()), repository)
 	authHandler, err := auth.NewHandler(authService, auth.HandlerConfig{
 		AllowedOrigin: cfg.AllowedOrigin,
@@ -78,11 +112,24 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 	if err != nil {
 		return nil, fmt.Errorf("create auth handler: %w", err)
 	}
+	onboardingHandler, err := onboarding.NewHandler(onboardingModule.service, onboarding.HandlerConfig{
+		AllowedOrigin: cfg.AllowedOrigin, Environment: cfg.Environment, Secure: cfg.Environment != "development",
+		Limiter: security.NewMemoryRateLimiter([]byte("onboarding-rate-limit:"+cfg.SessionPepper), time.Now, 15*time.Minute, 30, 10000),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create onboarding handler: %w", err)
+	}
 	workshopHandler := workshops.NewHandler(workshopService)
-	ping := func(ctx context.Context) error { return database.Ping(ctx, db) }
+	ping := func(ctx context.Context) error {
+		if err := database.Ping(ctx, db); err != nil {
+			return err
+		}
+		return onboardingModule.ping(ctx)
+	}
 	router := httpx.NewRouter(httpx.Dependencies{
 		Ping: ping,
 		Routes: []httpx.RouteRegistrar{
+			func(routes gin.IRouter) { onboarding.RegisterRoutes(routes, onboardingHandler) },
 			func(routes gin.IRouter) { auth.RegisterRoutes(routes, authHandler) },
 			func(routes gin.IRouter) {
 				workshops.RegisterRoutes(routes, workshopHandler, authHandler.RequireSession())
@@ -94,7 +141,20 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 	}
 
 	failed = false
-	return &application{handler: router, ping: ping, close: closeDatabase}, nil
+	return &application{handler: router, ping: ping, close: closeApplication}, nil
+}
+
+func buildPostgresOnboardingModule(databaseURL string, sessions *auth.SessionService) (onboardingModule, error) {
+	pool, err := pgxpool.New(context.Background(), databaseURL)
+	if err != nil {
+		return onboardingModule{}, err
+	}
+	bootstrap := auth.NewBootstrapService(auth.NewPostgresBootstrapStore(pool), auth.NewPasswordHasher(auth.DefaultPasswordParams()))
+	creator := onboarding.OwnerCreatorFunc(func(ctx context.Context, input auth.BootstrapInput, metadata auth.SessionMetadata) (auth.WebBootstrapResult, error) {
+		return bootstrap.CreateWebOwner(ctx, input, metadata, sessions)
+	})
+	service := onboarding.NewService(onboarding.NewPostgresStatusStore(pool), creator)
+	return onboardingModule{service: service, ping: pool.Ping, close: func() error { pool.Close(); return nil }}, nil
 }
 
 func onceClose(closeDatabase func() error) func() error {
