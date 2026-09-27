@@ -9,8 +9,18 @@ log_file="$root/sprint1-compose.log"
 
 export POSTGRES_DB=tallerflow
 export COMPOSE_PROJECT_NAME=tallerflow_sprint1_verify
+export POSTGRES_SUPERUSER=postgres
+export POSTGRES_SUPERUSER_PASSWORD=local-postgres-change-me
+export DB_OWNER_PASSWORD=local-owner-change-me
+export DB_MIGRATION_PASSWORD=local-migrator-change-me
+export DB_APP_PASSWORD=local-app-change-me
+export DB_BOOTSTRAP_PASSWORD=local-bootstrap-change-me
 export POSTGRES_PORT=55432
 export BACKEND_PORT=18080
+export TF_DATABASE_URL='postgres://tallerflow_app:local-app-change-me@postgres:5432/tallerflow?sslmode=disable'
+export TF_BOOTSTRAP_DATABASE_URL='postgres://tallerflow_bootstrap:local-bootstrap-change-me@postgres:5432/tallerflow?sslmode=disable'
+export TF_SESSION_PEPPER=local-session-pepper-change-me
+export TF_ENVIRONMENT=development
 export TF_ALLOWED_ORIGIN=http://localhost:18080
 export TF_TRUSTED_PROXIES=172.16.0.0/12
 export E2E_BASE_URL=http://localhost:18080
