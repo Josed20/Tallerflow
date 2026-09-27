@@ -85,11 +85,11 @@ func readPassword(stdin io.Reader) (string, error) {
 	if stdin == nil {
 		return "", errors.New("password input is required")
 	}
-	contents, err := io.ReadAll(io.LimitReader(stdin, maxBootstrapPasswordBytes+2))
-	if err != nil || len(contents) == 0 || len(contents) > maxBootstrapPasswordBytes+1 {
+	contents, err := io.ReadAll(io.LimitReader(stdin, maxBootstrapPasswordBytes+9))
+	if err != nil || len(contents) == 0 || len(contents) > maxBootstrapPasswordBytes+8 {
 		return "", errors.New("invalid password input")
 	}
-	password := strings.TrimSuffix(strings.TrimSuffix(string(contents), "\n"), "\r")
+	password := strings.TrimPrefix(strings.TrimRight(string(contents), "\r\n"), "\ufeff")
 	if password == "" || len(password) > maxBootstrapPasswordBytes {
 		return "", errors.New("invalid password input")
 	}

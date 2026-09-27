@@ -35,6 +35,25 @@ func TestRunBootstrapReadsPasswordFromStandardInputWithoutPrintingIt(t *testing.
 	}
 }
 
+func TestReadPasswordNormalizesPipedLineEndings(t *testing.T) {
+	for _, ending := range []string{"\n", "\r\n", "\r\r\n"} {
+		password, err := readPassword(strings.NewReader(bootstrapPassword + ending))
+		if err != nil {
+			t.Fatalf("readPassword() with ending %q returned %v", ending, err)
+		}
+		if password != bootstrapPassword {
+			t.Fatalf("readPassword() with ending %q retained line-ending bytes", ending)
+		}
+	}
+	password, err := readPassword(strings.NewReader("\ufeff" + bootstrapPassword + "\r\n"))
+	if err != nil {
+		t.Fatalf("readPassword() with UTF-8 BOM returned %v", err)
+	}
+	if password != bootstrapPassword {
+		t.Fatal("readPassword() retained the UTF-8 BOM")
+	}
+}
+
 func TestRunBootstrapRejectsMissingPasswordStdinAndExistingOwner(t *testing.T) {
 	for _, tc := range []struct {
 		name string
