@@ -8,9 +8,13 @@ servers:
     description: Same-origin deployment
 tags:
   - name: Health
+    description: Process and dependency health checks.
   - name: Authentication
+    description: Browser session, password rotation and logout operations.
   - name: Identity
+    description: Tenant-aware authenticated identity.
   - name: Workshops
+    description: Access to the workshop bound to the current session.
 paths:
   /health/live:
     get:
@@ -128,7 +132,7 @@ paths:
                   value:
                     error:
                       code: ORIGIN_INVALID
-                      message: El origen de la solicitud no está permitido.
+                      message: Request origin is not allowed.
                       details: {}
                       request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
         '429':
@@ -145,6 +149,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                rateLimited:
+                  value:
+                    error:
+                      code: AUTH_RATE_LIMITED
+                      message: Too many login attempts.
+                      details: {}
+                      request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
         '500':
           $ref: '#/components/responses/InternalError'
   /api/v1/auth/logout:
@@ -266,9 +278,7 @@ paths:
         '401':
           $ref: '#/components/responses/SessionInvalid'
         '403':
-          description: >-
-            Password replacement is required, or the user does not resolve to
-            exactly one active workshop membership.
+          description: Password replacement is required before private routes are available.
           headers:
             X-Request-ID:
               $ref: '#/components/headers/RequestID'
@@ -306,7 +316,9 @@ paths:
         '401':
           $ref: '#/components/responses/SessionInvalid'
         '403':
-          description: The user does not resolve to exactly one active workshop membership.
+          description: >-
+            Password replacement is required, or the authenticated membership
+            is not available in the session's workshop.
           headers:
             X-Request-ID:
               $ref: '#/components/headers/RequestID'
@@ -322,15 +334,13 @@ paths:
                       message: The password must be changed before accessing this resource.
                       details: {}
                       request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
-        '404':
-          description: Workshop is not available in the current tenant context.
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestID'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                workshopForbidden:
+                  value:
+                    error:
+                      code: WORKSHOP_FORBIDDEN
+                      message: The current workshop is not available.
+                      details: {}
+                      request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
         '500':
           $ref: '#/components/responses/InternalError'
 components:
@@ -500,21 +510,6 @@ components:
           description: >-
             When true, only session restoration, password change, and logout
             flows are available until the password is replaced.
-    UserSummary:
-      type: object
-      additionalProperties: false
-      required: [id, name, email]
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-          minLength: 1
-        email:
-          type: string
-          format: email
-          maxLength: 254
     WorkshopSummary:
       type: object
       additionalProperties: false
@@ -535,25 +530,36 @@ components:
     MeData:
       type: object
       additionalProperties: false
-      required: [id, name, email, workshop, role, must_change_password]
+      required: [userId, email, displayName, workshopId, role, passwordChangeRequired]
       properties:
-        id:
+        userId:
           type: string
           format: uuid
-        name:
-          type: string
-          minLength: 1
         email:
           type: string
           format: email
           maxLength: 254
+        displayName:
+          type: string
+          minLength: 1
+        workshopId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [OWNER, ADMIN, SUPERVISOR, OPERATOR]
+        passwordChangeRequired:
+          type: boolean
+    WorkshopAccessData:
+      type: object
+      additionalProperties: false
+      required: [workshop, role]
+      properties:
         workshop:
           $ref: '#/components/schemas/WorkshopSummary'
         role:
           type: string
-          enum: [OWNER, ADMIN, OPERATOR]
-        must_change_password:
-          type: boolean
+          enum: [OWNER, ADMIN, SUPERVISOR, OPERATOR]
     HealthData:
       type: object
       additionalProperties: false
@@ -620,7 +626,7 @@ components:
       required: [data]
       properties:
         data:
-          $ref: '#/components/schemas/WorkshopSummary'
+          $ref: '#/components/schemas/WorkshopAccessData'
         meta:
           $ref: '#/components/schemas/Meta'
     EmptyResponse:

@@ -2,6 +2,8 @@
 
 **Propósito:** dejar listo el entorno, los accesos y la coordinación humana necesarios para ejecutar el Sprint 1 sin bloquear al equipo ni exponer secretos.
 
+**Estado técnico local (2026-09-26):** entorno y recorrido completo verificados; publicación y comprobación del CI remoto pendientes.
+
 **Fuentes:** especificación MVP, plan ejecutable de Fase 1 y plan de equipo del Sprint 1.
 
 ## 1. Preparar la estación de trabajo
@@ -86,11 +88,12 @@ Los secretos reales no se escriben en comandos, historial, capturas, chats, issu
 
 - `TF_DATABASE_URL`
 - `TF_SESSION_PEPPER`
-- `TF_DB_OWNER_PASSWORD`
-- `TF_DB_FLYWAY_PASSWORD`
-- `TF_DB_APP_PASSWORD`
+- `DB_OWNER_PASSWORD`
+- `DB_MIGRATION_PASSWORD`
+- `DB_APP_PASSWORD`
+- `DB_BOOTSTRAP_PASSWORD`
 - `E2E_OWNER_PASSWORD`
-- `E2E_NEW_OWNER_PASSWORD`
+- `E2E_NEW_PASSWORD`
 
 Para una ejecución local puntual, introducir cada valor de forma oculta y mantenerlo solo en el proceso actual de PowerShell:
 
@@ -112,17 +115,18 @@ function Set-ProcessSecret {
 }
 
 Set-ProcessSecret TF_SESSION_PEPPER
-Set-ProcessSecret TF_DB_OWNER_PASSWORD
-Set-ProcessSecret TF_DB_FLYWAY_PASSWORD
-Set-ProcessSecret TF_DB_APP_PASSWORD
+Set-ProcessSecret DB_OWNER_PASSWORD
+Set-ProcessSecret DB_MIGRATION_PASSWORD
+Set-ProcessSecret DB_APP_PASSWORD
+Set-ProcessSecret DB_BOOTSTRAP_PASSWORD
 Set-ProcessSecret E2E_OWNER_PASSWORD
-Set-ProcessSecret E2E_NEW_OWNER_PASSWORD
+Set-ProcessSecret E2E_NEW_PASSWORD
 ```
 
 Comprobar solo la presencia, nunca imprimir el contenido:
 
 ```powershell
-$required = 'TF_SESSION_PEPPER', 'TF_DB_OWNER_PASSWORD', 'TF_DB_FLYWAY_PASSWORD', 'TF_DB_APP_PASSWORD'
+$required = 'TF_SESSION_PEPPER', 'DB_OWNER_PASSWORD', 'DB_MIGRATION_PASSWORD', 'DB_APP_PASSWORD', 'DB_BOOTSTRAP_PASSWORD'
 $required | ForEach-Object {
     [pscustomobject]@{
         Variable = $_
@@ -214,7 +218,7 @@ Después de fusionar las cuatro ramas personales en `main`, José crea la rama f
 ```powershell
 git switch main
 git pull --ff-only
-git switch -c feat/s1-integration-foundations
+git switch -c codex/s1-sprint1-final
 ```
 
 No crear esa rama desde la rama personal de José ni antes de integrar las cuatro entregas.
@@ -257,13 +261,14 @@ La arquitectura objetivo conserva `app.tallerflow.pe`, Caddy, un VPS de aplicaci
 
 ## 7. Criterios de listo para José
 
-- [ ] `go version` informa Go 1.27.x.
-- [ ] `node --version` informa Node 24.x LTS y `npm --version` funciona.
-- [ ] Docker Desktop está iniciado; `docker version`, `docker compose version` y `docker info` funcionan.
-- [ ] Los secretos de desarrollo se introducen sin mostrarse y no existen secretos reales en archivos rastreados.
-- [ ] Los cuatro integrantes tienen acceso al repositorio, CI y revisión correspondiente.
-- [ ] Las cuatro ramas personales y sus límites de propiedad están confirmados.
-- [ ] Cada PR declara pruebas ejecutadas, cambios de contrato y dependencias.
-- [ ] Se respeta el orden de merge y la rama de integración se crea desde `main` actualizado.
-- [ ] Dominio, VPS y proveedores de backup permanecen diferidos a Fase 5.
-- [ ] La aceptación del Sprint 1 se valida con Compose limpio, Flyway, bootstrap, login, cambio de contraseña, logout, CSRF, rate limit, RLS, accesibilidad y CI/E2E verdes.
+- [x] `go version` informa Go 1.27.x.
+- [x] `node --version` informa Node 24.x LTS y `npm --version` funciona.
+- [x] Docker Desktop está iniciado; Docker y Compose responden y ejecutan el stack.
+- [x] La verificación usa credenciales descartables y no imprime las contraseñas de bootstrap.
+- [ ] Los cuatro integrantes confirman acceso de escritura, visibilidad del CI y revisión correspondiente en GitHub.
+- [x] Las cuatro ramas personales fueron obtenidas y sus entregables quedaron reconciliados.
+- [ ] Los PR remotos declaran pruebas ejecutadas, cambios de contrato y dependencias.
+- [x] La integración se realizó en `codex/s1-sprint1-final` sin modificar el `main` local durante la revisión.
+- [x] Dominio, VPS y proveedores de backup permanecen diferidos a Fase 5.
+- [x] La aceptación local pasó con Compose vacío, Flyway, bootstrap, login, cambio de contraseña, logout, CSRF, rate limit, RLS, accesibilidad y E2E.
+- [ ] El workflow de CI remoto pasa sobre el commit publicado.

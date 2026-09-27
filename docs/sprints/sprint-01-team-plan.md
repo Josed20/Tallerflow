@@ -1,6 +1,6 @@
 # TallerFlow — Sprint 1: Cimientos seguros
 
-**Estado:** Propuesto para revisión y ejecución
+**Estado:** Implementado e integrado localmente; publicación y CI remoto pendientes
 
 **Duración:** 10 días hábiles
 
@@ -284,7 +284,7 @@ CSRF ausente produce 403
 ### Días 9–10: estabilización
 
 - Fusionar ramas en el orden acordado.
-- Crear `feat/s1-integration-foundations` desde `main` actualizado.
+- Crear `codex/s1-sprint1-final` desde la base de integración revisada.
 - Ejecutar E2E y pruebas negativas.
 - Probar 360 px, teclado y sesión expirada.
 - Levantar desde volúmenes vacíos.
@@ -340,19 +340,23 @@ Checklist del autor:
 
 ## 10. Definición de terminado
 
-1. `docker compose up --build` funciona desde limpio.
-2. Flyway valida y migra sin error.
-3. Bootstrap crea un OWNER exactamente una vez.
-4. El primer login obliga a cambiar la contraseña y rota la sesión.
-5. OWNER ve su taller.
-6. Logout y expiración invalidan la sesión.
-7. Mutación sin CSRF recibe `403`.
-8. Intentos excesivos reciben `429`.
-9. RLS bloquea otro taller y contexto ausente.
-10. Vue no guarda credenciales o tokens en almacenamiento web.
-11. Login funciona con teclado y a 360 px.
-12. Backend, frontend, datos y E2E pasan en CI.
-13. README y runbooks contienen comandos comprobados.
+Evidencia local obtenida con `scripts/verify-sprint1.ps1` sobre volúmenes aislados y vacíos:
+
+- [x] `docker compose --profile app up --build --wait` funciona desde limpio.
+- [x] Flyway valida y migra sin error.
+- [x] Bootstrap crea un OWNER exactamente una vez y rechaza el segundo intento.
+- [x] El primer login obliga a cambiar la contraseña y rota la sesión.
+- [x] OWNER ve su taller mediante `/me` y `/workshops/current`.
+- [x] Logout revoca la sesión y la restauración posterior recibe `401`.
+- [x] Una mutación sin CSRF recibe `403`.
+- [x] Intentos excesivos, incluso rotando correos, reciben `429` por IP.
+- [x] RLS bloquea otro taller y el acceso sin contexto.
+- [x] Vue no guarda credenciales o tokens en `localStorage` ni `sessionStorage`.
+- [x] Login y cambio de contraseña funcionan con teclado y a 360 px.
+- [ ] El workflow remoto de GitHub Actions pasa sobre el commit publicado.
+- [x] README, handoff, OpenAPI y runbooks contienen los comandos y DTO comprobados.
+
+La casilla de CI remoto se completa después de publicar la rama y observar el workflow; no invalida la evidencia nativa local.
 
 ## 11. Demo
 
