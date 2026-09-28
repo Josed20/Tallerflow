@@ -20,7 +20,10 @@ describe('ResetPasswordView', () => {
 
     render(ResetPasswordView, { global: { plugins: [router] } })
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Enlace inválido' })).toBeTruthy()
+    const heading = screen.getByRole('heading', { level: 1, name: 'Enlace inválido' })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(heading).toBeTruthy()
+    expect(document.activeElement).toBe(heading)
     expect(screen.getByText('Solicitar un nuevo enlace')).toBeTruthy()
   })
 
@@ -87,5 +90,50 @@ describe('ResetPasswordView', () => {
     expect(successHeading).toBeTruthy()
     expect(callCount).toBe(1)
     expect(screen.getByRole('button', { name: 'Iniciar sesión' })).toBeTruthy()
+  })
+
+  it.each([
+    ['TOKEN_INVALID', 'Enlace inválido'],
+    ['TOKEN_EXPIRED', 'Enlace expirado'],
+    ['TOKEN_ALREADY_USED', 'Enlace ya utilizado'],
+  ])('renders the %s recovery state returned by the API', async (code, heading) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: { code, message: 'Token rejected', details: {}, request_id: 'request-id' },
+    }), { status: 400, headers: { 'Content-Type': 'application/json' } })))
+
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/reset-password', component: ResetPasswordView }],
+    })
+    await router.push('/reset-password?token=valid-token-sample-1234567890123456')
+    await router.isReady()
+
+    render(ResetPasswordView, { global: { plugins: [router] } })
+    await fireEvent.update(screen.getByLabelText('Nueva contraseña', { selector: 'input' }), 'NewPassSecure2026!')
+    await fireEvent.update(screen.getByLabelText('Confirmar nueva contraseña'), 'NewPassSecure2026!')
+    await fireEvent.click(screen.getByRole('button', { name: 'Restablecer contraseña' }))
+
+    expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeTruthy()
+  })
+
+  it('keeps the form available after a recoverable API error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: { code: 'INTERNAL_ERROR', message: 'Unexpected error', details: {}, request_id: 'request-id' },
+    }), { status: 500, headers: { 'Content-Type': 'application/json' } })))
+
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/reset-password', component: ResetPasswordView }],
+    })
+    await router.push('/reset-password?token=valid-token-sample-1234567890123456')
+    await router.isReady()
+
+    render(ResetPasswordView, { global: { plugins: [router] } })
+    await fireEvent.update(screen.getByLabelText('Nueva contraseña', { selector: 'input' }), 'NewPassSecure2026!')
+    await fireEvent.update(screen.getByLabelText('Confirmar nueva contraseña'), 'NewPassSecure2026!')
+    await fireEvent.click(screen.getByRole('button', { name: 'Restablecer contraseña' }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('No pudimos actualizar la contraseña')
+    expect(screen.getByRole('button', { name: 'Restablecer contraseña' })).toBeTruthy()
   })
 })

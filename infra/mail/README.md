@@ -33,6 +33,8 @@ En producción, la entrega se realiza mediante el adaptador SMTP estándar (`net
 - `TF_SMTP_PASSWORD`: Contraseña o API key (inyectada por el orquestador).
 - `TF_SMTP_FROM`: Dirección remitente (ej. `soporte@tallerflow.pe`).
 
+La configuración del adaptador debe indicar explícitamente `RequireTLS: true` en producción. En ese modo exige STARTTLS con TLS 1.2 o superior, aplica un timeout de 10 segundos por defecto y no permite autenticación SMTP en claro. Para Mailpit local se usa `RequireTLS: false`, sin credenciales, en `127.0.0.1:1025`.
+
 ### Seguridad
 
 - **Sin secretos en el repositorio:** Ninguna credencial SMTP se almacena en el control de versiones.

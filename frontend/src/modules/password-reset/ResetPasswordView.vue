@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import AuthLayout from '../../layouts/AuthLayout.vue'
 import UiAlert from '../../components/UiAlert.vue'
@@ -7,7 +7,7 @@ import UiButton from '../../components/UiButton.vue'
 import UiField from '../../components/UiField.vue'
 import { api, ApiError } from '../session/api'
 
-type ViewState = 'ready' | 'invalid' | 'expired' | 'success'
+type ViewState = 'ready' | 'invalid' | 'expired' | 'used' | 'success'
 
 const route = useRoute()
 const router = useRouter()
@@ -23,11 +23,22 @@ const confirmPassword = ref('')
 const attempted = ref(false)
 const submitting = ref(false)
 const serverError = ref('')
+const resultHeading = ref<HTMLElement | null>(null)
 
-onMounted(() => {
+onMounted(async () => {
   if (!rawToken.value) {
     state.value = 'invalid'
   }
+  if (state.value !== 'ready') {
+    await nextTick()
+    resultHeading.value?.focus()
+  }
+})
+
+watch(state, async (nextState) => {
+  if (nextState === 'ready') return
+  await nextTick()
+  resultHeading.value?.focus()
 })
 
 const newPasswordError = computed(() => {
@@ -64,9 +75,12 @@ async function submit() {
     state.value = 'success'
   } catch (err: unknown) {
     if (err instanceof ApiError) {
-      if (err.status === 400) {
-        // Can be expired or invalid
-        serverError.value = 'El enlace de recuperación es inválido o ha expirado.'
+      if (err.code === 'TOKEN_INVALID') {
+        state.value = 'invalid'
+      } else if (err.code === 'TOKEN_EXPIRED') {
+        state.value = 'expired'
+      } else if (err.code === 'TOKEN_ALREADY_USED') {
+        state.value = 'used'
       } else if (err.status === 429) {
         serverError.value = 'Demasiados intentos. Por favor espera unos minutos antes de reintentar.'
       } else {
@@ -91,7 +105,7 @@ function goToLogin() {
     <template v-if="state === 'success'">
       <div class="reset-result" aria-live="polite">
         <div class="reset-result__icon reset-result__icon--success" aria-hidden="true">✓</div>
-        <h1 id="auth-title">Contraseña restablecida</h1>
+        <h1 id="auth-title" ref="resultHeading" tabindex="-1">Contraseña restablecida</h1>
         <p class="auth-subtitle">
           Tu contraseña ha sido actualizada exitosamente. Por seguridad, tus sesiones anteriores han sido cerradas.
         </p>
@@ -105,7 +119,7 @@ function goToLogin() {
     <template v-else-if="state === 'invalid'">
       <div class="reset-result" aria-live="assertive">
         <div class="reset-result__icon reset-result__icon--error" aria-hidden="true">!</div>
-        <h1 id="auth-title">Enlace inválido</h1>
+        <h1 id="auth-title" ref="resultHeading" tabindex="-1">Enlace inválido</h1>
         <p class="auth-subtitle">
           El enlace de recuperación es inválido, incompleto o ya ha sido utilizado.
         </p>
@@ -119,9 +133,23 @@ function goToLogin() {
     <template v-else-if="state === 'expired'">
       <div class="reset-result" aria-live="assertive">
         <div class="reset-result__icon reset-result__icon--error" aria-hidden="true">⏱</div>
-        <h1 id="auth-title">Enlace expirado</h1>
+        <h1 id="auth-title" ref="resultHeading" tabindex="-1">Enlace expirado</h1>
         <p class="auth-subtitle">
           El enlace de recuperación ha superado el tiempo máximo de validez (1 hora).
+        </p>
+        <RouterLink to="/forgot-password" class="secondary-button">
+          Solicitar un nuevo enlace
+        </RouterLink>
+      </div>
+    </template>
+
+    <!-- TOKEN ALREADY USED STATE -->
+    <template v-else-if="state === 'used'">
+      <div class="reset-result" aria-live="assertive">
+        <div class="reset-result__icon reset-result__icon--error" aria-hidden="true">!</div>
+        <h1 id="auth-title" ref="resultHeading" tabindex="-1">Enlace ya utilizado</h1>
+        <p class="auth-subtitle">
+          Este enlace de recuperación ya fue utilizado. Solicita uno nuevo para continuar.
         </p>
         <RouterLink to="/forgot-password" class="secondary-button">
           Solicitar un nuevo enlace

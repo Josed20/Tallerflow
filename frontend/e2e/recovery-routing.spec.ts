@@ -82,4 +82,29 @@ test.describe('Password Recovery & Route Handling', () => {
     await page.getByRole('button', { name: 'Iniciar sesión' }).click()
     await expect(page).toHaveURL(/\/login$/)
   })
+
+  for (const [code, heading] of [
+    ['TOKEN_INVALID', 'Enlace inválido'],
+    ['TOKEN_EXPIRED', 'Enlace expirado'],
+    ['TOKEN_ALREADY_USED', 'Enlace ya utilizado'],
+  ]) {
+    test(`renders ${code} as its own recovery state`, async ({ page }) => {
+      await page.route('**/api/v1/auth/password-resets/consume', async (route) => {
+        await route.fulfill({
+          status: 400,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            error: { code, message: 'Token rejected', details: {}, request_id: 'request-id' },
+          }),
+        })
+      })
+
+      await page.goto('/reset-password?token=mocked-recovery-token-12345678901234567890')
+      await page.getByLabel('Nueva contraseña', { exact: true }).fill('NewSecurePassword2026!')
+      await page.getByLabel('Confirmar nueva contraseña').fill('NewSecurePassword2026!')
+      await page.getByRole('button', { name: 'Restablecer contraseña' }).click()
+
+      await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible()
+    })
+  }
 })

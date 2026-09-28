@@ -3,6 +3,7 @@ package passwordreset
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -25,4 +26,23 @@ func TestMemoryDelivery(t *testing.T) {
 
 	delivery.Reset()
 	require.Empty(t, delivery.Deliveries())
+}
+
+func TestNewSMTPDeliveryRejectsUnsafeAuthenticationConfiguration(t *testing.T) {
+	_, err := NewSMTPDelivery(SMTPDeliveryConfig{
+		Host:     "smtp.example.com",
+		Port:     "587",
+		Username: "smtp-user",
+		Password: "smtp-password",
+	})
+
+	require.Error(t, err)
+}
+
+func TestNewSMTPDeliveryAcceptsMailpitWithoutCredentials(t *testing.T) {
+	delivery, err := NewSMTPDelivery(SMTPDeliveryConfig{Host: "127.0.0.1", Port: "1025", Timeout: time.Second})
+
+	require.NoError(t, err)
+	require.False(t, delivery.config.RequireTLS)
+	require.Equal(t, time.Second, delivery.config.Timeout)
 }
