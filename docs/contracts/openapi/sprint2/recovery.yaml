@@ -1,0 +1,191 @@
+openapi: 3.1.0
+info:
+  title: TallerFlow — Módulo de Recuperación de Contraseñas
+  version: 0.2.0
+  description: >
+    Contrato OpenAPI autocontenido para el flujo de recuperación de contraseña
+    y consumo de tokens de un solo uso en TallerFlow (Sprint 2).
+paths:
+  /api/v1/auth/password-resets:
+    post:
+      summary: Solicitar restablecimiento de contraseña
+      description: >
+        Inicia el flujo de recuperación de contraseña enviando un enlace seguro y temporal
+        al correo indicado. Aplica protección estricta contra enumeración de usuarios:
+        la respuesta HTTP es idéntica si el correo existe o no en la plataforma.
+      operationId: recoveryRequestReset
+      tags:
+        - recovery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecoveryRequestInput'
+      responses:
+        '200':
+          description: Solicitud aceptada y procesada de forma neutral (anti-enumeración).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryRequestResponse'
+        '400':
+          description: Solicitud malformada o sintaxis de correo inválida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryErrorResponse'
+        '429':
+          description: Límite de solicitudes excedido para la IP o correo.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Segundos que deben transcurrir antes de reintentar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryErrorResponse'
+        '500':
+          description: Error interno del servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryErrorResponse'
+
+  /api/v1/auth/password-resets/consume:
+    post:
+      summary: Consumir token y actualizar contraseña
+      description: >
+        Valida el token de recuperación temporal de un solo uso. Si es válido y no ha expirado,
+        actualiza la contraseña del usuario con Argon2id, marca el token como consumido y revoca
+        todas las sesiones activas previas del usuario en PostgreSQL. No inicia sesión automáticamente.
+      operationId: recoveryConsumeReset
+      tags:
+        - recovery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecoveryConsumeInput'
+      responses:
+        '200':
+          description: Contraseña restablecida con éxito. Sesiones previas revocadas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryConsumeResponse'
+        '400':
+          description: Token inválido, expirado, ya consumido o contraseña no cumple con los requisitos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryErrorResponse'
+        '429':
+          description: Límite de intentos excedido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryErrorResponse'
+        '500':
+          description: Error interno del servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryErrorResponse'
+
+components:
+  schemas:
+    RecoveryRequestInput:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          example: 'dueno@taller.pe'
+
+    RecoveryRequestResponse:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          required:
+            - status
+            - message
+          properties:
+            status:
+              type: string
+              example: 'REQUESTED'
+            message:
+              type: string
+              example: 'Si el correo está registrado, recibirás un enlace para restablecer tu contraseña.'
+
+    RecoveryConsumeInput:
+      type: object
+      required:
+        - token
+        - new_password
+      properties:
+        token:
+          type: string
+          minLength: 16
+          maxLength: 256
+          description: Token de recuperación recibido en el enlace.
+          example: '8f7a3bc2e1d045a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0'
+        new_password:
+          type: string
+          minLength: 12
+          maxLength: 1048576
+          description: Nueva contraseña (mínimo 12 caracteres).
+          example: 'MiNuevaPassSegura2026!'
+
+    RecoveryConsumeResponse:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          required:
+            - status
+            - message
+          properties:
+            status:
+              type: string
+              example: 'PASSWORD_RESET_COMPLETED'
+            message:
+              type: string
+              example: 'Tu contraseña ha sido restablecida exitosamente.'
+
+    RecoveryErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+            - details
+            - request_id
+          properties:
+            code:
+              type: string
+              example: 'TOKEN_INVALID'
+            message:
+              type: string
+              example: 'El enlace de recuperación es inválido o ha expirado.'
+            details:
+              type: object
+              additionalProperties: true
+            request_id:
+              type: string
+              format: uuid
+              example: 'a4b2c1d0-1234-5678-9abc-def012345678'
