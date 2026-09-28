@@ -99,6 +99,30 @@ func TestHandlerRequestReset(t *testing.T) {
 	})
 }
 
+func TestHandlerRequestResetReturnsEquivalentPublicResponseAfterDeliveryFailure(t *testing.T) {
+	repo := newMockRepository()
+	repo.users["owner@tallerflow.pe"] = uuid.New()
+	service := NewService(repo, failingDelivery{}, mockHasher{}, ServiceConfig{}, nil)
+	router := setupTestRouter(service)
+
+	request := func(email string) *httptest.ResponseRecorder {
+		body, err := json.Marshal(map[string]string{"email": email})
+		require.NoError(t, err)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/password-resets", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		res := httptest.NewRecorder()
+		router.ServeHTTP(res, req)
+		return res
+	}
+
+	existing := request("owner@tallerflow.pe")
+	unknown := request("unknown@tallerflow.pe")
+
+	require.Equal(t, http.StatusOK, existing.Code)
+	require.Equal(t, unknown.Code, existing.Code)
+	require.JSONEq(t, unknown.Body.String(), existing.Body.String())
+}
+
 func TestHandlerConsumeReset(t *testing.T) {
 	repo := newMockRepository()
 	existingID := uuid.New()
@@ -200,5 +224,22 @@ func TestHandlerConsumeReset(t *testing.T) {
 		}
 		require.NoError(t, json.Unmarshal(res.Body.Bytes(), &errResponse))
 		require.Equal(t, "TOKEN_INVALID", errResponse.Error.Code)
+	})
+
+	t.Run("returns 429 when consuming is rate limited", func(t *testing.T) {
+		repo.rateLimitAllowed = false
+		defer func() { repo.rateLimitAllowed = true }()
+		body, _ := json.Marshal(map[string]string{
+			"token":        "another-token-012345678901234567890123456789",
+			"new_password": "ValidNewPassword123!",
+		})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/password-resets/consume", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		res := httptest.NewRecorder()
+
+		router.ServeHTTP(res, req)
+
+		require.Equal(t, http.StatusTooManyRequests, res.Code)
+		require.Equal(t, "900", res.Header().Get("Retry-After"))
 	})
 }

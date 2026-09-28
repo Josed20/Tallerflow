@@ -87,6 +87,36 @@ func TestPostgresRepositoryCreateResetToken(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestPostgresRepositoryAllowRequestAtomicallyRecordsAttempts(t *testing.T) {
+	db, mock, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	now := time.Date(2026, 9, 27, 15, 0, 0, 0, time.UTC)
+	repo, err := NewPostgresRepository(db, func() time.Time { return now })
+	require.NoError(t, err)
+
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta(`SELECT pg_advisory_xact_lock(hashtext($1))`)).
+		WithArgs(sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(regexp.QuoteMeta(`SELECT pg_advisory_xact_lock(hashtext($1))`)).
+		WithArgs(sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT COUNT(*) FILTER (WHERE email = $1) AS subject_attempts, COUNT(*) FILTER (WHERE ip_prefix = $2) AS ip_attempts FROM login_attempts WHERE succeeded = true AND email LIKE $3 AND attempted_at >= $4`)).
+		WithArgs(sqlmock.AnyArg(), "127.0.0.1", "password-reset:request:%", now.Add(-15*time.Minute)).
+		WillReturnRows(sqlmock.NewRows([]string{"subject_attempts", "ip_attempts"}).AddRow(0, 0))
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO login_attempts (email, ip_prefix, succeeded, attempted_at) VALUES ($1, $2, true, $3)`)).
+		WithArgs(sqlmock.AnyArg(), "127.0.0.1", now).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	allowed, err := repo.AllowRequest(context.Background(), "127.0.0.1", "owner@tallerflow.pe")
+
+	require.NoError(t, err)
+	require.True(t, allowed)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestPostgresRepositoryConsumeResetTokenAndChangePassword(t *testing.T) {
 	db, mock, cleanup := setupTestDB(t)
 	defer cleanup()
@@ -108,12 +138,12 @@ func TestPostgresRepositoryConsumeResetTokenAndChangePassword(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "expires_at", "used_at"}).
 				AddRow(testTokenID, testUserID, expiresAt, nil))
 
-		mock.ExpectExec(regexp.QuoteMeta(`UPDATE password_reset_tokens SET used_at = $1 WHERE id = $2 AND used_at IS NULL`)).
-			WithArgs(now, testTokenID).
-			WillReturnResult(sqlmock.NewResult(0, 1))
-
 		mock.ExpectExec(regexp.QuoteMeta(`UPDATE user_credentials SET password_hash = $1, must_change_password = false, password_changed_at = $2, updated_at = $3 WHERE user_id = $4`)).
 			WithArgs("new-argon-hash", now, now, testUserID).
+			WillReturnResult(sqlmock.NewResult(0, 1))
+
+		mock.ExpectExec(regexp.QuoteMeta(`UPDATE password_reset_tokens SET used_at = $1 WHERE id = $2 AND used_at IS NULL`)).
+			WithArgs(now, testTokenID).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		mock.ExpectExec(regexp.QuoteMeta(`UPDATE user_sessions SET revoked_at = $1 WHERE user_id = $2 AND revoked_at IS NULL`)).
@@ -121,7 +151,7 @@ func TestPostgresRepositoryConsumeResetTokenAndChangePassword(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(0, 3)) // e.g. 3 sessions revoked
 		mock.ExpectCommit()
 
-		err := repo.ConsumeResetTokenAndChangePassword(ctx, tokenHash[:], "new-argon-hash", now)
+		err := repo.ConsumeResetTokenAndChangePassword(ctx, tokenHash[:], now, func() (string, error) { return "new-argon-hash", nil })
 		require.NoError(t, err)
 		require.NoError(t, mock.ExpectationsWereMet())
 	})
@@ -135,7 +165,7 @@ func TestPostgresRepositoryConsumeResetTokenAndChangePassword(t *testing.T) {
 				AddRow(testTokenID, testUserID, expiresAt, usedAt))
 		mock.ExpectRollback()
 
-		err := repo.ConsumeResetTokenAndChangePassword(ctx, tokenHash[:], "new-argon-hash", now)
+		err := repo.ConsumeResetTokenAndChangePassword(ctx, tokenHash[:], now, func() (string, error) { return "new-argon-hash", nil })
 		require.ErrorIs(t, err, ErrTokenAlreadyUsed)
 	})
 
@@ -148,7 +178,7 @@ func TestPostgresRepositoryConsumeResetTokenAndChangePassword(t *testing.T) {
 				AddRow(testTokenID, testUserID, expiredAt, nil))
 		mock.ExpectRollback()
 
-		err := repo.ConsumeResetTokenAndChangePassword(ctx, tokenHash[:], "new-argon-hash", now)
+		err := repo.ConsumeResetTokenAndChangePassword(ctx, tokenHash[:], now, func() (string, error) { return "new-argon-hash", nil })
 		require.ErrorIs(t, err, ErrTokenExpired)
 	})
 }

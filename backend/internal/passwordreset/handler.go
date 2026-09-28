@@ -49,7 +49,7 @@ func (h *Handler) RequestReset(c *gin.Context) {
 			c.Header("Retry-After", "900")
 			h.fail(c, http.StatusTooManyRequests, "RATE_LIMITED", "Demasiados intentos. Inténtalo más tarde.")
 		default:
-			h.fail(c, http.StatusBadRequest, "INVALID_REQUEST", "No se pudo procesar la solicitud.")
+			h.fail(c, http.StatusInternalServerError, "INTERNAL_ERROR", "No se pudo procesar la solicitud.")
 		}
 		return
 	}
@@ -79,7 +79,7 @@ func (h *Handler) ConsumeReset(c *gin.Context) {
 		return
 	}
 
-	err := h.service.ConsumeReset(c.Request.Context(), input.Token, input.NewPassword)
+	err := h.service.ConsumeReset(c.Request.Context(), input.Token, input.NewPassword, strings.TrimSpace(c.ClientIP()))
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrTokenInvalid):
@@ -90,6 +90,9 @@ func (h *Handler) ConsumeReset(c *gin.Context) {
 			h.fail(c, http.StatusBadRequest, "TOKEN_ALREADY_USED", "El enlace de recuperación ya ha sido utilizado.")
 		case errors.Is(err, ErrPasswordTooWeak):
 			h.fail(c, http.StatusBadRequest, "PASSWORD_TOO_WEAK", "La nueva contraseña debe tener al menos 12 caracteres.")
+		case errors.Is(err, ErrRateLimited):
+			c.Header("Retry-After", "900")
+			h.fail(c, http.StatusTooManyRequests, "RATE_LIMITED", "Demasiados intentos. Inténtalo más tarde.")
 		default:
 			h.fail(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Ocurrió un error inesperado al actualizar la contraseña.")
 		}

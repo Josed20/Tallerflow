@@ -2,9 +2,11 @@ package passwordreset
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,10 +14,16 @@ import (
 )
 
 type PostgresRepository struct {
-	db      *gorm.DB
-	clock   func() time.Time
-	limiter *rateLimiter
+	db    *gorm.DB
+	clock func() time.Time
 }
+
+const (
+	recoveryRateWindow      = 15 * time.Minute
+	recoveryRateMaxAttempts = 5
+	recoveryRequestScope    = "request"
+	recoveryConsumeScope    = "consume"
+)
 
 func NewPostgresRepository(db *gorm.DB, clock func() time.Time) (*PostgresRepository, error) {
 	if db == nil {
@@ -25,9 +33,8 @@ func NewPostgresRepository(db *gorm.DB, clock func() time.Time) (*PostgresReposi
 		clock = time.Now
 	}
 	return &PostgresRepository{
-		db:      db,
-		clock:   clock,
-		limiter: newRateLimiter(clock, 15*time.Minute, 5),
+		db:    db,
+		clock: clock,
 	}, nil
 }
 
@@ -59,7 +66,10 @@ func (r *PostgresRepository) CreateResetToken(ctx context.Context, userID uuid.U
 	})
 }
 
-func (r *PostgresRepository) ConsumeResetTokenAndChangePassword(ctx context.Context, tokenHash []byte, newPasswordHash string, consumedAt time.Time) error {
+func (r *PostgresRepository) ConsumeResetTokenAndChangePassword(ctx context.Context, tokenHash []byte, consumedAt time.Time, hashPassword func() (string, error)) error {
+	if hashPassword == nil {
+		return fmt.Errorf("password hash callback is required")
+	}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var tokenRow struct {
 			ID        uuid.UUID
@@ -82,8 +92,9 @@ func (r *PostgresRepository) ConsumeResetTokenAndChangePassword(ctx context.Cont
 			return ErrTokenExpired
 		}
 
-		if err := tx.Exec(`UPDATE password_reset_tokens SET used_at = ? WHERE id = ? AND used_at IS NULL`, consumedAt.UTC(), tokenRow.ID).Error; err != nil {
-			return fmt.Errorf("mark token used: %w", err)
+		newPasswordHash, err := hashPassword()
+		if err != nil {
+			return fmt.Errorf("hash new password: %w", err)
 		}
 
 		updateRes := tx.Exec(`UPDATE user_credentials SET password_hash = ?, must_change_password = false, password_changed_at = ?, updated_at = ? WHERE user_id = ?`,
@@ -95,6 +106,10 @@ func (r *PostgresRepository) ConsumeResetTokenAndChangePassword(ctx context.Cont
 			return fmt.Errorf("update user credential: expected 1 row, got %d", updateRes.RowsAffected)
 		}
 
+		if err := tx.Exec(`UPDATE password_reset_tokens SET used_at = ? WHERE id = ? AND used_at IS NULL`, consumedAt.UTC(), tokenRow.ID).Error; err != nil {
+			return fmt.Errorf("mark token used: %w", err)
+		}
+
 		if err := tx.Exec(`UPDATE user_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`, consumedAt.UTC(), tokenRow.UserID).Error; err != nil {
 			return fmt.Errorf("revoke user sessions: %w", err)
 		}
@@ -103,64 +118,68 @@ func (r *PostgresRepository) ConsumeResetTokenAndChangePassword(ctx context.Cont
 	})
 }
 
-func (r *PostgresRepository) AllowRequest(_ context.Context, ip, email string) (bool, error) {
-	return r.limiter.allow(ip, email), nil
+func (r *PostgresRepository) AllowRequest(ctx context.Context, ip, email string) (bool, error) {
+	return r.reserveRecoveryAttempt(ctx, recoveryRequestScope, email, ip)
 }
 
-func (r *PostgresRepository) RecordRequestFailure(_ context.Context, ip, email string) error {
-	r.limiter.record(ip, email)
-	return nil
+func (r *PostgresRepository) AllowConsume(ctx context.Context, ip string, tokenHash []byte) (bool, error) {
+	return r.reserveRecoveryAttempt(ctx, recoveryConsumeScope, hex.EncodeToString(tokenHash), ip)
 }
 
-type rateLimiter struct {
-	mu          sync.Mutex
-	clock       func() time.Time
-	window      time.Duration
-	maxAttempts int
-	records     map[string][]time.Time
-}
-
-func newRateLimiter(clock func() time.Time, window time.Duration, maxAttempts int) *rateLimiter {
-	return &rateLimiter{
-		clock:       clock,
-		window:      window,
-		maxAttempts: maxAttempts,
-		records:     make(map[string][]time.Time),
+func (r *PostgresRepository) reserveRecoveryAttempt(ctx context.Context, scope, subject, ip string) (bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
 	}
-}
+	subjectKey := recoveryRateKey(scope, subject)
+	ip = strings.TrimSpace(ip)
+	if ip == "" {
+		ip = "unknown"
+	}
+	locks := []string{"password-reset:" + scope + ":ip:" + ip, "password-reset:" + scope + ":subject:" + subjectKey}
+	sort.Strings(locks)
+	now := r.clock().UTC()
+	windowStart := now.Add(-recoveryRateWindow)
+	scopePrefix := "password-reset:" + scope + ":%"
 
-func (l *rateLimiter) allow(ip, email string) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	now := l.clock()
-	cutoff := now.Add(-l.window)
-
-	for _, key := range []string{strings.TrimSpace(ip), strings.ToLower(strings.TrimSpace(email))} {
-		if key == "" {
-			continue
-		}
-		timestamps := l.records[key]
-		valid := timestamps[:0]
-		for _, t := range timestamps {
-			if t.After(cutoff) {
-				valid = append(valid, t)
+	allowed := false
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, lockKey := range locks {
+			if err := tx.Exec(`SELECT pg_advisory_xact_lock(hashtext(?))`, lockKey).Error; err != nil {
+				return fmt.Errorf("lock recovery rate key: %w", err)
 			}
 		}
-		l.records[key] = valid
-		if len(valid) >= l.maxAttempts {
-			return false
+
+		var attempts struct {
+			SubjectAttempts int64
+			IPAttempts      int64
 		}
-	}
-	return true
+		const countQuery = `SELECT COUNT(*) FILTER (WHERE email = ?) AS subject_attempts, COUNT(*) FILTER (WHERE ip_prefix = ?) AS ip_attempts FROM login_attempts WHERE succeeded = true AND email LIKE ? AND attempted_at >= ?`
+		result := tx.Raw(countQuery, subjectKey, ip, scopePrefix, windowStart).Scan(&attempts)
+		if result.Error != nil {
+			return fmt.Errorf("count recovery attempts: %w", result.Error)
+		}
+		if result.RowsAffected != 1 {
+			return fmt.Errorf("count recovery attempts: no row returned")
+		}
+		if attempts.SubjectAttempts >= recoveryRateMaxAttempts || attempts.IPAttempts >= recoveryRateMaxAttempts {
+			return nil
+		}
+
+		result = tx.Exec(`INSERT INTO login_attempts (email, ip_prefix, succeeded, attempted_at) VALUES (?, ?, true, ?)`, subjectKey, ip, now)
+		if result.Error != nil {
+			return fmt.Errorf("record recovery attempt: %w", result.Error)
+		}
+		if result.RowsAffected != 1 {
+			return fmt.Errorf("record recovery attempt: no row inserted")
+		}
+		allowed = true
+		return nil
+	})
+	return allowed, err
 }
 
-func (l *rateLimiter) record(ip, email string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	now := l.clock()
-	for _, key := range []string{strings.TrimSpace(ip), strings.ToLower(strings.TrimSpace(email))} {
-		if key != "" {
-			l.records[key] = append(l.records[key], now)
-		}
-	}
+func recoveryRateKey(scope, subject string) string {
+	normalized := strings.ToLower(strings.TrimSpace(subject))
+	digest := sha256.Sum256([]byte(scope + ":" + normalized))
+	return "password-reset:" + scope + ":" + hex.EncodeToString(digest[:])
 }

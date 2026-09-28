@@ -134,7 +134,7 @@ components:
       properties:
         token:
           type: string
-          minLength: 16
+          minLength: 32
           maxLength: 256
           description: Token de recuperación recibido en el enlace.
           example: '8f7a3bc2e1d045a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0'
@@ -178,6 +178,14 @@ components:
           properties:
             code:
               type: string
+              enum:
+                - INVALID_REQUEST
+                - PASSWORD_TOO_WEAK
+                - TOKEN_INVALID
+                - TOKEN_EXPIRED
+                - TOKEN_ALREADY_USED
+                - RATE_LIMITED
+                - INTERNAL_ERROR
               example: 'TOKEN_INVALID'
             message:
               type: string

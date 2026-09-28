@@ -47,7 +47,7 @@ func (m *mockRepository) CreateResetToken(_ context.Context, userID uuid.UUID, t
 	return nil
 }
 
-func (m *mockRepository) ConsumeResetTokenAndChangePassword(_ context.Context, tokenHash []byte, newPasswordHash string, consumedAt time.Time) error {
+func (m *mockRepository) ConsumeResetTokenAndChangePassword(_ context.Context, tokenHash []byte, consumedAt time.Time, hashPassword func() (string, error)) error {
 	key := fmt.Sprintf("%x", tokenHash)
 	token, ok := m.tokens[key]
 	if !ok {
@@ -58,6 +58,10 @@ func (m *mockRepository) ConsumeResetTokenAndChangePassword(_ context.Context, t
 	}
 	if !token.expiresAt.After(consumedAt) {
 		return ErrTokenExpired
+	}
+	newPasswordHash, err := hashPassword()
+	if err != nil {
+		return err
 	}
 	token.used = true
 	m.tokens[key] = token
@@ -70,8 +74,18 @@ func (m *mockRepository) AllowRequest(_ context.Context, _, _ string) (bool, err
 	return m.rateLimitAllowed, nil
 }
 
-func (m *mockRepository) RecordRequestFailure(_ context.Context, _, _ string) error {
-	return nil
+func (m *mockRepository) AllowConsume(_ context.Context, _ string, _ []byte) (bool, error) {
+	return m.rateLimitAllowed, nil
+}
+
+func requireDelivery(t *testing.T, delivery *MemoryDelivery) DeliveryRecord {
+	t.Helper()
+	var record DeliveryRecord
+	require.Eventually(t, func() bool {
+		record, _ = delivery.LastDelivery()
+		return record.ResetURL != ""
+	}, time.Second, 10*time.Millisecond)
+	return record
 }
 
 type mockHasher struct{}
@@ -97,9 +111,9 @@ func TestRequestResetAntiEnumeration(t *testing.T) {
 	// 1. Existing user
 	errExisting := service.RequestReset(ctx, "registered@tallerflow.pe", "127.0.0.1")
 	require.NoError(t, errExisting)
-	require.Len(t, delivery.Deliveries(), 1)
-	require.Equal(t, "registered@tallerflow.pe", delivery.Deliveries()[0].RecipientEmail)
-	require.Contains(t, delivery.Deliveries()[0].ResetURL, "http://localhost:8080/reset-password?token=")
+	record := requireDelivery(t, delivery)
+	require.Equal(t, "registered@tallerflow.pe", record.RecipientEmail)
+	require.Contains(t, record.ResetURL, "http://localhost:8080/reset-password?token=")
 	require.Len(t, repo.tokens, 1)
 
 	// 2. Non-existing user produces identical nil error (no leak)
@@ -136,8 +150,7 @@ func TestConsumeReset(t *testing.T) {
 	repo.users["user@example.com"] = userID
 
 	require.NoError(t, service.RequestReset(ctx, "user@example.com", "127.0.0.1"))
-	last, ok := delivery.LastDelivery()
-	require.True(t, ok)
+	last := requireDelivery(t, delivery)
 
 	// Extract raw token from reset URL
 	parts := strings.Split(last.ResetURL, "token=")
@@ -172,7 +185,7 @@ func TestConsumeReset(t *testing.T) {
 		// Request a new token
 		delivery.Reset()
 		require.NoError(t, service.RequestReset(ctx, "user@example.com", "127.0.0.1"))
-		newDeliv, _ := delivery.LastDelivery()
+		newDeliv := requireDelivery(t, delivery)
 		newToken := strings.Split(newDeliv.ResetURL, "token=")[1]
 
 		// Now advance clock past expiry of this token as well
