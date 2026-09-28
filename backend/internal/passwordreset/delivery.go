@@ -55,10 +55,21 @@ func NewSMTPDelivery(cfg SMTPDeliveryConfig) (*SMTPDelivery, error) {
 	if (cfg.Username != "" || cfg.Password != "") && !cfg.RequireTLS {
 		return nil, fmt.Errorf("smtp authentication requires TLS")
 	}
+	if !cfg.RequireTLS && !isLoopbackSMTPHost(cfg.Host) {
+		return nil, fmt.Errorf("SMTP TLS is required for non-loopback hosts")
+	}
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = 10 * time.Second
 	}
 	return &SMTPDelivery{config: cfg}, nil
+}
+
+func isLoopbackSMTPHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func (d *SMTPDelivery) Deliver(ctx context.Context, recipientEmail, resetURL string) error {

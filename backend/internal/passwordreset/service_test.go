@@ -2,6 +2,7 @@ package passwordreset
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -15,6 +16,8 @@ type mockRepository struct {
 	users             map[string]uuid.UUID
 	tokens            map[string]mockToken
 	rateLimitAllowed  bool
+	findErr           error
+	createErr         error
 	consumedHashes    []string
 	newPasswordHashes []string
 }
@@ -34,11 +37,17 @@ func newMockRepository() *mockRepository {
 }
 
 func (m *mockRepository) FindUserByEmail(_ context.Context, email string) (uuid.UUID, bool, error) {
+	if m.findErr != nil {
+		return uuid.Nil, false, m.findErr
+	}
 	id, ok := m.users[strings.ToLower(strings.TrimSpace(email))]
 	return id, ok, nil
 }
 
 func (m *mockRepository) CreateResetToken(_ context.Context, userID uuid.UUID, tokenHash []byte, expiresAt time.Time, _ time.Time) error {
+	if m.createErr != nil {
+		return m.createErr
+	}
 	m.tokens[fmt.Sprintf("%x", tokenHash)] = mockToken{
 		userID:    userID,
 		expiresAt: expiresAt,
@@ -132,6 +141,31 @@ func TestRequestResetRateLimiting(t *testing.T) {
 
 	err := service.RequestReset(context.Background(), "user@example.com", "127.0.0.1")
 	require.ErrorIs(t, err, ErrRateLimited)
+}
+
+func TestRequestResetPropagatesOperationalFailuresWithoutExposingAccountExistence(t *testing.T) {
+	t.Run("user lookup failure", func(t *testing.T) {
+		repo := newMockRepository()
+		repo.findErr = errors.New("database unavailable")
+		service := NewService(repo, NewMemoryDelivery(), mockHasher{}, ServiceConfig{}, nil)
+
+		err := service.RequestReset(t.Context(), "user@example.com", "127.0.0.1")
+
+		require.Error(t, err)
+		require.NotErrorIs(t, err, ErrRateLimited)
+	})
+
+	t.Run("token persistence failure", func(t *testing.T) {
+		repo := newMockRepository()
+		repo.users["user@example.com"] = uuid.New()
+		repo.createErr = errors.New("database unavailable")
+		service := NewService(repo, NewMemoryDelivery(), mockHasher{}, ServiceConfig{}, nil)
+
+		err := service.RequestReset(t.Context(), "user@example.com", "127.0.0.1")
+
+		require.Error(t, err)
+		require.NotErrorIs(t, err, ErrRateLimited)
+	})
 }
 
 func TestConsumeReset(t *testing.T) {

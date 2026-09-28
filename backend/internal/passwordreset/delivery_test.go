@@ -39,6 +39,15 @@ func TestNewSMTPDeliveryRejectsUnsafeAuthenticationConfiguration(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestNewSMTPDeliveryRejectsPlaintextRemoteRelay(t *testing.T) {
+	_, err := NewSMTPDelivery(SMTPDeliveryConfig{
+		Host: "smtp.example.com",
+		Port: "25",
+	})
+
+	require.Error(t, err, "remote SMTP relays must require TLS even without credentials")
+}
+
 func TestNewSMTPDeliveryAcceptsMailpitWithoutCredentials(t *testing.T) {
 	delivery, err := NewSMTPDelivery(SMTPDeliveryConfig{Host: "127.0.0.1", Port: "1025", Timeout: time.Second})
 

@@ -3,6 +3,7 @@ package passwordreset
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -121,6 +122,28 @@ func TestHandlerRequestResetReturnsEquivalentPublicResponseAfterDeliveryFailure(
 	require.Equal(t, http.StatusOK, existing.Code)
 	require.Equal(t, unknown.Code, existing.Code)
 	require.JSONEq(t, unknown.Body.String(), existing.Body.String())
+}
+
+func TestHandlerRequestResetReturnsNeutral500ForOperationalFailure(t *testing.T) {
+	repo := newMockRepository()
+	repo.findErr = errors.New("database unavailable")
+	service := NewService(repo, NewMemoryDelivery(), mockHasher{}, ServiceConfig{}, nil)
+	router := setupTestRouter(service)
+
+	body, _ := json.Marshal(map[string]string{"email": "owner@tallerflow.pe"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/password-resets", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+
+	require.Equal(t, http.StatusInternalServerError, res.Code)
+	var response struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(res.Body.Bytes(), &response))
+	require.Equal(t, "INTERNAL_ERROR", response.Error.Code)
 }
 
 func TestHandlerConsumeReset(t *testing.T) {

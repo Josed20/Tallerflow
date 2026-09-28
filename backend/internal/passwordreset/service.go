@@ -73,7 +73,7 @@ func (s *Service) RequestReset(ctx context.Context, email, ip string) error {
 
 	userID, exists, err := s.repo.FindUserByEmail(ctx, trimmedEmail)
 	if err != nil {
-		return nil
+		return fmt.Errorf("find recovery user: %w", err)
 	}
 
 	// Anti-enumeration: if user does not exist, return nil without disclosing account existence
@@ -83,14 +83,14 @@ func (s *Service) RequestReset(ctx context.Context, email, ip string) error {
 
 	rawToken, tokenHash, err := GenerateToken()
 	if err != nil {
-		return nil
+		return fmt.Errorf("generate recovery token: %w", err)
 	}
 
 	now := s.clock().UTC()
 	expiresAt := now.Add(s.config.TokenLifetime)
 
 	if err := s.repo.CreateResetToken(ctx, userID, tokenHash, expiresAt, now); err != nil {
-		return nil
+		return fmt.Errorf("create recovery token: %w", err)
 	}
 
 	resetURL := fmt.Sprintf("%s/reset-password?token=%s", s.config.BaseURL, rawToken)
