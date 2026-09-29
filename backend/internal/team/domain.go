@@ -60,6 +60,6 @@ type UpdateMemberInput struct {
 }
 
 type ConsumeResult struct {
-	Email string
-	Role  string
+	Email string `json:"email"`
+	Role  string `json:"role"`
 }
