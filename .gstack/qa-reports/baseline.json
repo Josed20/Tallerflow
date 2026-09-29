@@ -1,0 +1,15 @@
+{
+  "date": "2026-09-29",
+  "url": "http://localhost:8080",
+  "healthScore": 100,
+  "issues": [],
+  "categoryScores": {
+    "links": 100,
+    "visual": 100,
+    "functional": 100,
+    "ux": 100,
+    "content": 100,
+    "accessibility": 100
+  },
+  "coverage": "Invitation flow only; console and performance were not scored."
+}
