@@ -18,7 +18,12 @@ async function signOut() {
       <p class="eyebrow">Taller activo</p>
       <h1>{{ session.principal?.workshop.name }}</h1>
       <p>{{ session.principal?.email }} · {{ session.principal?.role }}</p>
-      <UiButton @click="signOut">Cerrar sesión</UiButton>
+      <div class="session-home__actions">
+        <RouterLink v-if="session.principal?.role === 'OWNER' || session.principal?.role === 'ADMIN'" class="text-link" to="/app/team">
+          Gestionar equipo
+        </RouterLink>
+        <UiButton @click="signOut">Cerrar sesión</UiButton>
+      </div>
     </section>
   </main>
 </template>

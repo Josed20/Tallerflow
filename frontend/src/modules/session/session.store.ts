@@ -83,5 +83,5 @@ export const useSessionStore = defineStore('session', () => {
     status.value = 'anonymous'
   }
 
-  return { principal, status, restored, isAuthenticated, requiresPasswordChange, restore, login, changePassword, logout }
+  return { principal, status, restored, csrfToken, isAuthenticated, requiresPasswordChange, restore, login, changePassword, logout }
 })

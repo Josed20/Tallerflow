@@ -44,7 +44,7 @@ Ramas:
 | José | `feat/s1-jose-auth-api` |
 | Lucero | `feat/s1-lucero-frontend-shell` |
 | Michael | `feat/s1-michael-tenancy-team` |
-| Stefano | `feat/s1-stefano-data-platform` |
+| Stephano | `feat/s1-Stephano-data-platform` |
 
 Reglas:
 
@@ -52,7 +52,7 @@ Reglas:
 - No mezclar dos entregables independientes en un commit.
 - Actualizar la rama con `main` antes de abrir o actualizar PR.
 - No reescribir migraciones que ya hayan sido fusionadas.
-- Stefano es propietario de la numeración Flyway.
+- Stephano es propietario de la numeración Flyway.
 - José es propietario del router central y composición de dependencias.
 - Los módulos exportan `RegisterRoutes`; sus autores no cablean rutas globales.
 - Los cambios de DTO se reflejan primero en OpenAPI.
@@ -97,7 +97,7 @@ backend/platform/security/
 
 **José no modifica:**
 
-- Migraciones numeradas sin revisión de Stefano.
+- Migraciones numeradas sin revisión de Stephano.
 - Componentes visuales de Lucero.
 - Implementación del tenant runner de Michael.
 
@@ -182,7 +182,7 @@ backend/platform/httpx/principal.go
 - Números de migración.
 - Componentes Vue.
 
-## 6. Stefano — Datos, contenedores y CI
+## 6. Stephano — Datos, contenedores y CI
 
 **Objetivo:** producir un entorno reproducible y una base segura.
 
@@ -219,7 +219,7 @@ README.md
 - `feat(database): add identity schema and tenant policies`
 - `ci: integrate Docker Caddy and validation pipeline`
 
-**Stefano no modifica:**
+**Stephano no modifica:**
 
 - Reglas de autenticación.
 - Casos de uso de talleres.
@@ -234,7 +234,7 @@ README.md
 | José | Go compila, config y live health |
 | Lucero | Vue compila, tokens y componentes base |
 | Michael | Interfaces de TenantRunner y Principal acordadas |
-| Stefano | PostgreSQL, Flyway, V1 y V2 |
+| Stephano | PostgreSQL, Flyway, V1 y V2 |
 
 Control:
 
@@ -252,7 +252,7 @@ Nadie implementa clientes u órdenes
 | José | Argon2id, sesiones y repositorios |
 | Lucero | cliente HTTP, store y formulario de login |
 | Michael | TenantRunner y pruebas RLS |
-| Stefano | grants, roles y Compose integrado |
+| Stephano | grants, roles y Compose integrado |
 
 Control:
 
@@ -270,7 +270,7 @@ Login inválido tiene mensaje genérico
 | José | handlers, CSRF, rate limit y bootstrap |
 | Lucero | login conectado y guardas |
 | Michael | principal, /me y taller actual |
-| Stefano | Caddy, Dockerfiles y CI |
+| Stephano | Caddy, Dockerfiles y CI |
 
 Control:
 
@@ -306,11 +306,11 @@ CSRF ausente produce 403
 
 Orden:
 
-1. Stefano: datos.
+1. Stephano: datos.
 2. José: plataforma y servicios auth.
 3. Michael: tenancy y talleres.
 4. Lucero: frontend.
-5. Stefano: infraestructura integrada.
+5. Stephano: infraestructura integrada.
 6. José: integración final.
 
 ## 9. Revisión de PR
@@ -320,9 +320,9 @@ Orden:
 | José | Michael | seguridad, interfaces y testabilidad |
 | Lucero | José | contrato, errores, sesión y accesibilidad |
 | Michael | José | RLS, principal, roles y transacciones |
-| Stefano | Michael | SQL, grants, Compose y reproducibilidad |
+| Stephano | Michael | SQL, grants, Compose y reproducibilidad |
 
-Stefano revisa cualquier columna o variable nueva. Lucero revisa cambios de DTO consumidos por Vue.
+Stephano revisa cualquier columna o variable nueva. Lucero revisa cambios de DTO consumidos por Vue.
 
 Checklist del autor:
 
@@ -360,13 +360,13 @@ La casilla de CI remoto se completa después de publicar la rama y observar el w
 
 ## 11. Demo
 
-1. Stefano levanta PostgreSQL y Flyway desde cero.
+1. Stephano levanta PostgreSQL y Flyway desde cero.
 2. José ejecuta bootstrap sin mostrar la contraseña.
 3. Lucero abre el login en escritorio y móvil.
 4. José inicia sesión.
 5. Michael muestra `/me`, rol y taller activo.
 6. José demuestra error genérico, CSRF y logout.
 7. Michael ejecuta el test de aislamiento RLS.
-8. Stefano muestra CI verde.
+8. Stephano muestra CI verde.
 
 El Sprint termina únicamente después de repetir la demo desde un entorno limpio.

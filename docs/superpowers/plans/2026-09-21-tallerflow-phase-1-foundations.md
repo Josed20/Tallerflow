@@ -66,7 +66,7 @@ compose.yaml
 
 ## Preflight obligatorio
 
-Antes de crear ramas, José y Stefano verifican:
+Antes de crear ramas, José y Stephano verifican:
 
 ```powershell
 go version
@@ -88,7 +88,7 @@ El entorno revisado antes de este plan no tenía Go disponible y el daemon de Do
 
 ### Task 1: Backend skeleton, configuration and health
 
-**Owner:** José  
+**Owner:** José
 **Branch:** `feat/s1-jose-auth-api`
 
 **Files:**
@@ -127,7 +127,7 @@ func TestLoadRejectsMissingSecrets(t *testing.T) {
 }
 ```
 
-Run: `cd backend; go test ./platform/config -run TestLoadRejectsMissingSecrets -v`  
+Run: `cd backend; go test ./platform/config -run TestLoadRejectsMissingSecrets -v`
 Expected: FAIL porque `Load` aún no existe.
 
 - [ ] **Step 3: Implementar configuración tipada**
@@ -189,8 +189,8 @@ git commit -m "feat(platform): bootstrap Go API and health endpoint"
 
 ### Task 2: PostgreSQL, roles and Flyway identity schema
 
-**Owner:** Stefano  
-**Branch:** `feat/s1-stefano-data-platform`
+**Owner:** Stephano
+**Branch:** `feat/s1-Stephano-data-platform`
 
 **Files:**
 - Create: `database/migrations/V1__create_extensions.sql`
@@ -320,7 +320,7 @@ git commit -m "feat(database): add identity schema and tenant policies"
 
 ### Task 3: Database connection and tenant transaction
 
-**Owner:** Michael  
+**Owner:** Michael
 **Branch:** `feat/s1-michael-tenancy-team`
 
 **Files:**
@@ -345,7 +345,7 @@ func TestWorkshopMembersDenyWithoutTenant(t *testing.T) {
 }
 ```
 
-Run: `cd backend; go test ./platform/database -run TestWorkshopMembersDenyWithoutTenant -v`  
+Run: `cd backend; go test ./platform/database -run TestWorkshopMembersDenyWithoutTenant -v`
 Expected: FAIL hasta usar el rol `tallerflow_app` y activar RLS.
 
 - [ ] **Step 2: Definir runner transaccional**
@@ -396,7 +396,7 @@ git commit -m "feat(database): enforce tenant-scoped transactions"
 
 ### Task 4: Password hashing and session service
 
-**Owner:** José  
+**Owner:** José
 **Branch:** `feat/s1-jose-auth-api`
 
 **Files:**
@@ -487,7 +487,7 @@ git commit -m "feat(auth): add Argon2id credentials and opaque sessions"
 
 ### Task 5: Login, cookies, CSRF and throttling
 
-**Owner:** José  
+**Owner:** José
 **Branch:** `feat/s1-jose-auth-api`
 
 **Files:**
@@ -609,7 +609,7 @@ git commit -m "feat(auth): expose secure cookie session flow"
 
 ### Task 6: Workshop principal, memberships and authorization
 
-**Owner:** Michael  
+**Owner:** Michael
 **Branch:** `feat/s1-michael-tenancy-team`
 
 **Files:**
@@ -697,7 +697,7 @@ git commit -m "feat(workshops): resolve tenant principal and roles"
 
 ### Task 7: OWNER bootstrap and audit
 
-**Owner:** José  
+**Owner:** José
 **Branch:** `feat/s1-jose-auth-api`
 
 **Files:**
@@ -768,7 +768,7 @@ git commit -m "feat(auth): provision initial workshop owner"
 
 ### Task 8: Vue TypeScript shell and design system
 
-**Owner:** Lucero  
+**Owner:** Lucero
 **Branch:** `feat/s1-lucero-frontend-shell`
 
 **Files:**
@@ -857,7 +857,7 @@ git commit -m "feat(frontend): add Vue TypeScript design foundation"
 
 ### Task 9: Frontend session and login
 
-**Owner:** Lucero  
+**Owner:** Lucero
 **Branch:** `feat/s1-lucero-frontend-shell`
 
 **Files:**
@@ -967,8 +967,8 @@ git commit -m "feat(frontend-auth): add secure login and session restore"
 
 ### Task 10: Integrated Compose, Caddy and CI
 
-**Owner:** Stefano  
-**Branch:** `feat/s1-stefano-data-platform`
+**Owner:** Stephano
+**Branch:** `feat/s1-Stephano-data-platform`
 
 **Files:**
 - Create: `backend/Dockerfile`
@@ -1060,7 +1060,7 @@ git commit -m "ci: integrate Docker Caddy and validation pipeline"
 
 ### Task 11: End-to-end security flow
 
-**Owners:** José integra; Lucero, Michael y Stefano revisan sus capas  
+**Owners:** José integra; Lucero, Michael y Stephano revisan sus capas
 **Branch de integración:** `feat/s1-integration-foundations`, creada desde `main` después de fusionar las cuatro ramas personales
 
 **Files:**
@@ -1127,11 +1127,11 @@ git commit -m "test: verify secure owner session end to end"
 
 ## Merge order
 
-1. Stefano: PostgreSQL, Flyway y esquema.
+1. Stephano: PostgreSQL, Flyway y esquema.
 2. José: backend base, crypto y sesiones.
 3. Michael: tenant runner, principal y roles.
 4. Lucero: Vue shell y login.
-5. Stefano: Compose, Caddy y CI integrados.
+5. Stephano: Compose, Caddy y CI integrados.
 6. José: rama de integración y E2E.
 
 ## Phase 1 acceptance

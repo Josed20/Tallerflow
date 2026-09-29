@@ -126,6 +126,6 @@ Antes de abrir el plan siguiente:
 | José | Plataforma Go, autenticación, seguridad HTTP e integración |
 | Lucero | Vue, sistema visual, accesibilidad y pruebas frontend |
 | Michael | Dominio Go, multi-tenancy, contratos y reglas de negocio |
-| Stefano | PostgreSQL, Flyway, Docker, Caddy, CI y operación |
+| Stephano | PostgreSQL, Flyway, Docker, Caddy, CI y operación |
 
 La distribución concreta y los límites de archivos se definen en cada Sprint para reducir conflictos.

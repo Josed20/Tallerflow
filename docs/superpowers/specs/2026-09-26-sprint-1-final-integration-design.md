@@ -18,7 +18,7 @@ commands that were actually executed.
 The integration branch is `codex/s1-sprint1-final`. It starts from
 `codex/s1-michael-reconcile`, which already contains:
 
-- Stefano's data and infrastructure work through `4adf889`.
+- Stephano's data and infrastructure work through `4adf889`.
 - Jose's API, authentication and bootstrap work through `1ce90d6`.
 - Michael's tenancy work reconciled with the final persistence contract in
   `27363a8`.

@@ -135,7 +135,7 @@ $required | ForEach-Object {
 }
 ```
 
-Las variables desaparecen al cerrar esa terminal. Si el equipo decide usar un archivo local, esperar a que la rama de Stefano defina `.env.example` y las reglas de exclusión; antes de guardar valores, exigir que `git check-ignore <archivo-local>` devuelva la ruta. Si no la devuelve, no crear ni rellenar el archivo.
+Las variables desaparecen al cerrar esa terminal. Si el equipo decide usar un archivo local, esperar a que la rama de Stephano defina `.env.example` y las reglas de exclusión; antes de guardar valores, exigir que `git check-ignore <archivo-local>` devuelva la ruta. Si no la devuelve, no crear ni rellenar el archivo.
 
 Antes de cada commit o PR:
 
@@ -151,7 +151,7 @@ Revisar manualmente que la lista preparada no contenga archivos locales, volcado
 
 José debe verificar:
 
-- Acceso de lectura y escritura al repositorio remoto para Lucero, Michael y Stefano.
+- Acceso de lectura y escritura al repositorio remoto para Lucero, Michael y Stephano.
 - Permiso de cada integrante para crear su rama y abrir o actualizar PR.
 - CI visible para todo el equipo y permisos para consultar logs sin datos sensibles.
 - Reglas de protección de `main`: cambios por PR, revisión requerida y CI verde antes de fusionar.
@@ -177,7 +177,7 @@ Las ramas acordadas son:
 | José | `feat/s1-jose-auth-api` | plataforma Go, autenticación y bootstrap |
 | Lucero | `feat/s1-lucero-frontend-shell` | shell Vue, diseño, sesión y login |
 | Michael | `feat/s1-michael-tenancy-team` | conexión, tenant runner, taller y roles |
-| Stefano | `feat/s1-stefano-data-platform` | PostgreSQL, Flyway, Compose, Caddy y CI |
+| Stephano | `feat/s1-Stephano-data-platform` | PostgreSQL, Flyway, Compose, Caddy y CI |
 
 Cada persona crea su rama desde el mismo `main` actualizado:
 
@@ -189,7 +189,7 @@ git switch -c feat/s1-<persona>-<area>
 
 Acuerdos que José debe hacer visibles en las descripciones de PR:
 
-- Stefano controla la numeración Flyway y revisa columnas o variables nuevas.
+- Stephano controla la numeración Flyway y revisa columnas o variables nuevas.
 - José controla el router central y la composición de dependencias.
 - Michael implementa el tenant runner; los módulos exponen `RegisterRoutes` y no cablean rutas globales.
 - Lucero consume contratos coordinados; cualquier cambio de DTO se refleja primero en OpenAPI.
@@ -202,15 +202,15 @@ Revisión principal:
 | José | Michael | seguridad, interfaces y testabilidad |
 | Lucero | José | contrato HTTP, errores, sesión y accesibilidad |
 | Michael | José | RLS, principal, roles y transacciones |
-| Stefano | Michael | SQL, grants, Compose y reproducibilidad |
+| Stephano | Michael | SQL, grants, Compose y reproducibilidad |
 
 Orden de integración:
 
-1. Stefano: PostgreSQL, Flyway y esquema.
+1. Stephano: PostgreSQL, Flyway y esquema.
 2. José: backend base, criptografía y sesiones.
 3. Michael: tenancy, principal y roles.
 4. Lucero: frontend y login.
-5. Stefano: Compose, Caddy y CI integrados.
+5. Stephano: Compose, Caddy y CI integrados.
 6. José: integración y E2E.
 
 Después de fusionar las cuatro ramas personales en `main`, José crea la rama final desde un `main` nuevamente actualizado:

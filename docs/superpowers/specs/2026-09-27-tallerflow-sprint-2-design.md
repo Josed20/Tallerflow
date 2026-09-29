@@ -2,7 +2,7 @@
 
 - **Fecha:** 2026-09-27
 - **Duración propuesta:** 10 días hábiles
-- **Equipo:** José, Lucero, Michelle y Stefano
+- **Equipo:** José, Lucero, Michelle y Stephano
 - **Estado:** especificación lista para revisión del equipo
 - **Objetivo:** un dueño nuevo crea el primer taller sin terminal, entra a TallerFlow, registra clientes y órdenes, consulta su operación y administra a su equipo.
 
@@ -76,13 +76,13 @@ Ramas:
 | José | `feat/s2-jose-onboarding-integration` |
 | Lucero | `feat/s2-lucero-recovery-routing` |
 | Michelle | `feat/s2-michelle-orders` |
-| Stefano | `feat/s2-stefano-team` |
+| Stephano | `feat/s2-Stephano-team` |
 
 Límites compartidos:
 
 - Cada módulo exporta sus rutas; solo José realiza el cableado final en `backend/cmd/api/app.go` y `frontend/src/app/router.ts` durante integración.
 - Cada persona entrega un fragmento OpenAPI autocontenido en `docs/contracts/openapi/sprint2/{onboarding|recovery|orders|team}.yaml`, con `operationId` y nombres de esquema prefijados por módulo, y lo valida en su rama junto con pruebas de contrato HTTP. José consolida el archivo único sin reinterpretar los contratos aprobados ni obligar a una rama a consumir otra.
-- Las migraciones se reservan antes de abrir ramas: Michelle `V3` y `V4`, Stefano `V5`. Lucero reutiliza la tabla `password_reset_tokens` creada por V1 y no modifica una migración aplicada. Nadie reutiliza ni renombra una versión aplicada.
+- Las migraciones se reservan antes de abrir ramas: Michelle `V3` y `V4`, Stephano `V5`. Lucero reutiliza la tabla `password_reset_tokens` creada por V1 y no modifica una migración aplicada. Nadie reutiliza ni renombra una versión aplicada.
 - Cada rama usa un proyecto Compose o volumen distinto. No se comparte una base migrada parcialmente.
 - Los módulos no importan implementaciones internas de otro dominio. Se comunican mediante principal autenticado, interfaces y DTO documentados.
 - Los cambios en archivos compartidos se mantienen mínimos y se integran al final; no son requisito para desarrollar o probar el módulo aislado.
@@ -251,7 +251,7 @@ database/migrations/V4__orders_and_stages.sql
 
 OWNER o ADMIN crea cliente y orden, consulta el semáforo y detalle, y confirma una etapa sin duplicados ni fuga entre talleres.
 
-## 9. Stefano — miembros, invitaciones y permisos
+## 9. Stephano — miembros, invitaciones y permisos
 
 **Objetivo individual:** permitir que el OWNER administre el equipo sin compartir credenciales.
 
@@ -305,7 +305,7 @@ El OWNER incorpora y administra miembros sin compartir contraseñas y sin romper
 | José | OpenAPI base de onboarding y fixture de OWNER |
 | Lucero | pruebas de la tabla V1 existente y contratos de recuperación/404 |
 | Michelle | V3/V4 y contratos de clientes/órdenes |
-| Stefano | V5 y contratos de equipo/invitaciones |
+| Stephano | V5 y contratos de equipo/invitaciones |
 
 Puerta: los cuatro módulos compilan y sus migraciones funcionan desde una base V1/V2 aislada.
 
@@ -316,7 +316,7 @@ Puerta: los cuatro módulos compilan y sus migraciones funcionan desde una base 
 | José | primer OWNER transaccional y protegido contra carrera |
 | Lucero | token de recuperación, consumo y revocación de sesiones |
 | Michelle | clientes y creación idempotente de órdenes |
-| Stefano | invitaciones, membresías y reglas del último OWNER |
+| Stephano | invitaciones, membresías y reglas del último OWNER |
 
 Puerta: pruebas Go y PostgreSQL reales cubren RLS, roles, errores y concurrencia.
 
@@ -327,7 +327,7 @@ Puerta: pruebas Go y PostgreSQL reales cubren RLS, roles, errores y concurrencia
 | José | onboarding responsive |
 | Lucero | recuperación, 404 y estados ocupados |
 | Michelle | clientes, órdenes, detalle y dashboard |
-| Stefano | equipo y aceptación de invitaciones |
+| Stephano | equipo y aceptación de invitaciones |
 
 Puerta: pruebas Vue, accesibilidad y E2E del módulo pasan de forma aislada.
 
@@ -352,16 +352,16 @@ PR sugeridos:
 | José | `feat(onboarding): provision first workshop owner from web` |
 | Lucero | `feat(auth): add password recovery and route states` |
 | Michelle | `feat(orders): add productive client and order workflow` |
-| Stefano | `feat(team): add secure workshop invitations` |
+| Stephano | `feat(team): add secure workshop invitations` |
 
 Revisión cruzada:
 
 | Autor | Revisor principal | Foco |
 |---|---|---|
-| José | Stefano | transacción, secretos y reproducibilidad |
+| José | Stephano | transacción, secretos y reproducibilidad |
 | Lucero | José | auth, sesiones, errores y accesibilidad |
-| Michelle | Stefano | SQL, concurrencia, RLS e idempotencia |
-| Stefano | Michelle | roles, flujo de usuario y aislamiento |
+| Michelle | Stephano | SQL, concurrencia, RLS e idempotencia |
+| Stephano | Michelle | roles, flujo de usuario y aislamiento |
 
 Checklist de cada PR:
 
@@ -383,7 +383,7 @@ El desarrollo es paralelo. El orden siguiente solo controla la integración y la
 1. Crear `codex/s2-sprint2-integration` desde `main` actualizado.
 2. Integrar Lucero y verificar la compatibilidad de recuperación con V1/V2.
 3. Integrar Michelle y verificar V3/V4.
-4. Integrar Stefano y verificar V5.
+4. Integrar Stephano y verificar V5.
 5. Integrar José y consolidar router, navegación, OpenAPI y scripts.
 6. Ejecutar la matriz completa desde volúmenes vacíos.
 7. Abrir PR de integración hacia `main` y exigir CI verde.
@@ -437,11 +437,11 @@ Los comandos se ejecutan desde el directorio correspondiente según el script de
 
 ## 15. Demo final
 
-1. Stefano levanta PostgreSQL, Flyway y la aplicación desde cero.
+1. Stephano levanta PostgreSQL, Flyway y la aplicación desde cero.
 2. José crea el primer taller y OWNER desde el navegador.
 3. Lucero demuestra login, recuperación y página 404.
 4. Michelle crea un cliente y una orden, filtra la lista y confirma una etapa.
-5. Stefano genera una invitación e incorpora un OPERATOR.
+5. Stephano genera una invitación e incorpora un OPERATOR.
 6. El equipo demuestra permisos `403`, aislamiento `404`, logout y restauración de sesión.
 7. José ejecuta `verify-sprint2` y muestra CI verde.
 

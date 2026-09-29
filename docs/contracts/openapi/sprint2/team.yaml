@@ -1,0 +1,258 @@
+openapi: 3.1.0
+info:
+  title: TallerFlow Sprint 2 Team Contract
+  version: 0.1.0
+paths:
+  /api/v1/team:
+    get:
+      operationId: teamListMembers
+      summary: List workshop team members and pending invitations
+      responses:
+        "200":
+          description: Team state for the authenticated workshop
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamListResponse"
+        "401":
+          $ref: "#/components/responses/TeamUnauthorized"
+        "403":
+          $ref: "#/components/responses/TeamForbidden"
+  /api/v1/team/invitations:
+    post:
+      operationId: teamCreateInvitation
+      summary: Create a one-use invitation link
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamCreateInvitationRequest"
+      responses:
+        "201":
+          description: Invitation created; raw token is returned only once
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamInvitationCreatedResponse"
+        "409":
+          $ref: "#/components/responses/TeamConflict"
+        "422":
+          $ref: "#/components/responses/TeamInvalid"
+  /api/v1/team/invitations/consume:
+    post:
+      operationId: teamConsumeInvitation
+      summary: Publicly consume a one-use invitation token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamConsumeInvitationRequest"
+      responses:
+        "200":
+          description: Invitation consumed and membership created or reactivated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamConsumeInvitationResponse"
+        "422":
+          $ref: "#/components/responses/TeamInvalid"
+  /api/v1/team/{membershipId}:
+    patch:
+      operationId: teamUpdateMember
+      summary: Activate, deactivate, or change a team member role
+      parameters:
+        - name: membershipId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamUpdateMemberRequest"
+      responses:
+        "200":
+          description: Updated member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamMemberResponse"
+        "404":
+          $ref: "#/components/responses/TeamNotFound"
+        "409":
+          $ref: "#/components/responses/TeamConflict"
+components:
+  schemas:
+    TeamRole:
+      type: string
+      enum: [OWNER, ADMIN, OPERATOR]
+    TeamMemberStatus:
+      type: string
+      enum: [ACTIVE, INACTIVE]
+    TeamMember:
+      type: object
+      required: [id, user_id, email, display_name, role, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        role:
+          $ref: "#/components/schemas/TeamRole"
+        status:
+          $ref: "#/components/schemas/TeamMemberStatus"
+    TeamInvitation:
+      type: object
+      required: [id, email, role, expires_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [ADMIN, OPERATOR]
+        expires_at:
+          type: string
+          format: date-time
+    TeamListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [members, invitations]
+          properties:
+            members:
+              type: array
+              items:
+                $ref: "#/components/schemas/TeamMember"
+            invitations:
+              type: array
+              items:
+                $ref: "#/components/schemas/TeamInvitation"
+    TeamCreateInvitationRequest:
+      type: object
+      required: [email, role]
+      properties:
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [ADMIN, OPERATOR]
+    TeamInvitationCreatedResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [invitation, join_url, token]
+          properties:
+            invitation:
+              $ref: "#/components/schemas/TeamInvitation"
+            join_url:
+              type: string
+              format: uri
+            token:
+              type: string
+    TeamConsumeInvitationRequest:
+      type: object
+      required: [token, name, password]
+      properties:
+        token:
+          type: string
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        password:
+          type: string
+          minLength: 12
+    TeamConsumeInvitationResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [email, role]
+          properties:
+            email:
+              type: string
+              format: email
+            role:
+              type: string
+    TeamUpdateMemberRequest:
+      type: object
+      properties:
+        role:
+          $ref: "#/components/schemas/TeamRole"
+        status:
+          $ref: "#/components/schemas/TeamMemberStatus"
+    TeamMemberResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/TeamMember"
+    TeamError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, details, request_id]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+            request_id:
+              type: string
+  responses:
+    TeamUnauthorized:
+      description: Session is missing or expired
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TeamError"
+    TeamForbidden:
+      description: Role cannot perform the action
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TeamError"
+    TeamInvalid:
+      description: Invalid request or unavailable invitation
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TeamError"
+    TeamConflict:
+      description: Duplicate invitation or last OWNER invariant
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TeamError"
+    TeamNotFound:
+      description: Member does not exist in this workshop
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TeamError"

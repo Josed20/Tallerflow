@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Josed20/Tallerflow/backend/internal/auth"
+	"github.com/Josed20/Tallerflow/backend/internal/team"
 	"github.com/Josed20/Tallerflow/backend/internal/workshops"
 	"github.com/Josed20/Tallerflow/backend/platform/config"
 	"github.com/Josed20/Tallerflow/backend/platform/database"
@@ -68,6 +69,10 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 	if err != nil {
 		return nil, fmt.Errorf("create workshop service: %w", err)
 	}
+	teamRepository, err := team.NewPostgresRepository(db, tenantRunner)
+	if err != nil {
+		return nil, fmt.Errorf("create team repository: %w", err)
+	}
 	sessions := auth.NewSessionService(repository, []byte(cfg.SessionPepper), time.Now, nil)
 	authService := auth.NewAuthService(repository, repository, sessions, auth.NewPasswordHasher(auth.DefaultPasswordParams()), repository)
 	authHandler, err := auth.NewHandler(authService, auth.HandlerConfig{
@@ -79,6 +84,14 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 		return nil, fmt.Errorf("create auth handler: %w", err)
 	}
 	workshopHandler := workshops.NewHandler(workshopService)
+	teamService, err := team.NewService(teamRepository, auth.NewPasswordHasher(auth.DefaultPasswordParams()), []byte(cfg.SessionPepper), cfg.AllowedOrigin, time.Now, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create team service: %w", err)
+	}
+	teamHandler, err := team.NewHandler(teamService, cfg.AllowedOrigin)
+	if err != nil {
+		return nil, fmt.Errorf("create team handler: %w", err)
+	}
 	ping := func(ctx context.Context) error { return database.Ping(ctx, db) }
 	router := httpx.NewRouter(httpx.Dependencies{
 		Ping: ping,
@@ -86,6 +99,9 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 			func(routes gin.IRouter) { auth.RegisterRoutes(routes, authHandler) },
 			func(routes gin.IRouter) {
 				workshops.RegisterRoutes(routes, workshopHandler, authHandler.RequireSession())
+			},
+			func(routes gin.IRouter) {
+				team.RegisterRoutes(routes, teamHandler, authHandler.RequireSession())
 			},
 		},
 	})

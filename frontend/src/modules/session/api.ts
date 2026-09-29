@@ -36,4 +36,13 @@ export const api = {
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
+  patch: <T>(path: string, body?: unknown, csrfToken?: string) =>
+    request<T>(path, {
+      method: 'PATCH',
+      headers: {
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        ...(csrfToken === undefined ? {} : { 'X-CSRF-Token': csrfToken }),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    }),
 }
