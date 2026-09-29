@@ -10,7 +10,7 @@ import { useSessionStore } from '../session/session.store'
 const router = useRouter()
 const route = useRoute()
 const session = useSessionStore()
-const email = ref('')
+const email = ref(String(route.query.email ?? ''))
 const password = ref('')
 const attempted = ref(false)
 const submitting = ref(false)

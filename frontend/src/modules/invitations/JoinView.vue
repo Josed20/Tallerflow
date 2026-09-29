@@ -14,14 +14,24 @@ const password = ref('')
 const error = ref('')
 const loading = ref(false)
 const done = ref(false)
+const invitedEmail = ref('')
+
+function goToLogin() {
+  return router.replace({
+    path: '/login',
+    query: invitedEmail.value ? { email: invitedEmail.value } : undefined,
+  })
+}
 
 async function join() {
   loading.value = true
   error.value = ''
   try {
-    await teamApi.consume(token.value, name.value, password.value)
+    const result = await teamApi.consume(token.value, name.value, password.value)
+    invitedEmail.value = result.data.email
     done.value = true
   } catch {
+    password.value = ''
     error.value = 'La invitación no está disponible o ya fue usada.'
   } finally {
     loading.value = false
@@ -44,9 +54,20 @@ async function join() {
           <UiButton type="submit" :loading="loading">Aceptar invitación</UiButton>
         </form>
 
-        <div v-else class="auth-form">
-          <UiAlert message="Tu usuario fue creado. Ya puedes iniciar sesión." />
-          <UiButton @click="router.replace('/login')">Ir al login</UiButton>
+        <div v-else class="join-success" role="status" aria-live="polite">
+          <div class="join-success__icon" aria-hidden="true">&#10003;</div>
+          <div>
+            <h2>Cuenta creada correctamente</h2>
+            <p>Ya formas parte del taller. Inicia sesión con:</p>
+            <strong>{{ invitedEmail }}</strong>
+            <p>y la contraseña que acabas de crear.</p>
+          </div>
+          <UiButton @click="goToLogin">Iniciar sesión</UiButton>
+        </div>
+
+        <div v-if="error" class="join-recovery">
+          <p>Si ya completaste el registro, tu cuenta está lista. Intenta iniciar sesión con el correo que recibió la invitación.</p>
+          <UiButton @click="goToLogin">Ir a iniciar sesión</UiButton>
         </div>
       </div>
     </section>
