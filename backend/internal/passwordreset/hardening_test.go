@@ -1,7 +1,6 @@
 package passwordreset
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -100,7 +99,7 @@ func TestRequestResetHidesDeliveryFailureForRegisteredEmail(t *testing.T) {
 }
 
 func TestRequestResetKeepsPreviousTokenAndReportsDeliveryFailure(t *testing.T) {
-	var logs bytes.Buffer
+	var logs synchronizedBuffer
 	previousWriter := log.Writer()
 	log.SetOutput(&logs)
 	t.Cleanup(func() { log.SetOutput(previousWriter) })
@@ -129,7 +128,7 @@ func TestRequestResetKeepsPreviousTokenAndReportsDeliveryFailure(t *testing.T) {
 }
 
 func TestRequestResetKeepsNewTokenUsableWhenOldTokenCleanupFails(t *testing.T) {
-	var logs bytes.Buffer
+	var logs synchronizedBuffer
 	previousWriter := log.Writer()
 	log.SetOutput(&logs)
 	t.Cleanup(func() { log.SetOutput(previousWriter) })

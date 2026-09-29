@@ -28,6 +28,23 @@ type mockRepository struct {
 	newPasswordHashes []string
 }
 
+type synchronizedBuffer struct {
+	mu     sync.Mutex
+	buffer bytes.Buffer
+}
+
+func (b *synchronizedBuffer) Write(data []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buffer.Write(data)
+}
+
+func (b *synchronizedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buffer.String()
+}
+
 type mockToken struct {
 	userID    uuid.UUID
 	expiresAt time.Time
@@ -209,7 +226,7 @@ func TestRequestResetPropagatesOperationalFailuresWithoutExposingAccountExistenc
 	})
 
 	t.Run("token persistence failure", func(t *testing.T) {
-		var logs bytes.Buffer
+		var logs synchronizedBuffer
 		previousWriter := log.Writer()
 		log.SetOutput(&logs)
 		t.Cleanup(func() { log.SetOutput(previousWriter) })
