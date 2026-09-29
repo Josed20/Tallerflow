@@ -76,7 +76,7 @@ describe('JoinView invitation completion', () => {
     await fireEvent.update(screen.getByLabelText('Clave'), 'corta')
     await fireEvent.click(screen.getByRole('button', { name: 'Aceptar invitación' }))
 
-    expect(await screen.findByText('La clave debe tener al menos 12 caracteres.')).toBeTruthy()
+    expect(await screen.findByText('La clave debe tener al menos 8 caracteres. Mejor si mezclas palabras, numeros o simbolos.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Ir a iniciar sesión' })).toBeNull()
     expect(teamApi.consume).not.toHaveBeenCalled()
   })

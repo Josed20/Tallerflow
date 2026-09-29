@@ -89,7 +89,7 @@ func (s *Service) Consume(ctx context.Context, input ConsumeInput) (ConsumeResul
 	if err != nil || len(tokenBytes) == 0 {
 		return ConsumeResult{}, ErrInvitationUnavailable
 	}
-	if strings.TrimSpace(input.Name) == "" || len(input.Password) < 12 || len(input.Password) > 1<<20 {
+	if strings.TrimSpace(input.Name) == "" || len(input.Password) < 8 || len(input.Password) > 1<<20 {
 		return ConsumeResult{}, ErrInvalidInput
 	}
 	passwordHash, err := s.hasher.Hash(input.Password)

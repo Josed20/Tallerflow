@@ -34,8 +34,8 @@ async function join() {
     loading.value = false
     return
   }
-  if (password.value.length < 12) {
-    error.value = 'La clave debe tener al menos 12 caracteres.'
+  if (password.value.length < 8) {
+    error.value = 'La clave debe tener al menos 8 caracteres. Mejor si mezclas palabras, numeros o simbolos.'
     loading.value = false
     return
   }
@@ -46,7 +46,7 @@ async function join() {
   } catch (err) {
     password.value = ''
     if (err instanceof ApiError && err.code === 'TEAM_INVALID') {
-      error.value = 'Revisa tu nombre y clave. La clave debe tener al menos 12 caracteres.'
+      error.value = 'Revisa tu nombre y clave. La clave debe tener al menos 8 caracteres.'
       return
     }
     showRecovery.value = true
