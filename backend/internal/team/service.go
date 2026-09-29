@@ -86,8 +86,11 @@ func (s *Service) Invite(ctx context.Context, principal httpx.Principal, input I
 
 func (s *Service) Consume(ctx context.Context, input ConsumeInput) (ConsumeResult, error) {
 	tokenBytes, err := decodePublicToken(strings.TrimSpace(input.Token))
-	if err != nil || len(tokenBytes) == 0 || strings.TrimSpace(input.Name) == "" || len(input.Password) < 12 || len(input.Password) > 1<<20 {
+	if err != nil || len(tokenBytes) == 0 {
 		return ConsumeResult{}, ErrInvitationUnavailable
+	}
+	if strings.TrimSpace(input.Name) == "" || len(input.Password) < 12 || len(input.Password) > 1<<20 {
+		return ConsumeResult{}, ErrInvalidInput
 	}
 	passwordHash, err := s.hasher.Hash(input.Password)
 	if err != nil {

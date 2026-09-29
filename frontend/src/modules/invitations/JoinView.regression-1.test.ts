@@ -62,4 +62,22 @@ describe('JoinView invitation completion', () => {
     expect(screen.getByRole('button', { name: 'Ir a iniciar sesión' })).toBeTruthy()
     expect((screen.getByLabelText('Clave') as HTMLInputElement).value).toBe('')
   })
+
+  it('explains password requirements without consuming the invitation', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/join', component: JoinView }],
+    })
+    await router.push('/join?token=fresh-token')
+    await router.isReady()
+    render(JoinView, { global: { plugins: [router] } })
+
+    await fireEvent.update(screen.getByLabelText('Nombre'), 'Miembro Nuevo')
+    await fireEvent.update(screen.getByLabelText('Clave'), 'corta')
+    await fireEvent.click(screen.getByRole('button', { name: 'Aceptar invitación' }))
+
+    expect(await screen.findByText('La clave debe tener al menos 12 caracteres.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Ir a iniciar sesión' })).toBeNull()
+    expect(teamApi.consume).not.toHaveBeenCalled()
+  })
 })

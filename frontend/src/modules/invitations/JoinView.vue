@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ApiError } from '../session/api'
 import UiAlert from '../../components/UiAlert.vue'
 import UiButton from '../../components/UiButton.vue'
 import UiField from '../../components/UiField.vue'
@@ -15,6 +16,7 @@ const error = ref('')
 const loading = ref(false)
 const done = ref(false)
 const invitedEmail = ref('')
+const showRecovery = ref(false)
 
 function goToLogin() {
   return router.replace({
@@ -26,12 +28,28 @@ function goToLogin() {
 async function join() {
   loading.value = true
   error.value = ''
+  showRecovery.value = false
+  if (name.value.trim() === '') {
+    error.value = 'Ingresa tu nombre para aceptar la invitación.'
+    loading.value = false
+    return
+  }
+  if (password.value.length < 12) {
+    error.value = 'La clave debe tener al menos 12 caracteres.'
+    loading.value = false
+    return
+  }
   try {
     const result = await teamApi.consume(token.value, name.value, password.value)
     invitedEmail.value = result.data.email
     done.value = true
-  } catch {
+  } catch (err) {
     password.value = ''
+    if (err instanceof ApiError && err.code === 'TEAM_INVALID') {
+      error.value = 'Revisa tu nombre y clave. La clave debe tener al menos 12 caracteres.'
+      return
+    }
+    showRecovery.value = true
     error.value = 'La invitación no está disponible o ya fue usada.'
   } finally {
     loading.value = false
@@ -65,7 +83,7 @@ async function join() {
           <UiButton @click="goToLogin">Iniciar sesión</UiButton>
         </div>
 
-        <div v-if="error" class="join-recovery">
+        <div v-if="showRecovery" class="join-recovery">
           <p>Si ya completaste el registro, tu cuenta está lista. Intenta iniciar sesión con el correo que recibió la invitación.</p>
           <UiButton @click="goToLogin">Ir a iniciar sesión</UiButton>
         </div>
