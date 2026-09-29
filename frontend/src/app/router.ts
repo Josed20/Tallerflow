@@ -12,7 +12,7 @@ export const routes = [
   { path: '/', redirect: '/app' },
   { path: '/login', name: 'login', component: LoginView, meta: { public: true } },
   { path: '/forgot-password', name: 'forgot-password', component: ForgotPasswordView, meta: { public: true } },
-  { path: '/reset-password', name: 'reset-password', component: ResetPasswordView, meta: { public: true } },
+  { path: '/reset-password', name: 'reset-password', component: ResetPasswordView, meta: { public: true, allowAuthenticated: true } },
   { path: '/change-password', name: 'change-password', component: ChangePasswordView },
   { path: '/app', name: 'app', component: SessionHomeView },
   { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundView, meta: { public: true } },
@@ -28,6 +28,10 @@ router.beforeEach(async (to) => {
   await session.restore()
 
   if (to.name === 'not-found') {
+    return
+  }
+
+  if (to.meta.allowAuthenticated) {
     return
   }
 

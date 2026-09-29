@@ -60,7 +60,12 @@ async function submit() {
   attempted.value = true
   serverError.value = ''
 
-  if (newPasswordError.value || confirmPasswordError.value) return
+  if (newPasswordError.value || confirmPasswordError.value) {
+    await nextTick()
+    const firstInvalidField = newPasswordError.value ? 'new-password' : 'confirm-password'
+    document.getElementById(firstInvalidField)?.focus()
+    return
+  }
   if (!rawToken.value) {
     state.value = 'invalid'
     return

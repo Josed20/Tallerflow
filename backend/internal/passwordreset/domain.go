@@ -8,6 +8,7 @@ import (
 )
 
 var (
+	ErrEmailInvalid     = errors.New("email is invalid")
 	ErrTokenInvalid     = errors.New("recovery token is invalid")
 	ErrTokenExpired     = errors.New("recovery token has expired")
 	ErrTokenAlreadyUsed = errors.New("recovery token has already been used")

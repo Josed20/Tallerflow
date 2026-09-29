@@ -1,9 +1,12 @@
 package passwordreset
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,6 +26,15 @@ func (h *countingHasher) Hash(password string) (string, error) {
 type failingDelivery struct{}
 
 func (failingDelivery) Deliver(context.Context, string, string) error {
+	return errors.New("smtp is unavailable")
+}
+
+type signalingFailingDelivery struct {
+	called chan struct{}
+}
+
+func (d signalingFailingDelivery) Deliver(context.Context, string, string) error {
+	close(d.called)
 	return errors.New("smtp is unavailable")
 }
 
@@ -85,4 +97,60 @@ func TestRequestResetHidesDeliveryFailureForRegisteredEmail(t *testing.T) {
 	err := service.RequestReset(t.Context(), "owner@tallerflow.pe", "127.0.0.1")
 
 	require.NoError(t, err, "a mail failure must not disclose that the address exists")
+}
+
+func TestRequestResetKeepsPreviousTokenAndReportsDeliveryFailure(t *testing.T) {
+	var logs bytes.Buffer
+	previousWriter := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(previousWriter) })
+
+	repo := newMockRepository()
+	userID := uuid.New()
+	repo.users["owner@tallerflow.pe"] = userID
+	oldTokenKey := strings.Repeat("a", 64)
+	repo.tokens[oldTokenKey] = mockToken{userID: userID, expiresAt: time.Now().Add(time.Hour)}
+	delivery := signalingFailingDelivery{called: make(chan struct{})}
+	service := NewService(repo, delivery, mockHasher{}, ServiceConfig{}, nil)
+
+	require.NoError(t, service.RequestReset(t.Context(), "owner@tallerflow.pe", "127.0.0.1"))
+	select {
+	case <-delivery.called:
+	case <-time.After(time.Second):
+		t.Fatal("delivery was not attempted")
+	}
+
+	require.Eventually(t, func() bool {
+		return strings.Contains(logs.String(), "password reset delivery failed")
+	}, time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool {
+		return repo.hasToken(oldTokenKey) && repo.tokenCount() == 1
+	}, time.Second, 10*time.Millisecond, "a failed delivery must not invalidate the previous usable token")
+}
+
+func TestRequestResetKeepsNewTokenUsableWhenOldTokenCleanupFails(t *testing.T) {
+	var logs bytes.Buffer
+	previousWriter := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(previousWriter) })
+
+	repo := newMockRepository()
+	userID := uuid.New()
+	repo.users["owner@tallerflow.pe"] = userID
+	repo.tokens[strings.Repeat("a", 64)] = mockToken{userID: userID, expiresAt: time.Now().Add(time.Hour)}
+	repo.cleanupErr = errors.New("database unavailable")
+	delivery := NewMemoryDelivery()
+	service := NewService(repo, delivery, mockHasher{}, ServiceConfig{}, nil)
+
+	require.NoError(t, service.RequestReset(t.Context(), "owner@tallerflow.pe", "127.0.0.1"))
+	record := requireDelivery(t, delivery)
+	rawToken := strings.Split(record.ResetURL, "token=")[1]
+	newTokenHash, err := HashToken(rawToken)
+	require.NoError(t, err)
+	newTokenKey := fmt.Sprintf("%x", newTokenHash)
+
+	require.Eventually(t, func() bool {
+		return strings.Contains(logs.String(), "password reset token cleanup failed")
+	}, time.Second, 10*time.Millisecond)
+	require.True(t, repo.hasToken(newTokenKey), "a cleanup failure must not invalidate the delivered link")
 }

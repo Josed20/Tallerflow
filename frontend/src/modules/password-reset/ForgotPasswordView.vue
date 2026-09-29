@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import AuthLayout from '../../layouts/AuthLayout.vue'
 import UiAlert from '../../components/UiAlert.vue'
@@ -26,7 +26,11 @@ async function submit() {
   attempted.value = true
   serverError.value = ''
 
-  if (emailError.value) return
+  if (emailError.value) {
+    await nextTick()
+    document.getElementById('recovery-email')?.focus()
+    return
+  }
 
   submitting.value = true
   try {

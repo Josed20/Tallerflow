@@ -10,3 +10,14 @@ services:
       MP_MAX_MESSAGES: 500
       MP_SMTP_AUTH_ACCEPT_ANY: 1
     restart: unless-stopped
+
+  backend:
+    environment:
+      TF_SMTP_HOST: mailpit
+      TF_SMTP_PORT: "1025"
+      TF_SMTP_USER: ""
+      TF_SMTP_PASSWORD: ""
+      TF_SMTP_REQUIRE_TLS: "false"
+    depends_on:
+      mailpit:
+        condition: service_started

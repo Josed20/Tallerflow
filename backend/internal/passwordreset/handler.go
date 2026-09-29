@@ -45,6 +45,8 @@ func (h *Handler) RequestReset(c *gin.Context) {
 	err := h.service.RequestReset(c.Request.Context(), input.Email, ip)
 	if err != nil {
 		switch {
+		case errors.Is(err, ErrEmailInvalid):
+			h.fail(c, http.StatusBadRequest, "INVALID_REQUEST", "El correo proporcionado es inválido.")
 		case errors.Is(err, ErrRateLimited):
 			c.Header("Retry-After", "900")
 			h.fail(c, http.StatusTooManyRequests, "RATE_LIMITED", "Demasiados intentos. Inténtalo más tarde.")

@@ -15,6 +15,13 @@ services:
       TF_SESSION_PEPPER: ${TF_SESSION_PEPPER:?set a random session pepper}
       TF_ALLOWED_ORIGIN: ${TF_ALLOWED_ORIGIN:?set the public HTTPS origin}
       TF_TRUSTED_PROXIES: ${TF_TRUSTED_PROXIES:-172.16.0.0/12}
+      TF_PASSWORD_RESET_BASE_URL: ${TF_PASSWORD_RESET_BASE_URL:?set the public HTTPS password reset URL}
+      TF_SMTP_HOST: ${TF_SMTP_HOST:?set the production SMTP host}
+      TF_SMTP_PORT: ${TF_SMTP_PORT:-587}
+      TF_SMTP_USER: ${TF_SMTP_USER:?set the production SMTP user}
+      TF_SMTP_PASSWORD: ${TF_SMTP_PASSWORD:?set the production SMTP password}
+      TF_SMTP_FROM: ${TF_SMTP_FROM:?set the verified SMTP sender}
+      TF_SMTP_REQUIRE_TLS: "true"
       TF_ENVIRONMENT: production
     restart: always
 

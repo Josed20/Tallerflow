@@ -85,6 +85,24 @@ func TestHandlerRequestReset(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, res.Code)
 	})
 
+	t.Run("returns 400 for a syntactically invalid email", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]string{"email": "not-an-email"})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/password-resets", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		res := httptest.NewRecorder()
+
+		router.ServeHTTP(res, req)
+
+		require.Equal(t, http.StatusBadRequest, res.Code)
+		var response struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		require.NoError(t, json.Unmarshal(res.Body.Bytes(), &response))
+		require.Equal(t, "INVALID_REQUEST", response.Error.Code)
+	})
+
 	t.Run("returns 429 when rate limit is exceeded", func(t *testing.T) {
 		repo.rateLimitAllowed = false
 		body, _ := json.Marshal(map[string]string{"email": "owner@tallerflow.pe"})

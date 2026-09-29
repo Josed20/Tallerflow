@@ -1,10 +1,13 @@
 package passwordreset
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,11 +16,14 @@ import (
 )
 
 type mockRepository struct {
+	mu                sync.Mutex
 	users             map[string]uuid.UUID
 	tokens            map[string]mockToken
 	rateLimitAllowed  bool
 	findErr           error
 	createErr         error
+	deleteErr         error
+	cleanupErr        error
 	consumedHashes    []string
 	newPasswordHashes []string
 }
@@ -25,6 +31,7 @@ type mockRepository struct {
 type mockToken struct {
 	userID    uuid.UUID
 	expiresAt time.Time
+	createdAt time.Time
 	used      bool
 }
 
@@ -44,19 +51,52 @@ func (m *mockRepository) FindUserByEmail(_ context.Context, email string) (uuid.
 	return id, ok, nil
 }
 
-func (m *mockRepository) CreateResetToken(_ context.Context, userID uuid.UUID, tokenHash []byte, expiresAt time.Time, _ time.Time) error {
+func (m *mockRepository) CreateResetToken(_ context.Context, userID uuid.UUID, tokenHash []byte, expiresAt time.Time, createdAt time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.createErr != nil {
 		return m.createErr
 	}
 	m.tokens[fmt.Sprintf("%x", tokenHash)] = mockToken{
 		userID:    userID,
 		expiresAt: expiresAt,
+		createdAt: createdAt,
 		used:      false,
 	}
 	return nil
 }
 
+func (m *mockRepository) DeleteResetToken(_ context.Context, tokenHash []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.deleteErr != nil {
+		return m.deleteErr
+	}
+	delete(m.tokens, fmt.Sprintf("%x", tokenHash))
+	return nil
+}
+
+func (m *mockRepository) DeleteOlderResetTokens(_ context.Context, userID uuid.UUID, tokenHash []byte, createdAt time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.cleanupErr != nil {
+		return m.cleanupErr
+	}
+	currentKey := fmt.Sprintf("%x", tokenHash)
+	for key, token := range m.tokens {
+		if token.userID != userID || token.used || key == currentKey {
+			continue
+		}
+		if token.createdAt.Before(createdAt) || (token.createdAt.Equal(createdAt) && key < currentKey) {
+			delete(m.tokens, key)
+		}
+	}
+	return nil
+}
+
 func (m *mockRepository) ConsumeResetTokenAndChangePassword(_ context.Context, tokenHash []byte, consumedAt time.Time, hashPassword func() (string, error)) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	key := fmt.Sprintf("%x", tokenHash)
 	token, ok := m.tokens[key]
 	if !ok {
@@ -77,6 +117,19 @@ func (m *mockRepository) ConsumeResetTokenAndChangePassword(_ context.Context, t
 	m.consumedHashes = append(m.consumedHashes, key)
 	m.newPasswordHashes = append(m.newPasswordHashes, newPasswordHash)
 	return nil
+}
+
+func (m *mockRepository) hasToken(key string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, exists := m.tokens[key]
+	return exists
+}
+
+func (m *mockRepository) tokenCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.tokens)
 }
 
 func (m *mockRepository) AllowRequest(_ context.Context, _, _ string) (bool, error) {
@@ -123,14 +176,14 @@ func TestRequestResetAntiEnumeration(t *testing.T) {
 	record := requireDelivery(t, delivery)
 	require.Equal(t, "registered@tallerflow.pe", record.RecipientEmail)
 	require.Contains(t, record.ResetURL, "http://localhost:8080/reset-password?token=")
-	require.Len(t, repo.tokens, 1)
+	require.Eventually(t, func() bool { return repo.tokenCount() == 1 }, time.Second, 10*time.Millisecond)
 
 	// 2. Non-existing user produces identical nil error (no leak)
 	delivery.Reset()
 	errNonExisting := service.RequestReset(ctx, "not-found@tallerflow.pe", "127.0.0.1")
 	require.NoError(t, errNonExisting)
 	require.Empty(t, delivery.Deliveries(), "delivery must NOT send email to unregistered address")
-	require.Len(t, repo.tokens, 1, "no token created for unregistered address")
+	require.Equal(t, 1, repo.tokenCount(), "no token created for unregistered address")
 }
 
 func TestRequestResetRateLimiting(t *testing.T) {
@@ -156,6 +209,11 @@ func TestRequestResetPropagatesOperationalFailuresWithoutExposingAccountExistenc
 	})
 
 	t.Run("token persistence failure", func(t *testing.T) {
+		var logs bytes.Buffer
+		previousWriter := log.Writer()
+		log.SetOutput(&logs)
+		t.Cleanup(func() { log.SetOutput(previousWriter) })
+
 		repo := newMockRepository()
 		repo.users["user@example.com"] = uuid.New()
 		repo.createErr = errors.New("database unavailable")
@@ -163,8 +221,10 @@ func TestRequestResetPropagatesOperationalFailuresWithoutExposingAccountExistenc
 
 		err := service.RequestReset(t.Context(), "user@example.com", "127.0.0.1")
 
-		require.Error(t, err)
-		require.NotErrorIs(t, err, ErrRateLimited)
+		require.NoError(t, err, "background persistence failures must not disclose account existence")
+		require.Eventually(t, func() bool {
+			return strings.Contains(logs.String(), "password reset token persistence failed")
+		}, time.Second, 10*time.Millisecond)
 	})
 }
 

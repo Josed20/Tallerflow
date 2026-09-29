@@ -13,7 +13,10 @@ describe('ForgotPasswordView', () => {
   it('validates email before submitting', async () => {
     const router = createRouter({
       history: createMemoryHistory(),
-      routes: [{ path: '/forgot-password', component: ForgotPasswordView }],
+      routes: [
+        { path: '/forgot-password', component: ForgotPasswordView },
+        { path: '/login', component: { template: '<div />' } },
+      ],
     })
     await router.push('/forgot-password')
     await router.isReady()
@@ -26,6 +29,7 @@ describe('ForgotPasswordView', () => {
     expect(screen.getByText('El correo electrónico es obligatorio.')).toBeTruthy()
 
     const emailInput = screen.getByLabelText('Correo electrónico')
+    expect(document.activeElement).toBe(emailInput)
     await fireEvent.update(emailInput, 'invalid-email')
     await fireEvent.click(submitBtn)
 
@@ -44,7 +48,10 @@ describe('ForgotPasswordView', () => {
 
     const router = createRouter({
       history: createMemoryHistory(),
-      routes: [{ path: '/forgot-password', component: ForgotPasswordView }],
+      routes: [
+        { path: '/forgot-password', component: ForgotPasswordView },
+        { path: '/login', component: { template: '<div />' } },
+      ],
     })
     await router.push('/forgot-password')
     await router.isReady()

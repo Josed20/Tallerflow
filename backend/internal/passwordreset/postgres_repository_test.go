@@ -74,15 +74,62 @@ func TestPostgresRepositoryCreateResetToken(t *testing.T) {
 	expires := now.Add(1 * time.Hour)
 
 	mock.ExpectBegin()
-	mock.ExpectExec(regexp.QuoteMeta(`DELETE FROM password_reset_tokens WHERE user_id = $1 AND used_at IS NULL`)).
-		WithArgs(testUserID).
-		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta(`SELECT pg_advisory_xact_lock(hashtext($1))`)).
+		WithArgs("password-reset:issue:" + testUserID.String()).
+		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, created_at) VALUES (gen_random_uuid(), $1, $2, $3, $4)`)).
 		WithArgs(testUserID, tokenHash[:], expires, now).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
 	err = repo.CreateResetToken(ctx, testUserID, tokenHash[:], expires, now)
+	require.NoError(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPostgresRepositoryDeletesUndeliveredTokenWithoutTouchingPreviousTokens(t *testing.T) {
+	db, mock, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo, err := NewPostgresRepository(db, time.Now)
+	require.NoError(t, err)
+
+	tokenHash := sha256.Sum256([]byte("new-token"))
+	mock.ExpectExec(regexp.QuoteMeta(`DELETE FROM password_reset_tokens WHERE token_hash = $1 AND used_at IS NULL`)).
+		WithArgs(tokenHash[:]).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	err = repo.DeleteResetToken(t.Context(), tokenHash[:])
+
+	require.NoError(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPostgresRepositoryDeletesOnlyOlderResetTokensAfterDelivery(t *testing.T) {
+	db, mock, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo, err := NewPostgresRepository(db, time.Now)
+	require.NoError(t, err)
+
+	userID := uuid.New()
+	tokenHash := sha256.Sum256([]byte("new-token"))
+	createdAt := time.Now().UTC()
+
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta(`SELECT pg_advisory_xact_lock(hashtext($1))`)).
+		WithArgs("password-reset:issue:" + userID.String()).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	deleteQuery := `DELETE FROM password_reset_tokens
+WHERE user_id = $1 AND used_at IS NULL
+  AND (created_at < $2 OR (created_at = $3 AND token_hash < $4))`
+	mock.ExpectExec(regexp.QuoteMeta(deleteQuery)).
+		WithArgs(userID, createdAt, createdAt, tokenHash[:]).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	err = repo.DeleteOlderResetTokens(t.Context(), userID, tokenHash[:], createdAt)
+
 	require.NoError(t, err)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
@@ -122,7 +169,8 @@ func TestPostgresRepositoryConsumeResetTokenAndChangePassword(t *testing.T) {
 	defer cleanup()
 
 	now := time.Date(2026, 9, 27, 15, 0, 0, 0, time.UTC)
-	repo, err := NewPostgresRepository(db, func() time.Time { return now })
+	changedAt := now.Add(time.Minute)
+	repo, err := NewPostgresRepository(db, func() time.Time { return changedAt })
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -137,17 +185,20 @@ func TestPostgresRepositoryConsumeResetTokenAndChangePassword(t *testing.T) {
 			WithArgs(tokenHash[:]).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "expires_at", "used_at"}).
 				AddRow(testTokenID, testUserID, expiresAt, nil))
+		mock.ExpectQuery(regexp.QuoteMeta(`SELECT password_hash FROM user_credentials WHERE user_id = $1 FOR UPDATE`)).
+			WithArgs(testUserID).
+			WillReturnRows(sqlmock.NewRows([]string{"password_hash"}).AddRow("old-argon-hash"))
 
 		mock.ExpectExec(regexp.QuoteMeta(`UPDATE user_credentials SET password_hash = $1, must_change_password = false, password_changed_at = $2, updated_at = $3 WHERE user_id = $4`)).
-			WithArgs("new-argon-hash", now, now, testUserID).
+			WithArgs("new-argon-hash", changedAt, changedAt, testUserID).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
 		mock.ExpectExec(regexp.QuoteMeta(`UPDATE password_reset_tokens SET used_at = $1 WHERE id = $2 AND used_at IS NULL`)).
-			WithArgs(now, testTokenID).
+			WithArgs(changedAt, testTokenID).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
-		mock.ExpectExec(regexp.QuoteMeta(`UPDATE user_sessions SET revoked_at = $1 WHERE user_id = $2 AND revoked_at IS NULL`)).
-			WithArgs(now, testUserID).
+		mock.ExpectExec(regexp.QuoteMeta(`UPDATE user_sessions SET revoked_at = GREATEST($1, created_at) WHERE user_id = $2 AND revoked_at IS NULL`)).
+			WithArgs(changedAt, testUserID).
 			WillReturnResult(sqlmock.NewResult(0, 3)) // e.g. 3 sessions revoked
 		mock.ExpectCommit()
 

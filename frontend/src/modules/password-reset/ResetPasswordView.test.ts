@@ -13,7 +13,11 @@ describe('ResetPasswordView', () => {
   it('renders invalid state immediately when token query parameter is missing', async () => {
     const router = createRouter({
       history: createMemoryHistory(),
-      routes: [{ path: '/reset-password', component: ResetPasswordView }],
+      routes: [
+        { path: '/reset-password', component: ResetPasswordView },
+        { path: '/login', component: { template: '<div />' } },
+        { path: '/forgot-password', component: { template: '<div />' } },
+      ],
     })
     await router.push('/reset-password')
     await router.isReady()
@@ -30,7 +34,11 @@ describe('ResetPasswordView', () => {
   it('validates password requirements and confirmation match', async () => {
     const router = createRouter({
       history: createMemoryHistory(),
-      routes: [{ path: '/reset-password', component: ResetPasswordView }],
+      routes: [
+        { path: '/reset-password', component: ResetPasswordView },
+        { path: '/login', component: { template: '<div />' } },
+        { path: '/forgot-password', component: { template: '<div />' } },
+      ],
     })
     await router.push('/reset-password?token=valid-token-sample-1234567890123456')
     await router.isReady()
@@ -43,6 +51,7 @@ describe('ResetPasswordView', () => {
     expect(screen.getByText('La nueva contraseña es obligatoria.')).toBeTruthy()
 
     const newPassInput = screen.getByLabelText('Nueva contraseña', { selector: 'input' })
+    expect(document.activeElement).toBe(newPassInput)
     const confirmPassInput = screen.getByLabelText('Confirmar nueva contraseña', { selector: 'input' })
 
     // Less than 12 chars
@@ -70,7 +79,11 @@ describe('ResetPasswordView', () => {
 
     const router = createRouter({
       history: createMemoryHistory(),
-      routes: [{ path: '/reset-password', component: ResetPasswordView }],
+      routes: [
+        { path: '/reset-password', component: ResetPasswordView },
+        { path: '/login', component: { template: '<div />' } },
+        { path: '/forgot-password', component: { template: '<div />' } },
+      ],
     })
     await router.push('/reset-password?token=valid-token-sample-1234567890123456')
     await router.isReady()
@@ -103,7 +116,11 @@ describe('ResetPasswordView', () => {
 
     const router = createRouter({
       history: createMemoryHistory(),
-      routes: [{ path: '/reset-password', component: ResetPasswordView }],
+      routes: [
+        { path: '/reset-password', component: ResetPasswordView },
+        { path: '/login', component: { template: '<div />' } },
+        { path: '/forgot-password', component: { template: '<div />' } },
+      ],
     })
     await router.push('/reset-password?token=valid-token-sample-1234567890123456')
     await router.isReady()
@@ -123,7 +140,11 @@ describe('ResetPasswordView', () => {
 
     const router = createRouter({
       history: createMemoryHistory(),
-      routes: [{ path: '/reset-password', component: ResetPasswordView }],
+      routes: [
+        { path: '/reset-password', component: ResetPasswordView },
+        { path: '/login', component: { template: '<div />' } },
+        { path: '/forgot-password', component: { template: '<div />' } },
+      ],
     })
     await router.push('/reset-password?token=valid-token-sample-1234567890123456')
     await router.isReady()

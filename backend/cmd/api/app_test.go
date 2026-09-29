@@ -13,7 +13,7 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-func TestBuildApplicationRegistersAuthAndWorkshopRoutes(t *testing.T) {
+func TestBuildApplicationRegistersAuthWorkshopAndPasswordResetRoutes(t *testing.T) {
 	db, _, cleanup := applicationDatabase(t)
 	defer cleanup()
 	app, err := buildApplication(applicationConfig(), withDatabaseOpener(func(string) (*gorm.DB, error) { return db, nil }))
@@ -25,6 +25,10 @@ func TestBuildApplicationRegistersAuthAndWorkshopRoutes(t *testing.T) {
 	me := httptest.NewRecorder()
 	app.handler.ServeHTTP(me, httptest.NewRequest(http.MethodGet, "/api/v1/me", nil))
 	require.Equal(t, http.StatusUnauthorized, me.Code)
+	recovery := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/password-resets", nil)
+	app.handler.ServeHTTP(recovery, request)
+	require.Equal(t, http.StatusBadRequest, recovery.Code)
 }
 
 func TestBuildApplicationReadinessUsesDatabase(t *testing.T) {
@@ -52,6 +56,21 @@ func TestBuildApplicationRejectsInvalidTrustedProxy(t *testing.T) {
 	require.ErrorContains(t, err, "TF_TRUSTED_PROXIES")
 }
 
+func TestBuildApplicationRejectsUnsafeSMTPConfiguration(t *testing.T) {
+	db, _, cleanup := applicationDatabase(t)
+	defer cleanup()
+	cfg := applicationConfig()
+	cfg.SMTPHost = "smtp.example.com"
+	cfg.SMTPPort = "587"
+	cfg.SMTPUsername = "smtp-user"
+	cfg.SMTPPassword = "smtp-password"
+	cfg.SMTPRequireTLS = false
+
+	_, err := buildApplication(cfg, withDatabaseOpener(func(string) (*gorm.DB, error) { return db, nil }))
+
+	require.ErrorContains(t, err, "password reset delivery")
+}
+
 func TestBuildApplicationClosesDatabase(t *testing.T) {
 	db, mock, _ := applicationDatabase(t)
 	mock.ExpectClose()
@@ -66,6 +85,8 @@ func applicationConfig() config.Config {
 	return config.Config{
 		Environment: "development", HTTPAddress: ":0", DatabaseURL: "postgres://ignored",
 		SessionPepper: "test-session-pepper", AllowedOrigin: "http://localhost:8080",
+		PasswordResetBaseURL: "http://localhost:8080", SMTPHost: "localhost", SMTPPort: "1025",
+		SMTPFromAddress: "soporte@tallerflow.pe",
 	}
 }
 

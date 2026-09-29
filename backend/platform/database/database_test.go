@@ -41,6 +41,16 @@ func TestCloseUsesUnderlyingSQLConnection(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestRuntimeLoggerSuppressesSensitiveQueryParameters(t *testing.T) {
+	filter, ok := runtimeGORMConfig().Logger.(gorm.ParamsFilter)
+	require.True(t, ok, "the runtime logger must support GORM parameter filtering")
+
+	query, params := filter.ParamsFilter(context.Background(), "UPDATE user_credentials SET password_hash = ?", "secret-argon-hash")
+
+	require.Equal(t, "UPDATE user_credentials SET password_hash = ?", query)
+	require.Empty(t, params, "password hashes and reset-token digests must never be interpolated into logs")
+}
+
 func lifecycleDatabase(t *testing.T) (*gorm.DB, sqlmock.Sqlmock, func()) {
 	t.Helper()
 	sqlDB, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))

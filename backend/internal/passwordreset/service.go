@@ -4,9 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"log"
 	"net/mail"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type PasswordHasher interface {
@@ -60,7 +63,7 @@ func (s *Service) RequestReset(ctx context.Context, email, ip string) error {
 
 	trimmedEmail := strings.ToLower(strings.TrimSpace(email))
 	if trimmedEmail == "" || !isValidEmail(trimmedEmail) {
-		return fmt.Errorf("invalid email format")
+		return ErrEmailInvalid
 	}
 
 	allowed, err := s.repo.AllowRequest(ctx, ip, trimmedEmail)
@@ -89,12 +92,8 @@ func (s *Service) RequestReset(ctx context.Context, email, ip string) error {
 	now := s.clock().UTC()
 	expiresAt := now.Add(s.config.TokenLifetime)
 
-	if err := s.repo.CreateResetToken(ctx, userID, tokenHash, expiresAt, now); err != nil {
-		return fmt.Errorf("create recovery token: %w", err)
-	}
-
 	resetURL := fmt.Sprintf("%s/reset-password?token=%s", s.config.BaseURL, rawToken)
-	s.dispatchDelivery(trimmedEmail, resetURL)
+	s.dispatchDelivery(userID, tokenHash, expiresAt, now, trimmedEmail, resetURL)
 
 	return nil
 }
@@ -137,14 +136,28 @@ func (s *Service) ConsumeReset(ctx context.Context, rawToken, newPassword string
 	return nil
 }
 
-func (s *Service) dispatchDelivery(recipientEmail, resetURL string) {
+func (s *Service) dispatchDelivery(userID uuid.UUID, tokenHash []byte, expiresAt, createdAt time.Time, recipientEmail, resetURL string) {
 	if s.delivery == nil {
+		log.Printf("password reset delivery failed")
 		return
 	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), s.config.DeliveryTimeout)
 		defer cancel()
-		_ = s.delivery.Deliver(ctx, recipientEmail, resetURL)
+		if err := s.repo.CreateResetToken(ctx, userID, tokenHash, expiresAt, createdAt); err != nil {
+			log.Printf("password reset token persistence failed")
+			return
+		}
+		if err := s.delivery.Deliver(ctx, recipientEmail, resetURL); err != nil {
+			log.Printf("password reset delivery failed")
+			if cleanupErr := s.repo.DeleteResetToken(ctx, tokenHash); cleanupErr != nil {
+				log.Printf("password reset token cleanup failed")
+			}
+			return
+		}
+		if err := s.repo.DeleteOlderResetTokens(ctx, userID, tokenHash, createdAt); err != nil {
+			log.Printf("password reset token cleanup failed")
+		}
 	}()
 }
 

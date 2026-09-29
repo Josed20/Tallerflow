@@ -55,12 +55,36 @@ func (r *PostgresRepository) FindUserByEmail(ctx context.Context, email string) 
 
 func (r *PostgresRepository) CreateResetToken(ctx context.Context, userID uuid.UUID, tokenHash []byte, expiresAt time.Time, createdAt time.Time) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Exec(`DELETE FROM password_reset_tokens WHERE user_id = ? AND used_at IS NULL`, userID).Error; err != nil {
-			return fmt.Errorf("delete old reset tokens: %w", err)
+		lockKey := "password-reset:issue:" + userID.String()
+		if err := tx.Exec(`SELECT pg_advisory_xact_lock(hashtext(?))`, lockKey).Error; err != nil {
+			return fmt.Errorf("lock reset token issuance: %w", err)
 		}
 		const insertQuery = `INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, created_at) VALUES (gen_random_uuid(), ?, ?, ?, ?)`
 		if err := tx.Exec(insertQuery, userID, tokenHash, expiresAt.UTC(), createdAt.UTC()).Error; err != nil {
 			return fmt.Errorf("insert reset token: %w", err)
+		}
+		return nil
+	})
+}
+
+func (r *PostgresRepository) DeleteResetToken(ctx context.Context, tokenHash []byte) error {
+	if err := r.db.WithContext(ctx).Exec(`DELETE FROM password_reset_tokens WHERE token_hash = ? AND used_at IS NULL`, tokenHash).Error; err != nil {
+		return fmt.Errorf("delete undelivered reset token: %w", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepository) DeleteOlderResetTokens(ctx context.Context, userID uuid.UUID, tokenHash []byte, createdAt time.Time) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		lockKey := "password-reset:issue:" + userID.String()
+		if err := tx.Exec(`SELECT pg_advisory_xact_lock(hashtext(?))`, lockKey).Error; err != nil {
+			return fmt.Errorf("lock reset token cleanup: %w", err)
+		}
+		const deleteQuery = `DELETE FROM password_reset_tokens
+WHERE user_id = ? AND used_at IS NULL
+  AND (created_at < ? OR (created_at = ? AND token_hash < ?))`
+		if err := tx.Exec(deleteQuery, userID, createdAt.UTC(), createdAt.UTC(), tokenHash).Error; err != nil {
+			return fmt.Errorf("delete older reset tokens: %w", err)
 		}
 		return nil
 	})
@@ -92,13 +116,23 @@ func (r *PostgresRepository) ConsumeResetTokenAndChangePassword(ctx context.Cont
 			return ErrTokenExpired
 		}
 
+		var currentPasswordHash string
+		credentialResult := tx.Raw(`SELECT password_hash FROM user_credentials WHERE user_id = ? FOR UPDATE`, tokenRow.UserID).Scan(&currentPasswordHash)
+		if credentialResult.Error != nil {
+			return fmt.Errorf("lock user credential: %w", credentialResult.Error)
+		}
+		if credentialResult.RowsAffected != 1 {
+			return fmt.Errorf("lock user credential: expected 1 row, got %d", credentialResult.RowsAffected)
+		}
+
 		newPasswordHash, err := hashPassword()
 		if err != nil {
 			return fmt.Errorf("hash new password: %w", err)
 		}
+		changedAt := r.clock().UTC()
 
 		updateRes := tx.Exec(`UPDATE user_credentials SET password_hash = ?, must_change_password = false, password_changed_at = ?, updated_at = ? WHERE user_id = ?`,
-			newPasswordHash, consumedAt.UTC(), consumedAt.UTC(), tokenRow.UserID)
+			newPasswordHash, changedAt, changedAt, tokenRow.UserID)
 		if updateRes.Error != nil {
 			return fmt.Errorf("update user credential: %w", updateRes.Error)
 		}
@@ -106,11 +140,11 @@ func (r *PostgresRepository) ConsumeResetTokenAndChangePassword(ctx context.Cont
 			return fmt.Errorf("update user credential: expected 1 row, got %d", updateRes.RowsAffected)
 		}
 
-		if err := tx.Exec(`UPDATE password_reset_tokens SET used_at = ? WHERE id = ? AND used_at IS NULL`, consumedAt.UTC(), tokenRow.ID).Error; err != nil {
+		if err := tx.Exec(`UPDATE password_reset_tokens SET used_at = ? WHERE id = ? AND used_at IS NULL`, changedAt, tokenRow.ID).Error; err != nil {
 			return fmt.Errorf("mark token used: %w", err)
 		}
 
-		if err := tx.Exec(`UPDATE user_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`, consumedAt.UTC(), tokenRow.UserID).Error; err != nil {
+		if err := tx.Exec(`UPDATE user_sessions SET revoked_at = GREATEST(?, created_at) WHERE user_id = ? AND revoked_at IS NULL`, changedAt, tokenRow.UserID).Error; err != nil {
 			return fmt.Errorf("revoke user sessions: %w", err)
 		}
 
