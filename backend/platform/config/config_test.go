@@ -46,6 +46,7 @@ func TestLoadRejectsMissingSecretsWithoutLeakingConfiguredValues(t *testing.T) {
 
 func TestLoadUsesDefaultHTTPAddress(t *testing.T) {
 	t.Setenv("TF_DATABASE_URL", "postgres://tallerflow:password@localhost:5432/tallerflow")
+	t.Setenv("TF_BOOTSTRAP_DATABASE_URL", "postgres://tallerflow_bootstrap:password@localhost:5432/tallerflow")
 	t.Setenv("TF_SESSION_PEPPER", "test-session-pepper")
 	t.Setenv("TF_ALLOWED_ORIGIN", "http://localhost:5173")
 	t.Setenv("TF_HTTP_ADDRESS", "")
@@ -54,6 +55,29 @@ func TestLoadUsesDefaultHTTPAddress(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, ":8080", cfg.HTTPAddress)
+}
+
+func TestLoadRequiresBootstrapDatabaseURLWithoutLeakingConfiguredSecrets(t *testing.T) {
+	setValidEnvironment(t)
+	t.Setenv("TF_BOOTSTRAP_DATABASE_URL", "")
+	t.Setenv("TF_DATABASE_URL", "postgres://tallerflow:runtime-secret@localhost:5432/tallerflow")
+
+	_, err := Load()
+
+	require.ErrorContains(t, err, "TF_BOOTSTRAP_DATABASE_URL")
+	require.NotContains(t, err.Error(), "runtime-secret")
+}
+
+func TestLoadKeepsBootstrapDatabaseSeparateFromRuntimeDatabase(t *testing.T) {
+	setValidEnvironment(t)
+	bootstrapURL := "postgres://tallerflow_bootstrap:bootstrap-secret@localhost:5432/tallerflow"
+	t.Setenv("TF_BOOTSTRAP_DATABASE_URL", bootstrapURL)
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	require.Equal(t, bootstrapURL, cfg.BootstrapDatabaseURL)
+	require.NotEqual(t, cfg.DatabaseURL, cfg.BootstrapDatabaseURL)
 }
 
 func TestLoadRequiresAllowedOrigin(t *testing.T) {
@@ -125,6 +149,7 @@ func TestLoadRejectsInvalidTrustedProxyWithoutLeakingValue(t *testing.T) {
 func setValidEnvironment(t *testing.T) {
 	t.Helper()
 	t.Setenv("TF_DATABASE_URL", "postgres://tallerflow:password@localhost:5432/tallerflow")
+	t.Setenv("TF_BOOTSTRAP_DATABASE_URL", "postgres://tallerflow_bootstrap:password@localhost:5432/tallerflow")
 	t.Setenv("TF_SESSION_PEPPER", "test-session-pepper")
 	t.Setenv("TF_ALLOWED_ORIGIN", "http://localhost:5173")
 	t.Setenv("TF_ENVIRONMENT", "development")

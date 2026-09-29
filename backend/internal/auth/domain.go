@@ -36,6 +36,7 @@ type Session struct {
 
 type RawSession struct {
 	Token     string
+	CSRFToken string
 	ExpiresAt time.Time
 	Session   Session
 }
