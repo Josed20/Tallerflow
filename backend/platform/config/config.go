@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -23,6 +24,13 @@ type Config struct {
 	SessionPepper        string
 	AllowedOrigin        string
 	TrustedProxies       []string
+	PasswordResetBaseURL string
+	SMTPHost             string
+	SMTPPort             string
+	SMTPUsername         string
+	SMTPPassword         string
+	SMTPFromAddress      string
+	SMTPRequireTLS       bool
 }
 
 // Load reads and validates the API process configuration.
@@ -34,6 +42,11 @@ func Load() (Config, error) {
 		BootstrapDatabaseURL: os.Getenv("TF_BOOTSTRAP_DATABASE_URL"),
 		SessionPepper:        os.Getenv("TF_SESSION_PEPPER"),
 		AllowedOrigin:        strings.TrimSpace(os.Getenv("TF_ALLOWED_ORIGIN")),
+		SMTPHost:             valueOrDefault("TF_SMTP_HOST", "localhost"),
+		SMTPPort:             valueOrDefault("TF_SMTP_PORT", "1025"),
+		SMTPUsername:         strings.TrimSpace(os.Getenv("TF_SMTP_USER")),
+		SMTPPassword:         os.Getenv("TF_SMTP_PASSWORD"),
+		SMTPFromAddress:      valueOrDefault("TF_SMTP_FROM", "soporte@tallerflow.pe"),
 	}
 
 	missing := make([]string, 0, 4)
@@ -62,6 +75,25 @@ func Load() (Config, error) {
 	}
 	if cfg.Environment == "production" && origin.Scheme != "https" {
 		return Config{}, fmt.Errorf("TF_ALLOWED_ORIGIN is invalid")
+	}
+	cfg.PasswordResetBaseURL = valueOrDefault("TF_PASSWORD_RESET_BASE_URL", cfg.AllowedOrigin)
+	resetURL, err := url.Parse(cfg.PasswordResetBaseURL)
+	if err != nil || resetURL.Host == "" || (resetURL.Scheme != "http" && resetURL.Scheme != "https") {
+		return Config{}, fmt.Errorf("TF_PASSWORD_RESET_BASE_URL is invalid")
+	}
+	if cfg.Environment == "production" && resetURL.Scheme != "https" {
+		return Config{}, fmt.Errorf("TF_PASSWORD_RESET_BASE_URL is invalid")
+	}
+
+	cfg.SMTPRequireTLS = cfg.Environment == "production"
+	if configuredTLS := strings.TrimSpace(os.Getenv("TF_SMTP_REQUIRE_TLS")); configuredTLS != "" {
+		cfg.SMTPRequireTLS, err = strconv.ParseBool(configuredTLS)
+		if err != nil {
+			return Config{}, fmt.Errorf("TF_SMTP_REQUIRE_TLS is invalid")
+		}
+	}
+	if cfg.Environment == "production" && !cfg.SMTPRequireTLS {
+		return Config{}, fmt.Errorf("TF_SMTP_REQUIRE_TLS is invalid")
 	}
 
 	cfg.TrustedProxies, err = trustedProxies(cfg.Environment, os.Getenv("TF_TRUSTED_PROXIES"))

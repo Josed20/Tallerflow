@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import AuthLayout from '../../layouts/AuthLayout.vue'
 import UiAlert from '../../components/UiAlert.vue'
 import UiButton from '../../components/UiButton.vue'
@@ -21,7 +21,7 @@ const passwordError = computed(() => attempted.value && !password.value ? 'La co
 
 async function submit() {
   if (submitting.value) return
-	attempted.value = true
+  attempted.value = true
   serverError.value = ''
   if (emailError.value || passwordError.value) return
 
@@ -45,7 +45,40 @@ async function submit() {
       <UiAlert v-if="serverError" :message="serverError" />
       <UiField id="email" v-model="email" label="Correo electrónico" type="email" autocomplete="email" placeholder="ejemplo@taller.pe" :error="emailError" />
       <UiField id="password" v-model="password" label="Contraseña" type="password" autocomplete="current-password" placeholder="••••••••" :error="passwordError" />
+      <div class="auth-recovery-link">
+        <RouterLink to="/forgot-password" class="auth-link">
+          ¿Olvidaste tu contraseña?
+        </RouterLink>
+      </div>
       <UiButton type="submit" :loading="submitting">Iniciar sesión</UiButton>
     </form>
   </AuthLayout>
 </template>
+
+<style scoped>
+.auth-recovery-link {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -0.25rem;
+}
+
+.auth-link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  color: var(--tf-primary, #00685f);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: 0.25rem;
+}
+
+.auth-link:hover {
+  text-decoration: underline;
+}
+
+.auth-link:focus-visible {
+  outline: 3px solid #89f5e7;
+  outline-offset: 2px;
+}
+</style>

@@ -3,7 +3,10 @@ import { createRouter, createWebHistory, type RouterHistory } from 'vue-router'
 import { pinia as applicationPinia } from './pinia'
 import LoginView from '../modules/auth/LoginView.vue'
 import ChangePasswordView from '../modules/auth/ChangePasswordView.vue'
+import NotFoundView from '../modules/not-found/NotFoundView.vue'
 import OnboardingView from '../modules/onboarding/OnboardingView.vue'
+import ForgotPasswordView from '../modules/password-reset/ForgotPasswordView.vue'
+import ResetPasswordView from '../modules/password-reset/ResetPasswordView.vue'
 import SessionHomeView from '../modules/session/SessionHomeView.vue'
 import { useOnboardingStore } from '../modules/onboarding/onboarding.store'
 import { useSessionStore } from '../modules/session/session.store'
@@ -13,21 +16,27 @@ interface AppRouterOptions {
   history: RouterHistory
 }
 
+export const routes = [
+  { path: '/', redirect: '/app' },
+  { path: '/login', name: 'login', component: LoginView, meta: { public: true } },
+  { path: '/onboarding', name: 'onboarding', component: OnboardingView, meta: { public: true } },
+  { path: '/forgot-password', name: 'forgot-password', component: ForgotPasswordView, meta: { public: true } },
+  { path: '/reset-password', name: 'reset-password', component: ResetPasswordView, meta: { public: true, allowAuthenticated: true } },
+  { path: '/change-password', name: 'change-password', component: ChangePasswordView },
+  { path: '/app', name: 'app', component: SessionHomeView },
+  { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundView, meta: { public: true } },
+]
+
 export function createAppRouter({ pinia, history }: AppRouterOptions) {
-  const router = createRouter({
-    history,
-    routes: [
-      { path: '/', redirect: '/app' },
-      { path: '/login', name: 'login', component: LoginView, meta: { public: true } },
-      { path: '/onboarding', name: 'onboarding', component: OnboardingView, meta: { public: true } },
-      { path: '/change-password', name: 'change-password', component: ChangePasswordView },
-      { path: '/app', name: 'app', component: SessionHomeView },
-    ],
-  })
+  const router = createRouter({ history, routes })
 
   router.beforeEach(async (to) => {
     const session = useSessionStore(pinia)
     await session.restore()
+
+    if (to.name === 'not-found' || to.meta.allowAuthenticated) {
+      return
+    }
 
     if (to.meta.public && session.isAuthenticated) {
       return session.requiresPasswordChange ? '/change-password' : '/app'

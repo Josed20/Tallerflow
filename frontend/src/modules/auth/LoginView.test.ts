@@ -9,7 +9,10 @@ describe('LoginView', () => {
   it('shows accessible validation messages before submitting incomplete credentials', async () => {
     const router = createRouter({
       history: createMemoryHistory(),
-      routes: [{ path: '/', component: LoginView }],
+      routes: [
+        { path: '/', component: LoginView },
+        { path: '/forgot-password', component: { template: '<div />' } },
+      ],
     })
     await router.push('/')
     await router.isReady()
@@ -25,7 +28,10 @@ describe('LoginView', () => {
     const pinia = createPinia()
     const router = createRouter({
       history: createMemoryHistory(),
-      routes: [{ path: '/', component: LoginView }],
+      routes: [
+        { path: '/', component: LoginView },
+        { path: '/forgot-password', component: { template: '<div />' } },
+      ],
     })
     await router.push('/')
     await router.isReady()

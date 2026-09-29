@@ -10,6 +10,7 @@ import (
 
 	"github.com/Josed20/Tallerflow/backend/internal/auth"
 	"github.com/Josed20/Tallerflow/backend/internal/onboarding"
+	"github.com/Josed20/Tallerflow/backend/internal/passwordreset"
 	"github.com/Josed20/Tallerflow/backend/internal/workshops"
 	"github.com/Josed20/Tallerflow/backend/platform/config"
 	"github.com/Josed20/Tallerflow/backend/platform/database"
@@ -104,6 +105,28 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 		}
 	}()
 	authService := auth.NewAuthService(repository, repository, sessions, auth.NewPasswordHasher(auth.DefaultPasswordParams()), repository)
+	passwordResetRepository, err := passwordreset.NewPostgresRepository(db, time.Now)
+	if err != nil {
+		return nil, fmt.Errorf("create password reset repository: %w", err)
+	}
+	passwordResetDelivery, err := passwordreset.NewSMTPDelivery(passwordreset.SMTPDeliveryConfig{
+		Host:        cfg.SMTPHost,
+		Port:        cfg.SMTPPort,
+		Username:    cfg.SMTPUsername,
+		Password:    cfg.SMTPPassword,
+		FromAddress: cfg.SMTPFromAddress,
+		RequireTLS:  cfg.SMTPRequireTLS,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create password reset delivery: %w", err)
+	}
+	passwordResetService := passwordreset.NewService(
+		passwordResetRepository,
+		passwordResetDelivery,
+		auth.NewPasswordHasher(auth.DefaultPasswordParams()),
+		passwordreset.ServiceConfig{BaseURL: cfg.PasswordResetBaseURL},
+		time.Now,
+	)
 	authHandler, err := auth.NewHandler(authService, auth.HandlerConfig{
 		AllowedOrigin: cfg.AllowedOrigin,
 		Environment:   cfg.Environment,
@@ -120,6 +143,7 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 		return nil, fmt.Errorf("create onboarding handler: %w", err)
 	}
 	workshopHandler := workshops.NewHandler(workshopService)
+	passwordResetHandler := passwordreset.NewHandler(passwordResetService)
 	ping := func(ctx context.Context) error {
 		if err := database.Ping(ctx, db); err != nil {
 			return err
@@ -131,6 +155,7 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 		Routes: []httpx.RouteRegistrar{
 			func(routes gin.IRouter) { onboarding.RegisterRoutes(routes, onboardingHandler) },
 			func(routes gin.IRouter) { auth.RegisterRoutes(routes, authHandler) },
+			func(routes gin.IRouter) { passwordreset.RegisterRoutes(routes, passwordResetHandler) },
 			func(routes gin.IRouter) {
 				workshops.RegisterRoutes(routes, workshopHandler, authHandler.RequireSession())
 			},

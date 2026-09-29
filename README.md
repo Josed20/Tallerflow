@@ -31,7 +31,7 @@ PostgreSQL y Flyway se ejecutan en contenedores; no necesitan instalación local
 3. Construye e inicia la aplicación completa:
 
    ```powershell
-   docker compose --profile app up -d --build --wait
+   docker compose -f compose.yaml -f compose.mail.yaml --profile app up -d --build --wait
    ```
 
 4. Abre [http://localhost:8080](http://localhost:8080). Si la instalación está vacía, TallerFlow muestra automáticamente el formulario para crear el primer taller y su `OWNER`. La contraseña ingresada es definitiva y la sesión comienza al terminar.
@@ -112,6 +112,8 @@ Get-Content database/tests/constraints.sql -Raw | docker compose exec -T postgre
 Get-Content database/tests/identity_contract.sql -Raw | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_bootstrap -d tallerflow
 Get-Content database/tests/rls_setup.sql -Raw | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_bootstrap -d tallerflow
 Get-Content database/tests/rls.sql -Raw | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_app -d tallerflow
+Get-Content database/tests/password_reset_contract.sql -Raw | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_bootstrap -d tallerflow
+Get-Content database/tests/password_reset_isolation.sql -Raw | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_app -d tallerflow
 ```
 
 ## Detener el entorno
@@ -119,13 +121,13 @@ Get-Content database/tests/rls.sql -Raw | docker compose exec -T postgres psql -
 Conservar los datos locales:
 
 ```powershell
-docker compose --profile app --profile tools down --remove-orphans
+docker compose -f compose.yaml -f compose.mail.yaml --profile app --profile tools down --remove-orphans
 ```
 
 Eliminar también la base local descartable:
 
 ```powershell
-docker compose --profile app --profile tools down --volumes --remove-orphans
+docker compose -f compose.yaml -f compose.mail.yaml --profile app --profile tools down --volumes --remove-orphans
 ```
 
 `down --volumes` destruye la base del proyecto Compose seleccionado. No se debe ejecutar sobre datos que se necesiten conservar.
