@@ -1,67 +1,114 @@
 # TallerFlow
 
-Base técnica del Sprint 1 para la plataforma de trazabilidad de talleres de confección.
+Cimientos seguros del Sprint 1 para la plataforma de trazabilidad de talleres de confección.
+
+El recorrido integrado permite crear el primer `OWNER`, iniciar sesión, reemplazar la contraseña temporal, consultar el usuario y taller actuales, cerrar la sesión y aislar los datos por taller.
 
 ## Requisitos
 
 - Docker Desktop con Docker Compose v2.
+- Go 1.27.x.
+- Node.js 24 y npm.
 - Git.
 
-No se requiere instalar PostgreSQL ni Flyway localmente.
+PostgreSQL y Flyway se ejecutan en contenedores; no necesitan instalación local.
 
-## Base de datos desde cero
+## Inicio desde cero
 
-1. Crea la configuración local:
+1. Crea la configuración local y cambia sus valores si el entorno no es descartable:
 
    ```powershell
    Copy-Item .env.example .env
    ```
 
-2. Cambia las contraseñas de `.env` si el entorno no es exclusivamente local.
-   Si el puerto `5432` ya está ocupado, cambia `POSTGRES_PORT` en ese archivo.
-
-3. Inicia PostgreSQL y ejecuta las migraciones:
+2. Inicia PostgreSQL y aplica las migraciones:
 
    ```powershell
-   docker compose up --wait postgres flyway
-   ```
-
-4. Valida el historial de Flyway:
-
-   ```powershell
+   docker compose up -d --wait postgres flyway
    docker compose run --rm flyway validate
-   docker compose run --rm flyway info
    ```
 
-Para repetir la prueba con un volumen vacío:
+3. Crea el único `OWNER` inicial. La contraseña se lee por stdin y no aparece como argumento ni en la salida:
+
+   ```powershell
+   $bootstrapPassword = Read-Host 'Contraseña temporal del OWNER' -AsSecureString
+   $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($bootstrapPassword)
+   try {
+       $plainPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+       $plainPassword | docker compose --profile tools run --rm -T bootstrap `
+           --password-stdin `
+           --email owner@tallerflow.pe `
+           --name 'Owner TallerFlow' `
+           --workshop 'Taller principal'
+   }
+   finally {
+       [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+       Remove-Variable plainPassword, bootstrapPassword -ErrorAction SilentlyContinue
+   }
+   ```
+
+   La primera ejecución devuelve `OWNER_BOOTSTRAPPED`. Cualquier intento posterior se rechaza con `BOOTSTRAP_ALREADY_EXISTS`. El primer login obliga a cambiar la contraseña.
+
+4. Construye e inicia la aplicación completa:
+
+   ```powershell
+   docker compose --profile app up -d --build --wait
+   ```
+
+La aplicación queda disponible en [http://localhost:8080](http://localhost:8080). Caddy sirve Vue y la API bajo el mismo origen. Los health checks son `/health/live` y `/health/ready`.
+
+## Verificación completa del Sprint 1
+
+En Windows:
 
 ```powershell
-docker compose down --volumes
-docker compose up --wait postgres flyway
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify-sprint1.ps1
 ```
 
-`down --volumes` elimina la base local de Docker. No debe usarse sobre datos que se necesiten conservar.
+En Linux o CI:
 
-## Pruebas de datos
+```sh
+./scripts/verify-sprint1.sh
+```
+
+Los scripts ejecutan:
+
+- pruebas Go con detector de carreras en Linux;
+- pruebas unitarias y build de Vue;
+- Flyway y contratos SQL;
+- constraints, grants y aislamiento RLS;
+- bootstrap único y login real contra PostgreSQL;
+- imágenes de producción y health checks;
+- E2E Chromium a 360 px para login, cambio obligatorio, rutas privadas, CSRF, logout y rate limit.
+
+La verificación usa el proyecto Compose aislado `tallerflow_sprint1_verify`, PostgreSQL en `127.0.0.1:55432` y la aplicación en `http://localhost:18080`. Al terminar elimina únicamente sus contenedores y volumen descartable. No reutiliza ni borra el volumen del proyecto Compose normal.
+
+## Pruebas de datos manuales
 
 Con PostgreSQL y Flyway iniciados:
 
 ```powershell
-Get-Content database/tests/constraints.sql -Raw | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d tallerflow
-Get-Content database/tests/rls.sql -Raw | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d tallerflow
+Get-Content database/tests/constraints.sql -Raw | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_bootstrap -d tallerflow
+Get-Content database/tests/identity_contract.sql -Raw | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_bootstrap -d tallerflow
+Get-Content database/tests/rls_setup.sql -Raw | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_bootstrap -d tallerflow
+Get-Content database/tests/rls.sql -Raw | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_app -d tallerflow
 ```
 
-Las pruebas verifican constraints básicos y que RLS no muestre talleres sin contexto ni permita ver otro taller.
+## Detener el entorno
 
-## Aplicación completa
-
-Cuando existan `backend/go.mod` y `frontend/package-lock.json`, inicia todos los servicios:
+Conservar los datos locales:
 
 ```powershell
-docker compose --profile app up --build --wait
+docker compose --profile app --profile tools down --remove-orphans
 ```
 
-La aplicación quedará disponible en `http://localhost:8080`. Caddy sirve frontend y API bajo el mismo origen.
+Eliminar también la base local descartable:
+
+```powershell
+docker compose --profile app --profile tools down --volumes --remove-orphans
+```
+
+`down --volumes` destruye la base del proyecto Compose seleccionado. No se debe ejecutar sobre datos que se necesiten conservar.
 
 ## Roles de PostgreSQL
 
@@ -69,34 +116,28 @@ La aplicación quedará disponible en `http://localhost:8080`. Caddy sirve front
 |---|---|
 | `tallerflow_owner` | Propiedad de la base; no lo usa la aplicación. |
 | `tallerflow_migrator` | Flyway y cambios versionados de esquema. |
-| `tallerflow_app` | Conexiones del backend con privilegios limitados y RLS. |
+| `tallerflow_app` | API con privilegios limitados y RLS. |
+| `tallerflow_bootstrap` | Creación transaccional y única del primer OWNER. |
 
-La aplicación debe abrir cada operación privada en una transacción y establecer el taller con:
+Las operaciones privadas se ejecutan en una transacción que establece el taller con `SET LOCAL app.workshop_id`. Sin ese contexto, las tablas protegidas no devuelven filas.
 
-```sql
-SET LOCAL app.workshop_id = '<uuid-del-taller>';
-```
+## Migraciones y producción
 
-Sin ese contexto, las tablas protegidas por tenant no devuelven filas.
+- Agrega migraciones en `database/migrations/` con formato `V<n>__descripcion.sql`.
+- No edites una migración ya compartida o ejecutada.
+- El backend no usa `AutoMigrate`.
+- Los valores de `.env.example` son solo de desarrollo.
+- En producción se inyectan secretos únicos desde el sistema de despliegue.
 
-## Migraciones
-
-- Agrega archivos nuevos en `database/migrations/` con formato `V<n>__descripcion.sql`.
-- No edites una migración que ya se haya fusionado o ejecutado en un entorno compartido.
-- Stephano coordina la numeración de Flyway durante el Sprint 1.
-- El backend no debe usar AutoMigrate.
-
-## Producción
-
-`compose.production.yaml` complementa el Compose base y evita publicar PostgreSQL en el host:
+Valida la superposición de producción con:
 
 ```powershell
 docker compose -f compose.yaml -f compose.production.yaml --profile app config
 ```
 
-Los valores de `.env.example` son solo para desarrollo. En producción se deben inyectar secretos únicos desde el sistema de despliegue.
-
 ## Documentación
 
 - [Contexto del producto](docs/contexto-proyecto.md)
-- [Plan del Sprint 1](sprint-01-team-plan.md)
+- [Plan del Sprint 1](docs/sprints/sprint-01-team-plan.md)
+- [Handoff operativo](docs/sprints/sprint-01-human-handoff.md)
+- [Contrato OpenAPI](docs/contracts/openapi.yaml)

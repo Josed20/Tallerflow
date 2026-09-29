@@ -18,8 +18,7 @@ var (
 type Workshop struct {
 	ID       uuid.UUID `json:"id" gorm:"column:id"`
 	Name     string    `json:"name" gorm:"column:name"`
-	Slug     string    `json:"slug" gorm:"column:slug"`
-	IsActive bool      `json:"isActive" gorm:"column:is_active"`
+	Timezone string    `json:"timezone" gorm:"column:timezone"`
 }
 
 func (Workshop) TableName() string { return "workshops" }
@@ -29,10 +28,10 @@ type Membership struct {
 	WorkshopID uuid.UUID `gorm:"column:workshop_id"`
 	UserID     uuid.UUID `gorm:"column:user_id"`
 	Role       Role      `gorm:"column:role"`
-	IsActive   bool      `gorm:"column:is_active"`
+	Status     string    `gorm:"column:status"`
 }
 
-func (Membership) TableName() string { return "memberships" }
+func (Membership) TableName() string { return "workshop_members" }
 
 type Access struct {
 	Workshop Workshop `json:"workshop"`
@@ -60,7 +59,7 @@ func (s *Service) Resolve(ctx context.Context, userID, workshopID uuid.UUID) (Ac
 	var access Access
 	err := s.tenants.WithinTenant(ctx, workshopID, func(tx *gorm.DB) error {
 		var membership Membership
-		result := tx.Where("user_id = ? AND workshop_id = ? AND is_active = true", userID, workshopID).Take(&membership)
+		result := tx.Where("user_id = ? AND workshop_id = ? AND status = 'ACTIVE'", userID, workshopID).Take(&membership)
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return ErrMembershipNotFound
 		}
@@ -72,7 +71,7 @@ func (s *Service) Resolve(ctx context.Context, userID, workshopID uuid.UUID) (Ac
 		}
 
 		var workshop Workshop
-		result = tx.Where("id = ? AND is_active = true", workshopID).Take(&workshop)
+		result = tx.Where("id = ?", workshopID).Take(&workshop)
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return ErrMembershipNotFound
 		}

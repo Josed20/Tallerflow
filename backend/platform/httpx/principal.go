@@ -1,10 +1,10 @@
 package httpx
 
 import (
-	"context"
 	"errors"
 	"net/http"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
@@ -23,21 +23,22 @@ func (p Principal) Valid() bool {
 	return p.UserID != uuid.Nil && p.WorkshopID != uuid.Nil && validRole(p.Role)
 }
 
-type principalKey struct{}
+const principalKey = "authenticated_principal"
 
-func WithPrincipal(ctx context.Context, principal Principal) context.Context {
-	return context.WithValue(ctx, principalKey{}, principal)
+func SetPrincipal(c *gin.Context, principal Principal) {
+	c.Set(principalKey, principal)
 }
 
-func PrincipalFromContext(ctx context.Context) (Principal, error) {
-	principal, ok := ctx.Value(principalKey{}).(Principal)
-	if !ok || !principal.Valid() {
+func PrincipalFromGin(c *gin.Context) (Principal, error) {
+	value, ok := c.Get(principalKey)
+	principal, typed := value.(Principal)
+	if !ok || !typed || !principal.Valid() {
 		return Principal{}, ErrPrincipalMissing
 	}
 	return principal, nil
 }
 
-func RequireRoles(roles ...string) func(http.Handler) http.Handler {
+func RequireRoles(roles ...string) gin.HandlerFunc {
 	allowed := make(map[string]struct{}, len(roles))
 	for _, role := range roles {
 		if validRole(role) {
@@ -45,19 +46,17 @@ func RequireRoles(roles ...string) func(http.Handler) http.Handler {
 		}
 	}
 
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			principal, err := PrincipalFromContext(r.Context())
-			if err != nil {
-				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-				return
-			}
-			if _, ok := allowed[principal.Role]; !ok {
-				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
+	return func(c *gin.Context) {
+		principal, err := PrincipalFromGin(c)
+		if err != nil {
+			RespondError(c, http.StatusUnauthorized, "SESSION_INVALID", "The session is invalid or has expired.")
+			return
+		}
+		if _, ok := allowed[principal.Role]; !ok {
+			RespondError(c, http.StatusForbidden, "ROLE_FORBIDDEN", "The authenticated role cannot access this resource.")
+			return
+		}
+		c.Next()
 	}
 }
 

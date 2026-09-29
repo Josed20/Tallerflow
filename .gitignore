@@ -1,7 +1,11 @@
+.worktrees/
 .env
 *.local
 coverage/
 dist/
 node_modules/
 tmp/
-
+.superpowers/
+sprint1-compose.log
+frontend/playwright-report/
+frontend/test-results/

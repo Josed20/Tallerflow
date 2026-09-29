@@ -6,16 +6,16 @@ DECLARE
     test_user uuid;
     test_workshop uuid;
 BEGIN
-    INSERT INTO users (email, password_hash, display_name)
-    VALUES ('constraint@example.test', '$argon2id$test', 'Constraint Test')
+    INSERT INTO public.users (email, name)
+    VALUES ('constraint@example.test', 'Constraint Test')
     RETURNING id INTO test_user;
 
-    INSERT INTO workshops (name, slug)
-    VALUES ('Constraint Workshop', 'constraint-workshop')
+    INSERT INTO public.workshops (name, timezone)
+    VALUES ('Constraint Workshop', 'America/Lima')
     RETURNING id INTO test_workshop;
 
     BEGIN
-        INSERT INTO memberships (workshop_id, user_id, role)
+        INSERT INTO public.workshop_members (workshop_id, user_id, role)
         VALUES (test_workshop, test_user, 'INVALID');
         RAISE EXCEPTION 'invalid membership role was accepted';
     EXCEPTION WHEN check_violation THEN
@@ -23,13 +23,12 @@ BEGIN
     END;
 
     BEGIN
-        INSERT INTO users (email, password_hash, display_name)
-        VALUES ('CONSTRAINT@example.test', '$argon2id$test', 'Bad Email');
-        RAISE EXCEPTION 'non-normalized email was accepted';
-    EXCEPTION WHEN check_violation THEN
+        INSERT INTO public.users (email, name)
+        VALUES ('CONSTRAINT@example.test', 'Duplicate Email');
+        RAISE EXCEPTION 'case-insensitive duplicate email was accepted';
+    EXCEPTION WHEN unique_violation THEN
         NULL;
     END;
 END $$;
 
 ROLLBACK;
-
