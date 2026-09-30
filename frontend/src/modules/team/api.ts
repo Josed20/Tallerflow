@@ -45,6 +45,10 @@ export const teamApi = {
   list: () => api.get<TeamPayload>('/api/v1/team'),
   invite: (email: string, role: string, csrfToken: string) =>
     api.post<InvitationCreatedPayload>('/api/v1/team/invitations', { email, role }, csrfToken),
+  regenerateInvitation: (invitationId: string, csrfToken: string) =>
+    api.post<InvitationCreatedPayload>(`/api/v1/team/invitations/${invitationId}/regenerate`, {}, csrfToken),
+  cancelInvitation: (invitationId: string, csrfToken: string) =>
+    api.delete<void>(`/api/v1/team/invitations/${invitationId}`, csrfToken),
   updateMember: (membershipId: string, body: { role?: string; status?: string }, csrfToken: string) =>
     api.patch<{ data: TeamMember }>(`/api/v1/team/${membershipId}`, body, csrfToken),
   consume: (token: string, name: string, password: string) =>

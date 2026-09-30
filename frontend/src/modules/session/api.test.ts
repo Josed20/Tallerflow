@@ -28,4 +28,17 @@ describe('same-origin API client', () => {
 	await expect(api.post('/api/v1/auth/login', { email: 'owner@example.com', password: 'secret' }))
 		.rejects.toMatchObject({ status: 429, code: 'AUTH_RATE_LIMITED', requestId: 'request-7' } satisfies Partial<ApiError>)
   })
+
+  it('sends a CSRF token when canceling an invitation', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await api.delete('/api/v1/team/invitations/invitation-1', 'csrf-1')
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/team/invitations/invitation-1', {
+      credentials: 'include',
+      headers: { Accept: 'application/json', 'X-CSRF-Token': 'csrf-1' },
+      method: 'DELETE',
+    })
+  })
 })

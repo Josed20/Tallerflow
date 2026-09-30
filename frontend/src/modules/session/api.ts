@@ -45,4 +45,9 @@ export const api = {
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
+  delete: <T>(path: string, csrfToken?: string) =>
+    request<T>(path, {
+      method: 'DELETE',
+      headers: csrfToken === undefined ? {} : { 'X-CSRF-Token': csrfToken },
+    }),
 }

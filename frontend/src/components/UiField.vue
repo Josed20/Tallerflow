@@ -1,10 +1,13 @@
 <script setup lang="ts">
 defineProps<{
   id: string
+  name?: string
   label: string
   type?: string
   modelValue: string
   autocomplete?: string
+  required?: boolean
+  spellcheck?: boolean
   error?: string
   placeholder?: string
   description?: string
@@ -18,9 +21,12 @@ defineEmits<{ 'update:modelValue': [value: string] }>()
     <label :for="id">{{ label }}</label>
     <input
       :id="id"
+      :name="name ?? id"
       :value="modelValue"
       :type="type ?? 'text'"
       :autocomplete="autocomplete"
+      :required="required"
+      :spellcheck="spellcheck"
       :placeholder="placeholder"
       :aria-invalid="Boolean(error)"
       :aria-describedby="[description ? `${id}-description` : '', error ? `${id}-error` : ''].filter(Boolean).join(' ') || undefined"

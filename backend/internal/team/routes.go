@@ -6,6 +6,8 @@ func RegisterRoutes(routes gin.IRouter, handler *Handler, requireSession gin.Han
 	team := routes.Group("/api/v1/team", requireSession)
 	team.GET("", handler.List)
 	team.POST("/invitations", handler.Invite)
+	team.POST("/invitations/:invitationId/regenerate", handler.RegenerateInvitation)
+	team.DELETE("/invitations/:invitationId", handler.CancelInvitation)
 	team.PATCH("/:membershipId", handler.UpdateMember)
 
 	routes.POST("/api/v1/team/invitations/consume", handler.Consume)

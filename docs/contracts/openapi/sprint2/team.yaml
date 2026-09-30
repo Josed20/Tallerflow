@@ -58,6 +58,42 @@ paths:
                 $ref: "#/components/schemas/TeamConsumeInvitationResponse"
         "422":
           $ref: "#/components/responses/TeamInvalid"
+  /api/v1/team/invitations/{invitationId}/regenerate:
+    post:
+      operationId: teamRegenerateInvitation
+      summary: Replace a pending invitation link and invalidate the previous link
+      parameters:
+        - name: invitationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: A replacement one-use link; its raw token is returned only once
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamInvitationCreatedResponse"
+        "422":
+          $ref: "#/components/responses/TeamInvalid"
+  /api/v1/team/invitations/{invitationId}:
+    delete:
+      operationId: teamCancelInvitation
+      summary: Cancel a pending invitation and invalidate its link
+      parameters:
+        - name: invitationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Invitation canceled
+        "422":
+          $ref: "#/components/responses/TeamInvalid"
   /api/v1/team/{membershipId}:
     patch:
       operationId: teamUpdateMember
@@ -182,7 +218,7 @@ components:
           maxLength: 160
         password:
           type: string
-          minLength: 12
+          minLength: 8
     TeamConsumeInvitationResponse:
       type: object
       required: [data]

@@ -52,16 +52,73 @@ func (r *PostgresRepository) ListInvitations(ctx context.Context, workshopID uui
 		return tx.Raw(`
 			SELECT id, email::text AS email, role, expires_at, created_at
 			FROM team_invitations
-			WHERE workshop_id = ? AND consumed_at IS NULL AND expires_at > ?
+			WHERE workshop_id = ? AND consumed_at IS NULL AND canceled_at IS NULL AND expires_at > ?
 			ORDER BY created_at DESC
 		`, workshopID, now).Scan(&invitations).Error
 	})
 	return invitations, err
 }
 
+func (r *PostgresRepository) RegenerateInvitation(ctx context.Context, workshopID, actorUserID, invitationID uuid.UUID, tokenHash []byte, expiresAt, now time.Time) (Invitation, error) {
+	var invitation Invitation
+	err := r.tenant.WithinTenant(ctx, workshopID, func(tx *gorm.DB) error {
+		result := tx.Raw(`
+			UPDATE team_invitations
+			SET token_hash = ?, expires_at = ?, updated_at = ?
+			WHERE id = ? AND workshop_id = ? AND consumed_at IS NULL AND canceled_at IS NULL AND expires_at > ?
+			RETURNING id, email::text AS email, role, expires_at, created_at
+		`, tokenHash, expiresAt, now, invitationID, workshopID, now).Scan(&invitation)
+		if result.Error != nil {
+			return mapConstraint(result.Error)
+		}
+		if result.RowsAffected != 1 {
+			return ErrInvitationUnavailable
+		}
+		return tx.Exec(`
+			INSERT INTO audit_events (workshop_id, actor_user_id, event_type, details)
+			VALUES (?, ?, 'TEAM_INVITATION_REGENERATED', jsonb_build_object('invitation_id', ?::text, 'email', ?::text))
+		`, workshopID, actorUserID, invitationID, invitation.Email).Error
+	})
+	if err != nil {
+		return Invitation{}, err
+	}
+	return invitation, nil
+}
+
+func (r *PostgresRepository) CancelInvitation(ctx context.Context, workshopID, actorUserID, invitationID uuid.UUID, now time.Time) error {
+	return r.tenant.WithinTenant(ctx, workshopID, func(tx *gorm.DB) error {
+		var invitation struct{ Email string }
+		result := tx.Raw(`
+			UPDATE team_invitations
+			SET canceled_at = ?, updated_at = ?
+			WHERE id = ? AND workshop_id = ? AND consumed_at IS NULL AND canceled_at IS NULL
+			RETURNING email::text AS email
+		`, now, now, invitationID, workshopID).Scan(&invitation)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return ErrInvitationUnavailable
+		}
+		return tx.Exec(`
+			INSERT INTO audit_events (workshop_id, actor_user_id, event_type, details)
+			VALUES (?, ?, 'TEAM_INVITATION_CANCELED', jsonb_build_object('invitation_id', ?::text, 'email', ?::text))
+		`, workshopID, actorUserID, invitationID, invitation.Email).Error
+	})
+}
+
 func (r *PostgresRepository) CreateInvitation(ctx context.Context, workshopID, actorUserID uuid.UUID, email, role string, tokenHash []byte, expiresAt time.Time) (Invitation, error) {
 	var invitation Invitation
 	err := r.tenant.WithinTenant(ctx, workshopID, func(tx *gorm.DB) error {
+		// Expired links are no longer actionable; retire them so a new invitation
+		// for the same email is never blocked by stale state.
+		if err := tx.Exec(`
+			UPDATE team_invitations
+			SET canceled_at = ?, updated_at = ?
+			WHERE workshop_id = ? AND email = ? AND consumed_at IS NULL AND canceled_at IS NULL AND expires_at <= ?
+		`, expiresAt.Add(-invitationLifetime), expiresAt.Add(-invitationLifetime), workshopID, email, expiresAt.Add(-invitationLifetime)).Error; err != nil {
+			return err
+		}
 		var existing struct {
 			UserID     uuid.UUID
 			WorkshopID uuid.UUID
@@ -114,7 +171,7 @@ func (r *PostgresRepository) ConsumeInvitation(ctx context.Context, tokenHash []
 		find := tx.Raw(`
 			SELECT id, workshop_id, email::text AS email, role, expires_at
 			FROM team_invitations
-			WHERE token_hash = ? AND consumed_at IS NULL
+			WHERE token_hash = ? AND consumed_at IS NULL AND canceled_at IS NULL
 			FOR UPDATE
 		`, tokenHash).Scan(&invitation)
 		if find.Error != nil {

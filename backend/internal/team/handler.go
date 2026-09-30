@@ -86,6 +86,49 @@ func (h *Handler) Invite(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"data": created})
 }
 
+func (h *Handler) RegenerateInvitation(c *gin.Context) {
+	principal, ok := h.principal(c)
+	if !ok {
+		return
+	}
+	if !security.ValidRequestOrigin(c.Request, h.allowedOrigin) {
+		h.fail(c, http.StatusForbidden, "CSRF_INVALID", "CSRF validation failed.")
+		return
+	}
+	invitationID, err := uuid.Parse(c.Param("invitationId"))
+	if err != nil {
+		h.fail(c, http.StatusNotFound, "TEAM_INVITATION_UNAVAILABLE", "Invitation is unavailable.")
+		return
+	}
+	created, err := h.service.RegenerateInvitation(c.Request.Context(), principal, invitationID)
+	if err != nil {
+		h.respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": created})
+}
+
+func (h *Handler) CancelInvitation(c *gin.Context) {
+	principal, ok := h.principal(c)
+	if !ok {
+		return
+	}
+	if !security.ValidRequestOrigin(c.Request, h.allowedOrigin) {
+		h.fail(c, http.StatusForbidden, "CSRF_INVALID", "CSRF validation failed.")
+		return
+	}
+	invitationID, err := uuid.Parse(c.Param("invitationId"))
+	if err != nil {
+		h.fail(c, http.StatusNotFound, "TEAM_INVITATION_UNAVAILABLE", "Invitation is unavailable.")
+		return
+	}
+	if err := h.service.CancelInvitation(c.Request.Context(), principal, invitationID); err != nil {
+		h.respondError(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
 func (h *Handler) Consume(c *gin.Context) {
 	if !security.ValidRequestOrigin(c.Request, h.allowedOrigin) {
 		h.fail(c, http.StatusForbidden, "ORIGIN_INVALID", "Request origin is not allowed.")

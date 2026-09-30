@@ -84,6 +84,42 @@ func (s *Service) Invite(ctx context.Context, principal httpx.Principal, input I
 	}, nil
 }
 
+// RegenerateInvitation replaces a pending invitation's one-use token. The old
+// link stops working immediately, so a lost link never needs to be recovered.
+func (s *Service) RegenerateInvitation(ctx context.Context, principal httpx.Principal, invitationID uuid.UUID) (InvitationCreated, error) {
+	if !canManageTeam(principal.Role) {
+		return InvitationCreated{}, ErrForbidden
+	}
+	if invitationID == uuid.Nil {
+		return InvitationCreated{}, ErrInvalidInput
+	}
+	token, err := newInvitationToken(s.random)
+	if err != nil {
+		return InvitationCreated{}, err
+	}
+	hash := invitationDigest(s.pepper, token)
+	now := s.clock().UTC()
+	invitation, err := s.store.RegenerateInvitation(ctx, principal.WorkshopID, principal.UserID, invitationID, encodeDigest(hash), now.Add(invitationLifetime), now)
+	if err != nil {
+		return InvitationCreated{}, err
+	}
+	return InvitationCreated{
+		Invitation: invitation,
+		Token:      token,
+		JoinURL:    s.origin + "/join?token=" + url.QueryEscape(publicToken(token)),
+	}, nil
+}
+
+func (s *Service) CancelInvitation(ctx context.Context, principal httpx.Principal, invitationID uuid.UUID) error {
+	if !canManageTeam(principal.Role) {
+		return ErrForbidden
+	}
+	if invitationID == uuid.Nil {
+		return ErrInvalidInput
+	}
+	return s.store.CancelInvitation(ctx, principal.WorkshopID, principal.UserID, invitationID, s.clock().UTC())
+}
+
 func (s *Service) Consume(ctx context.Context, input ConsumeInput) (ConsumeResult, error) {
 	tokenBytes, err := decodePublicToken(strings.TrimSpace(input.Token))
 	if err != nil || len(tokenBytes) == 0 {
