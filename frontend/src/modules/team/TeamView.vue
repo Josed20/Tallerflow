@@ -25,7 +25,7 @@ interface RevealedInvitationLink {
 interface ToastMessage {
   title: string
   detail?: string
-  tone: 'success' | 'info'
+  tone: 'success' | 'info' | 'warning' | 'danger'
 }
 
 const session = useSessionStore()
@@ -124,7 +124,7 @@ async function invite() {
 async function copyInvitationLink(url: string) {
   try {
     await navigator.clipboard.writeText(url)
-    showToast('Enlace copiado', 'Ya puedes enviarlo por el medio que prefieras.')
+    showToast('Enlace copiado', 'Ya puedes enviarlo por el medio que prefieras.', 'info')
   } catch {
     error.value = 'No se pudo copiar el enlace. Selecciónalo y cópialo manualmente.'
   }
@@ -149,12 +149,12 @@ async function confirmInvitationAction() {
       invitations.value = invitations.value.map((invitation) => invitation.id === action.invitation.id ? response.data.invitation : invitation)
       revealedInvitationLink.value = { id: action.invitation.id, email: response.data.invitation.email, url: response.data.join_url }
       joinUrl.value = ''
-      showToast('Enlace nuevo creado', `El enlace anterior de ${response.data.invitation.email} ya no funciona.`)
+      showToast('Enlace nuevo creado', `El enlace anterior de ${response.data.invitation.email} ya no funciona.`, 'info')
     } else {
       await teamApi.cancelInvitation(action.invitation.id, session.csrfToken)
       invitations.value = invitations.value.filter((invitation) => invitation.id !== action.invitation.id)
       if (revealedInvitationLink.value?.id === action.invitation.id) revealedInvitationLink.value = null
-      showToast('Invitación cancelada', `${action.invitation.email} ya no puede usar ese enlace.`, 'info')
+      showToast('Invitación cancelada', `${action.invitation.email} ya no puede usar ese enlace.`, 'danger')
     }
     pendingInvitationAction.value = null
   } catch {
@@ -175,6 +175,7 @@ async function deactivate(member: TeamMember) {
     showToast(
       member.status === 'ACTIVE' ? 'Acceso desactivado' : 'Acceso activado',
       member.status === 'ACTIVE' ? `${member.display_name} ya no puede ingresar al taller.` : `${member.display_name} ya puede ingresar al taller.`,
+      member.status === 'ACTIVE' ? 'warning' : 'success',
     )
   } catch {
     error.value = 'No se pudo actualizar el miembro. Inténtalo otra vez.'

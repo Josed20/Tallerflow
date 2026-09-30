@@ -37,8 +37,8 @@ h1 { margin: 0; font-size: 1.5rem; line-height: 1.35; letter-spacing: -.02em; }
 .ui-button:disabled { opacity: .65; cursor: wait; }
 .ui-button--secondary { border: 1px solid #00776d; color: #00695f; background: #fff; box-shadow: none; }
 .ui-button--secondary:hover:not(:disabled) { background: #effaf7; }
-.ui-button--danger { color: #fff; background: #b42318; }
-.ui-button--danger:hover:not(:disabled) { background: #8f1d14; }
+.ui-button--danger { color: #fff; background: var(--tf-danger); }
+.ui-button--danger:hover:not(:disabled) { background: var(--tf-danger-hover); }
 .ui-button--secondary .ui-button__spinner { border-color: rgb(0 105 95 / 35%); border-top-color: #00695f; }
 .ui-button__spinner { width: 1rem; height: 1rem; border: 2px solid rgb(255 255 255 / 50%); border-top-color: white; border-radius: 50%; animation: spin .8s linear infinite; }
 .auth-footer { display: flex; align-items: center; justify-content: center; gap: .5rem; margin-top: 1.5rem; color: #565e74; font-size: .6875rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
@@ -89,13 +89,13 @@ h1 { margin: 0; font-size: 1.5rem; line-height: 1.35; letter-spacing: -.02em; }
 .team-card__meta, .team-list__identity { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
 .team-card__meta strong { color: #334155; font-size: .8125rem; }
 .team-status { border-radius: 999px; padding: .25rem .5rem; font-size: .75rem; font-weight: 800; }
-.team-status--active { color: #00574f; background: #ecfff8; }
-.team-status--inactive { color: #7c2d12; background: #fff0e6; }
+.team-status--active { color: #006143; background: var(--tf-success-soft); }
+.team-status--inactive { color: #7a4100; background: var(--tf-warning-soft); }
 .team-member-action { box-shadow: none; }
-.team-member-action--activate { border-color: #8edbc9; color: #00574f; background: #e8fbf4; }
-.team-member-action--activate:hover:not(:disabled) { border-color: #00776d; background: #d2f6e9; }
-.team-member-action--deactivate { border-color: #efd1b8; color: #92400e; background: #fff7ed; }
-.team-member-action--deactivate:hover:not(:disabled) { border-color: #c76a25; background: #ffedd5; }
+.team-member-action--activate { border-color: var(--tf-success); color: #fff; background: var(--tf-success); }
+.team-member-action--activate:hover:not(:disabled) { border-color: var(--tf-success-hover); color: #fff; background: var(--tf-success-hover); }
+.team-member-action--deactivate { border-color: var(--tf-danger-border); color: var(--tf-danger); background: var(--tf-danger-soft); }
+.team-member-action--deactivate:hover:not(:disabled) { border-color: var(--tf-danger); color: #941b12; background: #ffe1dd; }
 .team-empty { margin: 0; padding: 1rem; border: 1px dashed #b7caeb; border-radius: .5rem; color: var(--tf-text-muted); background: #fff; }
 .team-list { display: grid; gap: .75rem; padding: 0; margin: 0; list-style: none; }
 .team-invitation-item { display: grid; gap: .875rem; padding: 1rem; border: 1px solid #dce9ff; border-radius: .5rem; background: #fff; }
@@ -120,12 +120,16 @@ h1 { margin: 0; font-size: 1.5rem; line-height: 1.35; letter-spacing: -.02em; }
 .team-modal .eyebrow { margin: 0; }
 .team-modal p:not(.eyebrow) { margin: 0; color: var(--tf-text-muted); line-height: 1.5; }
 .team-modal__actions { display: flex; justify-content: flex-end; gap: .5rem; }
-.team-toast { position: fixed; z-index: 30; right: 1rem; bottom: 1rem; display: flex; width: min(calc(100% - 2rem), 25rem); align-items: flex-start; justify-content: space-between; gap: .75rem; border: 1px solid #93dcca; border-left: .3125rem solid #00776d; border-radius: .5rem; padding: .875rem 1rem; color: #0b1c30; background: #fff; box-shadow: 0 12px 28px rgb(11 28 48 / 18%); animation: toast-in .18s ease-out; }
+.team-toast { position: fixed; z-index: 30; right: 1rem; bottom: 1rem; display: flex; width: min(calc(100% - 2rem), 25rem); align-items: flex-start; justify-content: space-between; gap: .75rem; border: 1px solid var(--tf-success-border); border-left: .3125rem solid var(--tf-success); border-radius: .5rem; padding: .875rem 1rem; color: #0b1c30; background: #fff; box-shadow: 0 12px 28px rgb(11 28 48 / 18%); animation: toast-in .18s ease-out; }
 .team-toast > div { display: grid; gap: .1875rem; min-width: 0; }
-.team-toast strong { color: #00574f; font-size: .875rem; }
+.team-toast strong { color: var(--tf-success); font-size: .875rem; }
 .team-toast span { color: #536074; font-size: .8125rem; line-height: 1.4; }
-.team-toast--info { border-color: #b7caeb; border-left-color: #3d5ba9; }
-.team-toast--info strong { color: #243d8f; }
+.team-toast--info { border-color: var(--tf-info-border); border-left-color: var(--tf-info); }
+.team-toast--info strong { color: var(--tf-info); }
+.team-toast--warning { border-color: var(--tf-warning-border); border-left-color: var(--tf-warning); }
+.team-toast--warning strong { color: var(--tf-warning); }
+.team-toast--danger { border-color: var(--tf-danger-border); border-left-color: var(--tf-danger); }
+.team-toast--danger strong { color: var(--tf-danger); }
 .team-toast button { display: grid; width: 2rem; height: 2rem; flex: 0 0 auto; place-items: center; border: 0; border-radius: .375rem; color: #00574f; background: transparent; font-size: 1.25rem; line-height: 1; cursor: pointer; }
 .team-toast button:hover { background: #d9f8ee; }
 .team-toast button:focus-visible { outline: 3px solid #89f5e7; outline-offset: 2px; }

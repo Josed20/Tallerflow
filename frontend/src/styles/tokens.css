@@ -10,5 +10,19 @@
   --tf-border: #bcc9c6;
   --tf-error: #ba1a1a;
   --tf-error-bg: #ffdad6;
+  --tf-success: #087f5b;
+  --tf-success-hover: #066a4c;
+  --tf-success-soft: #e8f8f1;
+  --tf-success-border: #82d6b9;
+  --tf-info: #3157a4;
+  --tf-info-soft: #eff4ff;
+  --tf-info-border: #aec2ee;
+  --tf-warning: #965000;
+  --tf-warning-soft: #fff4df;
+  --tf-warning-border: #e9bd78;
+  --tf-danger: #b42318;
+  --tf-danger-hover: #8f1d14;
+  --tf-danger-soft: #fff0ee;
+  --tf-danger-border: #efa9a3;
   --tf-radius: 0.75rem;
 }
