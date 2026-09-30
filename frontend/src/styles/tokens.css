@@ -14,8 +14,11 @@
   --tf-ink: #0b1c30;
   --tf-ink-soft: #334155;
   --tf-text-muted: #3d4947;
+  --tf-text-subtle: #52606d;
   --tf-border: #bcc9c6;
   --tf-border-soft: #d8e2e8;
+  --tf-neutral-soft: #f1f4f6;
+  --tf-focus: #6be7d6;
   --tf-error: #ba1a1a;
   --tf-error-bg: #ffdad6;
   --tf-success: #087f5b;
