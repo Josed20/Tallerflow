@@ -178,6 +178,29 @@ func (h *Handler) RequireSession() gin.HandlerFunc {
 	}
 }
 
+// RequireMutation applies the same session gate plus Origin and CSRF checks.
+// Sprint modules use it for every state-changing authenticated endpoint.
+func (h *Handler) RequireMutation() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		result, ok := h.restore(c)
+		if !ok {
+			c.Abort()
+			return
+		}
+		if result.MustChangePassword {
+			h.fail(c, http.StatusForbidden, "PASSWORD_CHANGE_REQUIRED", "The password must be changed before accessing this resource.")
+			c.Abort()
+			return
+		}
+		if !h.requireCSRF(c, result) {
+			c.Abort()
+			return
+		}
+		httpx.SetPrincipal(c, result.Principal)
+		c.Next()
+	}
+}
+
 func (h *Handler) restore(c *gin.Context) (AuthSession, bool) {
 	raw, err := c.Cookie(h.cookieName)
 	if err != nil || raw == "" {

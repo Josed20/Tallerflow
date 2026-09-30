@@ -1,0 +1,4 @@
+import test from 'node:test'; import assert from 'node:assert/strict'; import {readFile} from 'node:fs/promises';
+test('declares all Sprint 2 routes',async()=>{const js=await readFile('public/app.js','utf8');for(const route of ['/onboarding','/login','/forgot-password','/reset-password','/app/clients','/app/orders','/app/team','/join'])assert.ok(js.includes(route),route)});
+test('password recovery exposes accessible states and prevents repeated submissions',async()=>{const js=await readFile('public/app.js','utf8');assert.match(js,/aria-live/);assert.match(js,/dataset\.pending/);assert.match(js,/El enlace es inválido/);assert.match(js,/Contraseña actualizada/)});
+test('ships a server-side 404 document',async()=>{const html=await readFile('public/404.html','utf8');assert.match(html,/>404</);assert.match(html,/Esta página no existe/)});

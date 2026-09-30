@@ -1,0 +1,83 @@
+openapi: 3.1.0
+info:
+  title: TallerFlow password recovery
+  version: 2.0.0
+paths:
+  /api/v1/auth/password-resets:
+    post:
+      operationId: requestPasswordReset
+      summary: Solicita un enlace sin revelar si la cuenta existe
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RecoveryRequest'}
+      responses:
+        '202':
+          description: Respuesta uniforme para correos existentes e inexistentes
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RecoveryAcceptedResponse'}
+  /api/v1/auth/password-resets/consume:
+    post:
+      operationId: consumePasswordReset
+      summary: Consume una vez un enlace temporal
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RecoveryConsumeRequest'}
+      responses:
+        '200':
+          description: Contraseña actualizada y sesiones anteriores revocadas
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RecoveryChangedResponse'}
+        '422':
+          description: Token alterado, vencido, consumido o contraseña inválida
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RecoveryErrorResponse'}
+components:
+  schemas:
+    RecoveryRequest:
+      type: object
+      additionalProperties: false
+      required: [Email]
+      properties:
+        Email: {type: string, format: email, maxLength: 320}
+    RecoveryConsumeRequest:
+      type: object
+      additionalProperties: false
+      required: [Token, Password]
+      properties:
+        Token: {type: string, minLength: 40, maxLength: 128}
+        Password: {type: string, minLength: 12, maxLength: 128, writeOnly: true}
+    RecoveryAcceptedResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [accepted]
+          properties: {accepted: {type: boolean, const: true}}
+    RecoveryChangedResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [changed]
+          properties: {changed: {type: boolean, const: true}}
+    RecoveryErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: {type: string, const: RESET_INVALID}
+            message: {type: string}

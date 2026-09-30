@@ -1,0 +1,6 @@
+openapi: 3.1.0
+info: {title: TallerFlow orders, version: 2.0.0}
+paths:
+  /api/v1/clients: {get: {operationId: listClients, responses: {'200': {description: Lista}}}, post: {operationId: createClient, responses: {'201': {description: Creado}}}}
+  /api/v1/orders: {get: {operationId: listOrders, responses: {'200': {description: Lista}}}, post: {operationId: createOrder, responses: {'201': {description: Creada}, '409': {description: Conflicto}}}}
+  /api/v1/dashboard: {get: {operationId: getDashboard, responses: {'200': {description: Resumen}}}}

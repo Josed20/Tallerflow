@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/Josed20/Tallerflow/backend/internal/auth"
+	"github.com/Josed20/Tallerflow/backend/internal/passwordreset"
+	"github.com/Josed20/Tallerflow/backend/internal/sprint2"
 	"github.com/Josed20/Tallerflow/backend/internal/workshops"
 	"github.com/Josed20/Tallerflow/backend/platform/config"
 	"github.com/Josed20/Tallerflow/backend/platform/database"
@@ -79,13 +81,36 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 		return nil, fmt.Errorf("create auth handler: %w", err)
 	}
 	workshopHandler := workshops.NewHandler(workshopService)
+	var bootstrapDB *gorm.DB
+	if cfg.BootstrapDatabaseURL != "" {
+		bootstrapDB, err = dependencies.openDatabase(cfg.BootstrapDatabaseURL)
+		if err != nil {
+			return nil, fmt.Errorf("open onboarding database: %w", err)
+		}
+	}
+	sprintHandler, err := sprint2.New(db, bootstrapDB, tenantRunner)
+	if err != nil {
+		return nil, fmt.Errorf("create sprint 2 handler: %w", err)
+	}
+	resetDelivery, err := passwordreset.NewSMTPDelivery(passwordreset.SMTPConfig{Address: cfg.SMTPAddress, Username: cfg.SMTPUsername, Password: cfg.SMTPPassword, From: cfg.SMTPFrom, UseTLS: cfg.SMTPTLS})
+	if err != nil {
+		return nil, fmt.Errorf("create password reset delivery: %w", err)
+	}
+	resetHandler, err := passwordreset.New(db, resetDelivery, cfg.PasswordResetURL)
+	if err != nil {
+		return nil, fmt.Errorf("create password reset handler: %w", err)
+	}
 	ping := func(ctx context.Context) error { return database.Ping(ctx, db) }
 	router := httpx.NewRouter(httpx.Dependencies{
 		Ping: ping,
 		Routes: []httpx.RouteRegistrar{
 			func(routes gin.IRouter) { auth.RegisterRoutes(routes, authHandler) },
+			func(routes gin.IRouter) { passwordreset.RegisterRoutes(routes, resetHandler) },
 			func(routes gin.IRouter) {
 				workshops.RegisterRoutes(routes, workshopHandler, authHandler.RequireSession())
+			},
+			func(routes gin.IRouter) {
+				sprint2.RegisterRoutes(routes, sprintHandler, authHandler.RequireSession(), authHandler.RequireMutation())
 			},
 		},
 	})
@@ -94,7 +119,13 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 	}
 
 	failed = false
-	return &application{handler: router, ping: ping, close: closeDatabase}, nil
+	closeAll := onceClose(func() error {
+		if bootstrapDB != nil {
+			_ = database.Close(bootstrapDB)
+		}
+		return closeDatabase()
+	})
+	return &application{handler: router, ping: ping, close: closeAll}, nil
 }
 
 func onceClose(closeDatabase func() error) func() error {

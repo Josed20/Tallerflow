@@ -24,7 +24,7 @@ services:
     restart: unless-stopped
 
   flyway:
-    image: flyway/flyway:13.7.0
+    image: flyway/flyway:13.8.0
     command: -connectRetries=30 -validateMigrationNaming=true migrate
     environment:
       FLYWAY_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-tallerflow}
@@ -45,14 +45,21 @@ services:
       dockerfile: Dockerfile
     environment:
       TF_DATABASE_URL: ${TF_DATABASE_URL:-postgres://tallerflow_app:local-app-change-me@postgres:5432/tallerflow?sslmode=disable}
+      TF_BOOTSTRAP_DATABASE_URL: ${TF_BOOTSTRAP_DATABASE_URL:-postgres://tallerflow_bootstrap:local-bootstrap-change-me@postgres:5432/tallerflow?sslmode=disable}
       TF_HTTP_ADDRESS: ":8080"
       TF_ENVIRONMENT: ${TF_ENVIRONMENT:-development}
       TF_SESSION_PEPPER: ${TF_SESSION_PEPPER:-local-session-pepper-change-me}
       TF_ALLOWED_ORIGIN: ${TF_ALLOWED_ORIGIN:-http://localhost:8080}
       TF_TRUSTED_PROXIES: ${TF_TRUSTED_PROXIES:-172.16.0.0/12}
+      TF_SMTP_ADDRESS: ${TF_SMTP_ADDRESS:-mailpit:1025}
+      TF_SMTP_FROM: ${TF_SMTP_FROM:-no-reply@tallerflow.local}
+      TF_SMTP_TLS: ${TF_SMTP_TLS:-false}
+      TF_PASSWORD_RESET_URL: ${TF_PASSWORD_RESET_URL:-http://localhost:8080}
     depends_on:
       flyway:
         condition: service_completed_successfully
+      mailpit:
+        condition: service_started
     expose:
       - "8080"
     read_only: true
@@ -105,6 +112,13 @@ services:
     tmpfs:
       - /config
       - /data
+    restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports:
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
     restart: unless-stopped
 
 volumes:

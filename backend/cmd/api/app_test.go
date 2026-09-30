@@ -66,6 +66,7 @@ func applicationConfig() config.Config {
 	return config.Config{
 		Environment: "development", HTTPAddress: ":0", DatabaseURL: "postgres://ignored",
 		SessionPepper: "test-session-pepper", AllowedOrigin: "http://localhost:8080",
+		SMTPAddress: "localhost:1025", SMTPFrom: "no-reply@example.test", PasswordResetURL: "http://localhost:8080",
 	}
 }
 

@@ -27,6 +27,7 @@ export E2E_BASE_URL=http://localhost:18080
 export E2E_OWNER_EMAIL=$owner_email
 export E2E_OWNER_PASSWORD=$owner_password
 export E2E_NEW_PASSWORD=$replacement_password
+export E2E_MAILPIT_URL=http://127.0.0.1:8025
 
 cleanup() {
   docker compose logs --no-color --tail 200 >"$log_file" 2>&1 || true
@@ -46,6 +47,7 @@ docker compose up -d --wait postgres flyway
 docker compose run --rm flyway validate
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_bootstrap -d tallerflow < database/tests/constraints.sql
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_bootstrap -d tallerflow < database/tests/identity_contract.sql
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d tallerflow < database/tests/password_reset_contract.sql
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_bootstrap -d tallerflow < database/tests/rls_setup.sql
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_app -d tallerflow < database/tests/rls.sql
 

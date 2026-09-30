@@ -36,6 +36,7 @@ $env:E2E_BASE_URL = 'http://localhost:18080'
 $env:E2E_OWNER_EMAIL = $ownerEmail
 $env:E2E_OWNER_PASSWORD = $ownerPassword
 $env:E2E_NEW_PASSWORD = $replacementPassword
+$env:E2E_MAILPIT_URL = 'http://127.0.0.1:8025'
 
 Push-Location $root
 try {
@@ -62,6 +63,8 @@ try {
     Assert-NativeSuccess 'Database constraint tests'
     Get-Content database/tests/identity_contract.sql -Raw | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_bootstrap -d tallerflow
     Assert-NativeSuccess 'Identity contract tests'
+    Get-Content database/tests/password_reset_contract.sql -Raw | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d tallerflow
+    Assert-NativeSuccess 'Password reset contract tests'
     Get-Content database/tests/rls_setup.sql -Raw | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_bootstrap -d tallerflow
     Assert-NativeSuccess 'RLS fixture setup'
     Get-Content database/tests/rls.sql -Raw | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_app -d tallerflow

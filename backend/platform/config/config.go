@@ -16,22 +16,39 @@ const (
 // Config contains the process configuration read from TF_* environment
 // variables. Secret values must never be included in returned errors.
 type Config struct {
-	Environment    string
-	HTTPAddress    string
-	DatabaseURL    string
-	SessionPepper  string
-	AllowedOrigin  string
-	TrustedProxies []string
+	Environment          string
+	HTTPAddress          string
+	DatabaseURL          string
+	BootstrapDatabaseURL string
+	SessionPepper        string
+	AllowedOrigin        string
+	TrustedProxies       []string
+	SMTPAddress          string
+	SMTPUsername         string
+	SMTPPassword         string
+	SMTPFrom             string
+	SMTPTLS              bool
+	PasswordResetURL     string
 }
 
 // Load reads and validates the API process configuration.
 func Load() (Config, error) {
 	cfg := Config{
-		Environment:   valueOrDefault("TF_ENVIRONMENT", defaultEnvironment),
-		HTTPAddress:   valueOrDefault("TF_HTTP_ADDRESS", defaultHTTPAddress),
-		DatabaseURL:   os.Getenv("TF_DATABASE_URL"),
-		SessionPepper: os.Getenv("TF_SESSION_PEPPER"),
-		AllowedOrigin: strings.TrimSpace(os.Getenv("TF_ALLOWED_ORIGIN")),
+		Environment:          valueOrDefault("TF_ENVIRONMENT", defaultEnvironment),
+		HTTPAddress:          valueOrDefault("TF_HTTP_ADDRESS", defaultHTTPAddress),
+		DatabaseURL:          os.Getenv("TF_DATABASE_URL"),
+		BootstrapDatabaseURL: os.Getenv("TF_BOOTSTRAP_DATABASE_URL"),
+		SessionPepper:        os.Getenv("TF_SESSION_PEPPER"),
+		AllowedOrigin:        strings.TrimSpace(os.Getenv("TF_ALLOWED_ORIGIN")),
+		SMTPAddress:          valueOrDefault("TF_SMTP_ADDRESS", "mailpit:1025"),
+		SMTPUsername:         os.Getenv("TF_SMTP_USERNAME"),
+		SMTPPassword:         os.Getenv("TF_SMTP_PASSWORD"),
+		SMTPFrom:             valueOrDefault("TF_SMTP_FROM", "no-reply@tallerflow.local"),
+		PasswordResetURL:     strings.TrimSpace(os.Getenv("TF_PASSWORD_RESET_URL")),
+	}
+	cfg.SMTPTLS = strings.EqualFold(strings.TrimSpace(os.Getenv("TF_SMTP_TLS")), "true")
+	if cfg.PasswordResetURL == "" {
+		cfg.PasswordResetURL = cfg.AllowedOrigin
 	}
 
 	missing := make([]string, 0, 3)

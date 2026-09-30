@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc -b && vite build",
-    "test": "vitest run src",
+    "build": "node scripts/build.mjs",
+    "test": "vitest run src && node --test tests/routes.test.mjs",
     "test:watch": "vitest",
     "test:e2e": "playwright test"
   },
