@@ -36,6 +36,7 @@ const invitations = ref<TeamInvitation[]>([])
 const email = ref('')
 const role = ref<'ADMIN' | 'OPERATOR'>('OPERATOR')
 const joinUrl = ref('')
+const joinLinkVisible = ref(false)
 const loading = ref(false)
 const error = ref('')
 const toast = ref<ToastMessage | null>(null)
@@ -46,6 +47,7 @@ const membersLimit = ref(12)
 const invitationsLimit = ref(12)
 const pendingInvitationAction = ref<PendingInvitationAction | null>(null)
 const revealedInvitationLink = ref<RevealedInvitationLink | null>(null)
+const replacementLinkVisible = ref(false)
 let toastTimeout: ReturnType<typeof setTimeout> | undefined
 
 const canInviteAdmin = computed(() => session.principal?.role === 'OWNER')
@@ -105,9 +107,11 @@ async function invite() {
   loading.value = true
   error.value = ''
   joinUrl.value = ''
+  joinLinkVisible.value = false
   try {
     const response = await teamApi.invite(email.value, role.value, session.csrfToken)
     joinUrl.value = response.data.join_url
+    joinLinkVisible.value = true
     invitations.value = [response.data.invitation, ...invitations.value]
     email.value = ''
     role.value = 'OPERATOR'
@@ -148,12 +152,17 @@ async function confirmInvitationAction() {
       const response = await teamApi.regenerateInvitation(action.invitation.id, session.csrfToken)
       invitations.value = invitations.value.map((invitation) => invitation.id === action.invitation.id ? response.data.invitation : invitation)
       revealedInvitationLink.value = { id: action.invitation.id, email: response.data.invitation.email, url: response.data.join_url }
+      replacementLinkVisible.value = true
       joinUrl.value = ''
+      joinLinkVisible.value = false
       showToast('Enlace nuevo creado', `El enlace anterior de ${response.data.invitation.email} ya no funciona.`, 'info')
     } else {
       await teamApi.cancelInvitation(action.invitation.id, session.csrfToken)
       invitations.value = invitations.value.filter((invitation) => invitation.id !== action.invitation.id)
-      if (revealedInvitationLink.value?.id === action.invitation.id) revealedInvitationLink.value = null
+      if (revealedInvitationLink.value?.id === action.invitation.id) {
+        revealedInvitationLink.value = null
+        replacementLinkVisible.value = false
+      }
       showToast('Invitación cancelada', `${action.invitation.email} ya no puede usar ese enlace.`, 'danger')
     }
     pendingInvitationAction.value = null
@@ -197,11 +206,19 @@ function invitationExpiry(expiresAt: string) {
 }
 
 function hideInitialInvitationLink() {
-  joinUrl.value = ''
+  joinLinkVisible.value = false
+}
+
+function showInitialInvitationLink() {
+  joinLinkVisible.value = true
 }
 
 function hideReplacementInvitationLink(id: string) {
-  if (revealedInvitationLink.value?.id === id) revealedInvitationLink.value = null
+  if (revealedInvitationLink.value?.id === id) replacementLinkVisible.value = false
+}
+
+function showReplacementInvitationLink(id: string) {
+  if (revealedInvitationLink.value?.id === id) replacementLinkVisible.value = true
 }
 
 onMounted(loadTeam)
@@ -240,7 +257,7 @@ onBeforeUnmount(() => {
         <UiButton type="submit" :loading="loading">Crear invitación</UiButton>
       </form>
       <UiAlert v-if="error" :message="error" />
-      <div v-if="joinUrl" class="team-link-result">
+      <div v-if="joinUrl && joinLinkVisible" class="team-link-result">
         <label for="join-link">Enlace de invitación listo</label>
         <div class="team-link-result__row">
           <input id="join-link" :value="joinUrl" readonly aria-describedby="join-link-help" />
@@ -250,6 +267,13 @@ onBeforeUnmount(() => {
           <p id="join-link-help">Este enlace funciona hasta vencer, ser usado, cancelado o reemplazado por uno nuevo.</p>
           <button class="team-text-button" type="button" @click="hideInitialInvitationLink">Ocultar enlace</button>
         </div>
+      </div>
+      <div v-else-if="joinUrl" class="team-link-collapsed" role="region" aria-label="Enlace de invitación oculto">
+        <div>
+          <strong>Enlace oculto</strong>
+          <span>Sigue disponible mientras permanezcas en esta página.</span>
+        </div>
+        <UiButton type="button" variant="secondary" @click="showInitialInvitationLink">Ver enlace</UiButton>
       </div>
     </section>
 
@@ -317,13 +341,20 @@ onBeforeUnmount(() => {
                 <button class="team-text-button team-text-button--danger" type="button" :disabled="Boolean(busyInvitationId)" @click="requestInvitationAction('cancel', invitation)">Cancelar</button>
               </div>
             </div>
-            <div v-if="revealedInvitationLink?.id === invitation.id" class="team-inline-link">
+            <div v-if="revealedInvitationLink?.id === invitation.id && replacementLinkVisible" class="team-inline-link">
               <label :for="`invitation-link-${invitation.id}`">Enlace nuevo listo para copiar</label>
               <div class="team-link-result__row">
                 <input :id="`invitation-link-${invitation.id}`" :value="revealedInvitationLink.url" readonly />
                 <UiButton type="button" @click="copyInvitationLink(revealedInvitationLink.url)">Copiar enlace</UiButton>
               </div>
               <button class="team-text-button" type="button" @click="hideReplacementInvitationLink(invitation.id)">Ocultar enlace</button>
+            </div>
+            <div v-else-if="revealedInvitationLink?.id === invitation.id" class="team-link-collapsed" role="region" aria-label="Enlace nuevo oculto">
+              <div>
+                <strong>Enlace nuevo oculto</strong>
+                <span>Puedes volver a verlo mientras permanezcas en esta página.</span>
+              </div>
+              <UiButton type="button" variant="secondary" @click="showReplacementInvitationLink(invitation.id)">Ver enlace</UiButton>
             </div>
           </li>
         </ul>
