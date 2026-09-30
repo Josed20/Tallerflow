@@ -22,6 +22,12 @@ interface RevealedInvitationLink {
   url: string
 }
 
+interface ToastMessage {
+  title: string
+  detail?: string
+  tone: 'success' | 'info'
+}
+
 const session = useSessionStore()
 const route = useRoute()
 const router = useRouter()
@@ -32,7 +38,7 @@ const role = ref<'ADMIN' | 'OPERATOR'>('OPERATOR')
 const joinUrl = ref('')
 const loading = ref(false)
 const error = ref('')
-const toast = ref('')
+const toast = ref<ToastMessage | null>(null)
 const busyInvitationId = ref('')
 const teamLoading = ref(false)
 const search = ref('')
@@ -58,15 +64,15 @@ const filteredInvitations = computed(() => invitations.value.filter((invitation)
 const visibleMembers = computed(() => filteredMembers.value.slice(0, membersLimit.value))
 const visibleInvitations = computed(() => filteredInvitations.value.slice(0, invitationsLimit.value))
 
-function showToast(message: string) {
-  toast.value = message
+function showToast(title: string, detail?: string, tone: ToastMessage['tone'] = 'success') {
+  toast.value = { title, detail, tone }
   if (toastTimeout) clearTimeout(toastTimeout)
-  toastTimeout = setTimeout(() => { toast.value = '' }, 4500)
+  toastTimeout = setTimeout(() => { toast.value = null }, 5000)
 }
 
 function dismissToast() {
   if (toastTimeout) clearTimeout(toastTimeout)
-  toast.value = ''
+  toast.value = null
 }
 
 function setDirectoryView(view: DirectoryView) {
@@ -105,7 +111,7 @@ async function invite() {
     invitations.value = [response.data.invitation, ...invitations.value]
     email.value = ''
     role.value = 'OPERATOR'
-    showToast(`Invitación creada para ${response.data.invitation.email}.`)
+    showToast('Invitación creada', `Copia el enlace y compártelo con ${response.data.invitation.email}.`)
   } catch (err) {
     error.value = err instanceof ApiError && err.code === 'TEAM_INVITATION_DUPLICATE'
       ? 'Ya hay una invitación pendiente para ese correo. Puedes abrirla en Invitaciones y generar un enlace nuevo.'
@@ -118,7 +124,7 @@ async function invite() {
 async function copyInvitationLink(url: string) {
   try {
     await navigator.clipboard.writeText(url)
-    showToast('Enlace copiado.')
+    showToast('Enlace copiado', 'Ya puedes enviarlo por el medio que prefieras.')
   } catch {
     error.value = 'No se pudo copiar el enlace. Selecciónalo y cópialo manualmente.'
   }
@@ -143,12 +149,12 @@ async function confirmInvitationAction() {
       invitations.value = invitations.value.map((invitation) => invitation.id === action.invitation.id ? response.data.invitation : invitation)
       revealedInvitationLink.value = { id: action.invitation.id, email: response.data.invitation.email, url: response.data.join_url }
       joinUrl.value = ''
-      showToast(`Enlace nuevo listo para ${response.data.invitation.email}.`)
+      showToast('Enlace nuevo creado', `El enlace anterior de ${response.data.invitation.email} ya no funciona.`)
     } else {
       await teamApi.cancelInvitation(action.invitation.id, session.csrfToken)
       invitations.value = invitations.value.filter((invitation) => invitation.id !== action.invitation.id)
       if (revealedInvitationLink.value?.id === action.invitation.id) revealedInvitationLink.value = null
-      showToast(`Invitación cancelada para ${action.invitation.email}.`)
+      showToast('Invitación cancelada', `${action.invitation.email} ya no puede usar ese enlace.`, 'info')
     }
     pendingInvitationAction.value = null
   } catch {
@@ -166,7 +172,10 @@ async function deactivate(member: TeamMember) {
   try {
     const response = await teamApi.updateMember(member.id, { status: member.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' }, session.csrfToken)
     members.value = members.value.map((current) => current.id === member.id ? response.data : current)
-    showToast(member.status === 'ACTIVE' ? `${member.display_name} fue desactivado.` : `${member.display_name} fue activado.`)
+    showToast(
+      member.status === 'ACTIVE' ? 'Acceso desactivado' : 'Acceso activado',
+      member.status === 'ACTIVE' ? `${member.display_name} ya no puede ingresar al taller.` : `${member.display_name} ya puede ingresar al taller.`,
+    )
   } catch {
     error.value = 'No se pudo actualizar el miembro. Inténtalo otra vez.'
   }
@@ -184,6 +193,14 @@ function invitationExpiry(expiresAt: string) {
   if (hours < 24) return `Vence en ${hours} h`
   const days = Math.ceil(hours / 24)
   return `Vence en ${days} ${days === 1 ? 'día' : 'días'}`
+}
+
+function hideInitialInvitationLink() {
+  joinUrl.value = ''
+}
+
+function hideReplacementInvitationLink(id: string) {
+  if (revealedInvitationLink.value?.id === id) revealedInvitationLink.value = null
 }
 
 onMounted(loadTeam)
@@ -228,7 +245,10 @@ onBeforeUnmount(() => {
           <input id="join-link" :value="joinUrl" readonly aria-describedby="join-link-help" />
           <UiButton type="button" @click="copyInvitationLink(joinUrl)">Copiar enlace</UiButton>
         </div>
-        <p id="join-link-help">Este enlace funciona hasta vencer, ser usado, cancelado o reemplazado por uno nuevo.</p>
+        <div class="team-link-result__footer">
+          <p id="join-link-help">Este enlace funciona hasta vencer, ser usado, cancelado o reemplazado por uno nuevo.</p>
+          <button class="team-text-button" type="button" @click="hideInitialInvitationLink">Ocultar enlace</button>
+        </div>
       </div>
     </section>
 
@@ -267,7 +287,7 @@ onBeforeUnmount(() => {
               <strong>{{ roleLabel(member.role) }}</strong>
               <span :class="['team-status', member.status === 'ACTIVE' ? 'team-status--active' : 'team-status--inactive']">{{ member.status === 'ACTIVE' ? 'Activo' : 'Desactivado' }}</span>
             </div>
-            <UiButton v-if="session.principal?.role === 'OWNER' && member.user_id !== session.principal.id" @click="deactivate(member)">
+            <UiButton v-if="session.principal?.role === 'OWNER' && member.user_id !== session.principal.id" variant="secondary" @click="deactivate(member)">
               {{ member.status === 'ACTIVE' ? 'Desactivar' : 'Activar' }}
             </UiButton>
           </article>
@@ -292,7 +312,7 @@ onBeforeUnmount(() => {
                 <span>{{ roleLabel(invitation.role) }} · {{ invitationExpiry(invitation.expires_at) }}</span>
               </div>
               <div class="team-list__actions">
-                <UiButton type="button" :loading="busyInvitationId === invitation.id" @click="requestInvitationAction('regenerate', invitation)">Generar enlace nuevo</UiButton>
+                <UiButton type="button" variant="secondary" :loading="busyInvitationId === invitation.id" @click="requestInvitationAction('regenerate', invitation)">Generar enlace nuevo</UiButton>
                 <button class="team-text-button team-text-button--danger" type="button" :disabled="Boolean(busyInvitationId)" @click="requestInvitationAction('cancel', invitation)">Cancelar</button>
               </div>
             </div>
@@ -302,6 +322,7 @@ onBeforeUnmount(() => {
                 <input :id="`invitation-link-${invitation.id}`" :value="revealedInvitationLink.url" readonly />
                 <UiButton type="button" @click="copyInvitationLink(revealedInvitationLink.url)">Copiar enlace</UiButton>
               </div>
+              <button class="team-text-button" type="button" @click="hideReplacementInvitationLink(invitation.id)">Ocultar enlace</button>
             </div>
           </li>
         </ul>
@@ -320,15 +341,18 @@ onBeforeUnmount(() => {
             : `La persona con correo ${pendingInvitationAction.invitation.email} ya no podrá usar este enlace.` }}</p>
           <div class="team-modal__actions">
             <button class="team-text-button" type="button" :disabled="Boolean(busyInvitationId)" @click="closeInvitationAction">Volver</button>
-            <UiButton type="button" :loading="Boolean(busyInvitationId)" @click="confirmInvitationAction">{{ pendingInvitationAction.kind === 'regenerate' ? 'Generar enlace' : 'Cancelar invitación' }}</UiButton>
+            <UiButton type="button" :variant="pendingInvitationAction.kind === 'cancel' ? 'danger' : 'primary'" :loading="Boolean(busyInvitationId)" @click="confirmInvitationAction">{{ pendingInvitationAction.kind === 'regenerate' ? 'Generar enlace' : 'Cancelar invitación' }}</UiButton>
           </div>
         </section>
       </div>
     </Teleport>
 
     <Teleport to="body">
-      <div v-if="toast" class="team-toast" role="status" aria-live="polite">
-        <span>{{ toast }}</span>
+      <div v-if="toast" :class="['team-toast', `team-toast--${toast.tone}`]" role="status" aria-live="polite">
+        <div>
+          <strong>{{ toast.title }}</strong>
+          <span v-if="toast.detail">{{ toast.detail }}</span>
+        </div>
         <button type="button" aria-label="Cerrar aviso" @click="dismissToast">×</button>
       </div>
     </Teleport>

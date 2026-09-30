@@ -35,6 +35,11 @@ h1 { margin: 0; font-size: 1.5rem; line-height: 1.35; letter-spacing: -.02em; }
 .ui-button:hover:not(:disabled) { background: var(--tf-primary-hover); }
 .ui-button:focus-visible { outline: 3px solid #89f5e7; outline-offset: 2px; }
 .ui-button:disabled { opacity: .65; cursor: wait; }
+.ui-button--secondary { border: 1px solid #00776d; color: #00695f; background: #fff; box-shadow: none; }
+.ui-button--secondary:hover:not(:disabled) { background: #effaf7; }
+.ui-button--danger { color: #fff; background: #b42318; }
+.ui-button--danger:hover:not(:disabled) { background: #8f1d14; }
+.ui-button--secondary .ui-button__spinner { border-color: rgb(0 105 95 / 35%); border-top-color: #00695f; }
 .ui-button__spinner { width: 1rem; height: 1rem; border: 2px solid rgb(255 255 255 / 50%); border-top-color: white; border-radius: 50%; animation: spin .8s linear infinite; }
 .auth-footer { display: flex; align-items: center; justify-content: center; gap: .5rem; margin-top: 1.5rem; color: #565e74; font-size: .6875rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .auth-footer__dot { width: .5rem; height: .5rem; border-radius: 50%; background: var(--tf-primary); }
@@ -61,6 +66,7 @@ h1 { margin: 0; font-size: 1.5rem; line-height: 1.35; letter-spacing: -.02em; }
 .team-link-result > label { color: #0b1c30; font-size: .8125rem; font-weight: 800; }
 .team-link-result__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .75rem; align-items: center; }
 .team-link-result input { min-width: 0; color: #00574f; }
+.team-link-result__footer { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
 .team-link-result p { margin: 0; color: var(--tf-text-muted); font-size: .8125rem; line-height: 1.45; }
 .team-directory { margin-bottom: 2rem; border: 1px solid #dce9ff; border-radius: .5rem; background: #fff; overflow: hidden; }
 .team-directory__toolbar { display: flex; align-items: end; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; border-bottom: 1px solid #dce9ff; background: #fbfcff; }
@@ -109,7 +115,12 @@ h1 { margin: 0; font-size: 1.5rem; line-height: 1.35; letter-spacing: -.02em; }
 .team-modal .eyebrow { margin: 0; }
 .team-modal p:not(.eyebrow) { margin: 0; color: var(--tf-text-muted); line-height: 1.5; }
 .team-modal__actions { display: flex; justify-content: flex-end; gap: .5rem; }
-.team-toast { position: fixed; z-index: 30; right: 1rem; bottom: 1rem; display: flex; width: min(calc(100% - 2rem), 24rem); align-items: center; justify-content: space-between; gap: .75rem; padding: .875rem 1rem; border: 1px solid #a7e8d6; border-radius: .5rem; color: #00574f; background: #f4fffb; box-shadow: 0 12px 28px rgb(11 28 48 / 18%); font-size: .875rem; font-weight: 700; animation: toast-in .18s ease-out; }
+.team-toast { position: fixed; z-index: 30; right: 1rem; bottom: 1rem; display: flex; width: min(calc(100% - 2rem), 25rem); align-items: flex-start; justify-content: space-between; gap: .75rem; border: 1px solid #93dcca; border-left: .3125rem solid #00776d; border-radius: .5rem; padding: .875rem 1rem; color: #0b1c30; background: #fff; box-shadow: 0 12px 28px rgb(11 28 48 / 18%); animation: toast-in .18s ease-out; }
+.team-toast > div { display: grid; gap: .1875rem; min-width: 0; }
+.team-toast strong { color: #00574f; font-size: .875rem; }
+.team-toast span { color: #536074; font-size: .8125rem; line-height: 1.4; }
+.team-toast--info { border-color: #b7caeb; border-left-color: #3d5ba9; }
+.team-toast--info strong { color: #243d8f; }
 .team-toast button { display: grid; width: 2rem; height: 2rem; flex: 0 0 auto; place-items: center; border: 0; border-radius: .375rem; color: #00574f; background: transparent; font-size: 1.25rem; line-height: 1; cursor: pointer; }
 .team-toast button:hover { background: #d9f8ee; }
 .team-toast button:focus-visible { outline: 3px solid #89f5e7; outline-offset: 2px; }
@@ -117,5 +128,5 @@ h1 { margin: 0; font-size: 1.5rem; line-height: 1.35; letter-spacing: -.02em; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes toast-in { from { transform: translateY(1rem); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .ui-button__spinner { animation-duration: 1.6s; } .team-toast { animation: none; } }
-@media (max-width: 560px) { .team-page { padding-top: 1.25rem; } .team-header, .team-panel__heading, .team-section__heading, .team-directory__toolbar, .team-invitation-item__row { align-items: flex-start; flex-direction: column; } .team-form, .team-link-result__row { grid-template-columns: 1fr; } .team-search, .team-show-more { width: 100%; } .team-list__actions { width: 100%; justify-content: stretch; } .team-list__actions .ui-button, .team-list__actions .team-text-button, .team-link-result__row .ui-button { width: 100%; } .team-modal__actions { align-items: stretch; flex-direction: column-reverse; } .team-modal__actions .ui-button, .team-modal__actions .team-text-button { width: 100%; } .session-home__actions { align-items: stretch; flex-direction: column; } .session-home__actions .ui-button, .session-home__actions .text-link { width: 100%; } }
+@media (max-width: 560px) { .team-page { padding-top: 1.25rem; } .team-header, .team-panel__heading, .team-section__heading, .team-directory__toolbar, .team-invitation-item__row, .team-link-result__footer { align-items: flex-start; flex-direction: column; } .team-form, .team-link-result__row { grid-template-columns: 1fr; } .team-search, .team-show-more { width: 100%; } .team-list__actions { width: 100%; justify-content: stretch; } .team-list__actions .ui-button, .team-list__actions .team-text-button, .team-link-result__row .ui-button { width: 100%; } .team-modal__actions { align-items: stretch; flex-direction: column-reverse; } .team-modal__actions .ui-button, .team-modal__actions .team-text-button { width: 100%; } .session-home__actions { align-items: stretch; flex-direction: column; } .session-home__actions .ui-button, .session-home__actions .text-link { width: 100%; } }
 @media (max-width: 360px) { .auth-layout { padding: .75rem; } .auth-card__content { padding: 1.5rem 1rem; } h1 { font-size: 1.25rem; } .auth-footer { font-size: .6rem; } }
