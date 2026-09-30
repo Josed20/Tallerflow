@@ -3,9 +3,13 @@ package database
 import (
 	"context"
 	"fmt"
+	"log"
+	"os"
+	"time"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 // Open creates the application's GORM connection. Schema changes are owned by
@@ -15,13 +19,25 @@ func Open(databaseURL string) (*gorm.DB, error) {
 		return nil, fmt.Errorf("database URL is required")
 	}
 
-	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{
-		DisableForeignKeyConstraintWhenMigrating: true,
-	})
+	db, err := gorm.Open(postgres.Open(databaseURL), runtimeGORMConfig())
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 	return db, nil
+}
+
+func runtimeGORMConfig() *gorm.Config {
+	safeLogger := gormlogger.New(log.New(os.Stdout, "\r\n", log.LstdFlags), gormlogger.Config{
+		SlowThreshold:             200 * time.Millisecond,
+		LogLevel:                  gormlogger.Warn,
+		IgnoreRecordNotFoundError: false,
+		Colorful:                  false,
+		ParameterizedQueries:      true,
+	})
+	return &gorm.Config{
+		DisableForeignKeyConstraintWhenMigrating: true,
+		Logger:                                   safeLogger,
+	}
 }
 
 // Ping checks the underlying database/sql connection used by GORM.

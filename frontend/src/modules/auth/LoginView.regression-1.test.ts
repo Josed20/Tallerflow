@@ -11,7 +11,10 @@ describe('LoginView invited email', () => {
     // Report: .gstack/qa-reports/qa-report-localhost-2026-09-29.md
     const router = createRouter({
       history: createMemoryHistory(),
-      routes: [{ path: '/login', component: LoginView }],
+      routes: [
+        { path: '/login', component: LoginView },
+        { path: '/forgot-password', component: { template: '<main />' } },
+      ],
     })
     await router.push('/login?email=new.member@example.test')
     await router.isReady()

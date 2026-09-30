@@ -64,6 +64,33 @@ func TestSessionCreateStoresOnlyPepperedTokenDigest(t *testing.T) {
 	}
 }
 
+func TestSessionPrepareReturnsRawBrowserValuesWithoutWriting(t *testing.T) {
+	repo := &fakeSessionRepository{}
+	randomBytes := make([]byte, 32)
+	for i := range randomBytes {
+		randomBytes[i] = byte(i + 1)
+	}
+	service := NewSessionService(repo, testPepper, fixedClock(testNow), bytes.NewReader(randomBytes))
+
+	prepared, err := service.Prepare(testUserID, SessionMetadata{IPPrefix: "203.0.113.0/24", UserAgent: "browser"})
+
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if repo.inserted != nil {
+		t.Fatal("Prepare() wrote a session before its caller's transaction")
+	}
+	if prepared.Token == "" || prepared.CSRFToken == "" || prepared.Created.UserID != testUserID {
+		t.Fatalf("Prepare() returned incomplete values: %+v", prepared)
+	}
+	if prepared.CSRFToken != security.DeriveCSRFToken(testPepper, prepared.Token) {
+		t.Fatal("Prepare() returned a CSRF token not bound to the opaque token")
+	}
+	if prepared.Created.Metadata.IPPrefix != "203.0.113.0/24" || prepared.Created.Metadata.UserAgent != "browser" {
+		t.Fatalf("Prepare() lost session metadata: %+v", prepared.Created.Metadata)
+	}
+}
+
 func TestSessionAuthenticateUsesPepperedDigest(t *testing.T) {
 	const rawToken = "3fUHx2rXJ0l6R1l-VV5I8JH8sRj2r0N-fzpZ08O1ZJc"
 	wantSession := Session{

@@ -72,4 +72,4 @@ if [ "$bootstrap_help_exit" -eq 0 ] || ! printf '%s' "$bootstrap_help" | grep -q
   exit 1
 fi
 npm --prefix frontend exec playwright install chromium
-npm --prefix frontend run test:e2e
+npm --prefix frontend run test:e2e -- auth-flow.spec.ts

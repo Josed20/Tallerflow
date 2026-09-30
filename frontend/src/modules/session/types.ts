@@ -14,6 +14,7 @@ export interface SessionPrincipal {
 
 export interface AuthSessionPayload {
   data: {
+    expires_at: string
     csrf_token: string
     must_change_password: boolean
   }

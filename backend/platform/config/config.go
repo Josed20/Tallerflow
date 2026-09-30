@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -16,30 +17,47 @@ const (
 // Config contains the process configuration read from TF_* environment
 // variables. Secret values must never be included in returned errors.
 type Config struct {
-	Environment    string
-	HTTPAddress    string
-	DatabaseURL    string
-	SessionPepper  string
-	AllowedOrigin  string
-	TrustedProxies []string
+	Environment          string
+	HTTPAddress          string
+	DatabaseURL          string
+	BootstrapDatabaseURL string
+	SessionPepper        string
+	AllowedOrigin        string
+	TrustedProxies       []string
+	PasswordResetBaseURL string
+	SMTPHost             string
+	SMTPPort             string
+	SMTPUsername         string
+	SMTPPassword         string
+	SMTPFromAddress      string
+	SMTPRequireTLS       bool
 }
 
 // Load reads and validates the API process configuration.
 func Load() (Config, error) {
 	cfg := Config{
-		Environment:   valueOrDefault("TF_ENVIRONMENT", defaultEnvironment),
-		HTTPAddress:   valueOrDefault("TF_HTTP_ADDRESS", defaultHTTPAddress),
-		DatabaseURL:   os.Getenv("TF_DATABASE_URL"),
-		SessionPepper: os.Getenv("TF_SESSION_PEPPER"),
-		AllowedOrigin: strings.TrimSpace(os.Getenv("TF_ALLOWED_ORIGIN")),
+		Environment:          valueOrDefault("TF_ENVIRONMENT", defaultEnvironment),
+		HTTPAddress:          valueOrDefault("TF_HTTP_ADDRESS", defaultHTTPAddress),
+		DatabaseURL:          os.Getenv("TF_DATABASE_URL"),
+		BootstrapDatabaseURL: os.Getenv("TF_BOOTSTRAP_DATABASE_URL"),
+		SessionPepper:        os.Getenv("TF_SESSION_PEPPER"),
+		AllowedOrigin:        strings.TrimSpace(os.Getenv("TF_ALLOWED_ORIGIN")),
+		SMTPHost:             valueOrDefault("TF_SMTP_HOST", "localhost"),
+		SMTPPort:             valueOrDefault("TF_SMTP_PORT", "1025"),
+		SMTPUsername:         strings.TrimSpace(os.Getenv("TF_SMTP_USER")),
+		SMTPPassword:         os.Getenv("TF_SMTP_PASSWORD"),
+		SMTPFromAddress:      valueOrDefault("TF_SMTP_FROM", "soporte@tallerflow.pe"),
 	}
 
-	missing := make([]string, 0, 3)
+	missing := make([]string, 0, 4)
 	if strings.TrimSpace(cfg.DatabaseURL) == "" {
 		missing = append(missing, "TF_DATABASE_URL")
 	}
 	if strings.TrimSpace(cfg.SessionPepper) == "" {
 		missing = append(missing, "TF_SESSION_PEPPER")
+	}
+	if strings.TrimSpace(cfg.BootstrapDatabaseURL) == "" {
+		missing = append(missing, "TF_BOOTSTRAP_DATABASE_URL")
 	}
 	if cfg.AllowedOrigin == "" {
 		missing = append(missing, "TF_ALLOWED_ORIGIN")
@@ -57,6 +75,25 @@ func Load() (Config, error) {
 	}
 	if cfg.Environment == "production" && origin.Scheme != "https" {
 		return Config{}, fmt.Errorf("TF_ALLOWED_ORIGIN is invalid")
+	}
+	cfg.PasswordResetBaseURL = valueOrDefault("TF_PASSWORD_RESET_BASE_URL", cfg.AllowedOrigin)
+	resetURL, err := url.Parse(cfg.PasswordResetBaseURL)
+	if err != nil || resetURL.Host == "" || (resetURL.Scheme != "http" && resetURL.Scheme != "https") {
+		return Config{}, fmt.Errorf("TF_PASSWORD_RESET_BASE_URL is invalid")
+	}
+	if cfg.Environment == "production" && resetURL.Scheme != "https" {
+		return Config{}, fmt.Errorf("TF_PASSWORD_RESET_BASE_URL is invalid")
+	}
+
+	cfg.SMTPRequireTLS = cfg.Environment == "production"
+	if configuredTLS := strings.TrimSpace(os.Getenv("TF_SMTP_REQUIRE_TLS")); configuredTLS != "" {
+		cfg.SMTPRequireTLS, err = strconv.ParseBool(configuredTLS)
+		if err != nil {
+			return Config{}, fmt.Errorf("TF_SMTP_REQUIRE_TLS is invalid")
+		}
+	}
+	if cfg.Environment == "production" && !cfg.SMTPRequireTLS {
+		return Config{}, fmt.Errorf("TF_SMTP_REQUIRE_TLS is invalid")
 	}
 
 	cfg.TrustedProxies, err = trustedProxies(cfg.Environment, os.Getenv("TF_TRUSTED_PROXIES"))

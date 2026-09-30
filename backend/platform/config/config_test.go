@@ -46,6 +46,7 @@ func TestLoadRejectsMissingSecretsWithoutLeakingConfiguredValues(t *testing.T) {
 
 func TestLoadUsesDefaultHTTPAddress(t *testing.T) {
 	t.Setenv("TF_DATABASE_URL", "postgres://tallerflow:password@localhost:5432/tallerflow")
+	t.Setenv("TF_BOOTSTRAP_DATABASE_URL", "postgres://tallerflow_bootstrap:password@localhost:5432/tallerflow")
 	t.Setenv("TF_SESSION_PEPPER", "test-session-pepper")
 	t.Setenv("TF_ALLOWED_ORIGIN", "http://localhost:5173")
 	t.Setenv("TF_HTTP_ADDRESS", "")
@@ -54,6 +55,29 @@ func TestLoadUsesDefaultHTTPAddress(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, ":8080", cfg.HTTPAddress)
+}
+
+func TestLoadRequiresBootstrapDatabaseURLWithoutLeakingConfiguredSecrets(t *testing.T) {
+	setValidEnvironment(t)
+	t.Setenv("TF_BOOTSTRAP_DATABASE_URL", "")
+	t.Setenv("TF_DATABASE_URL", "postgres://tallerflow:runtime-secret@localhost:5432/tallerflow")
+
+	_, err := Load()
+
+	require.ErrorContains(t, err, "TF_BOOTSTRAP_DATABASE_URL")
+	require.NotContains(t, err.Error(), "runtime-secret")
+}
+
+func TestLoadKeepsBootstrapDatabaseSeparateFromRuntimeDatabase(t *testing.T) {
+	setValidEnvironment(t)
+	bootstrapURL := "postgres://tallerflow_bootstrap:bootstrap-secret@localhost:5432/tallerflow"
+	t.Setenv("TF_BOOTSTRAP_DATABASE_URL", bootstrapURL)
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	require.Equal(t, bootstrapURL, cfg.BootstrapDatabaseURL)
+	require.NotEqual(t, cfg.DatabaseURL, cfg.BootstrapDatabaseURL)
 }
 
 func TestLoadRequiresAllowedOrigin(t *testing.T) {
@@ -112,6 +136,46 @@ func TestLoadDefaultsTrustedProxyOnlyForProduction(t *testing.T) {
 	require.Equal(t, []string{"172.16.0.0/12"}, production.TrustedProxies)
 }
 
+func TestLoadDefaultsPasswordResetDeliveryForDevelopment(t *testing.T) {
+	setValidEnvironment(t)
+	t.Setenv("TF_SMTP_HOST", "")
+	t.Setenv("TF_SMTP_PORT", "")
+	t.Setenv("TF_SMTP_FROM", "")
+	t.Setenv("TF_SMTP_REQUIRE_TLS", "")
+	t.Setenv("TF_PASSWORD_RESET_BASE_URL", "")
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	require.Equal(t, "localhost", cfg.SMTPHost)
+	require.Equal(t, "1025", cfg.SMTPPort)
+	require.Equal(t, "soporte@tallerflow.pe", cfg.SMTPFromAddress)
+	require.False(t, cfg.SMTPRequireTLS)
+	require.Equal(t, cfg.AllowedOrigin, cfg.PasswordResetBaseURL)
+}
+
+func TestLoadRejectsInvalidSMTPTLSFlagWithoutLeakingValue(t *testing.T) {
+	setValidEnvironment(t)
+	t.Setenv("TF_SMTP_REQUIRE_TLS", "not-a-boolean-secret")
+
+	_, err := Load()
+
+	require.ErrorContains(t, err, "TF_SMTP_REQUIRE_TLS")
+	require.NotContains(t, err.Error(), "not-a-boolean-secret")
+}
+
+func TestLoadRejectsDisabledSMTPTLSInProduction(t *testing.T) {
+	setValidEnvironment(t)
+	t.Setenv("TF_ENVIRONMENT", "production")
+	t.Setenv("TF_ALLOWED_ORIGIN", "https://app.tallerflow.test")
+	t.Setenv("TF_PASSWORD_RESET_BASE_URL", "https://app.tallerflow.test")
+	t.Setenv("TF_SMTP_REQUIRE_TLS", "false")
+
+	_, err := Load()
+
+	require.ErrorContains(t, err, "TF_SMTP_REQUIRE_TLS")
+}
+
 func TestLoadRejectsInvalidTrustedProxyWithoutLeakingValue(t *testing.T) {
 	setValidEnvironment(t)
 	t.Setenv("TF_TRUSTED_PROXIES", "not-a-network-secret")
@@ -125,7 +189,15 @@ func TestLoadRejectsInvalidTrustedProxyWithoutLeakingValue(t *testing.T) {
 func setValidEnvironment(t *testing.T) {
 	t.Helper()
 	t.Setenv("TF_DATABASE_URL", "postgres://tallerflow:password@localhost:5432/tallerflow")
+	t.Setenv("TF_BOOTSTRAP_DATABASE_URL", "postgres://tallerflow_bootstrap:password@localhost:5432/tallerflow")
 	t.Setenv("TF_SESSION_PEPPER", "test-session-pepper")
 	t.Setenv("TF_ALLOWED_ORIGIN", "http://localhost:5173")
 	t.Setenv("TF_ENVIRONMENT", "development")
+	t.Setenv("TF_PASSWORD_RESET_BASE_URL", "")
+	t.Setenv("TF_SMTP_HOST", "")
+	t.Setenv("TF_SMTP_PORT", "")
+	t.Setenv("TF_SMTP_USER", "")
+	t.Setenv("TF_SMTP_PASSWORD", "")
+	t.Setenv("TF_SMTP_FROM", "")
+	t.Setenv("TF_SMTP_REQUIRE_TLS", "")
 }

@@ -24,6 +24,12 @@ type SessionService struct {
 	random     io.Reader
 }
 
+type PreparedSession struct {
+	Token     string
+	CSRFToken string
+	Created   NewSession
+}
+
 func NewSessionService(repository SessionRepository, pepper []byte, clock func() time.Time, randomSource io.Reader) *SessionService {
 	if clock == nil {
 		clock = time.Now
@@ -40,52 +46,53 @@ func NewSessionService(repository SessionRepository, pepper []byte, clock func()
 }
 
 func (s *SessionService) Create(ctx context.Context, userID uuid.UUID, metadata SessionMetadata) (RawSession, error) {
-	token, created, err := s.prepare(userID, metadata)
+	prepared, err := s.Prepare(userID, metadata)
 	if err != nil {
 		return RawSession{}, err
 	}
-	session, err := s.repository.Insert(ctx, created)
+	session, err := s.repository.Insert(ctx, prepared.Created)
 	if err != nil {
 		return RawSession{}, err
 	}
-	return RawSession{Token: token, ExpiresAt: created.ExpiresAt, Session: session}, nil
+	return RawSession{Token: prepared.Token, CSRFToken: prepared.CSRFToken, ExpiresAt: prepared.Created.ExpiresAt, Session: session}, nil
 }
 
 func (s *SessionService) CreateForCredential(ctx context.Context, userID uuid.UUID, verifiedHash string, metadata SessionMetadata) (RawSession, error) {
-	token, created, err := s.prepare(userID, metadata)
+	prepared, err := s.Prepare(userID, metadata)
 	if err != nil {
 		return RawSession{}, err
 	}
-	session, err := s.repository.InsertForCredential(ctx, verifiedHash, created)
+	session, err := s.repository.InsertForCredential(ctx, verifiedHash, prepared.Created)
 	if err != nil {
 		return RawSession{}, err
 	}
-	return RawSession{Token: token, ExpiresAt: created.ExpiresAt, Session: session}, nil
+	return RawSession{Token: prepared.Token, CSRFToken: prepared.CSRFToken, ExpiresAt: prepared.Created.ExpiresAt, Session: session}, nil
 }
 
 func (s *SessionService) ChangePasswordAndCreate(ctx context.Context, userID uuid.UUID, expectedHash, replacementHash string, metadata SessionMetadata) (RawSession, error) {
-	token, created, err := s.prepare(userID, metadata)
+	prepared, err := s.Prepare(userID, metadata)
 	if err != nil {
 		return RawSession{}, err
 	}
-	session, err := s.repository.ChangePasswordAndInsert(ctx, userID, expectedHash, replacementHash, created.CreatedAt, created)
+	session, err := s.repository.ChangePasswordAndInsert(ctx, userID, expectedHash, replacementHash, prepared.Created.CreatedAt, prepared.Created)
 	if err != nil {
 		return RawSession{}, err
 	}
-	return RawSession{Token: token, ExpiresAt: created.ExpiresAt, Session: session}, nil
+	return RawSession{Token: prepared.Token, CSRFToken: prepared.CSRFToken, ExpiresAt: prepared.Created.ExpiresAt, Session: session}, nil
 }
 
-func (s *SessionService) prepare(userID uuid.UUID, metadata SessionMetadata) (string, NewSession, error) {
+func (s *SessionService) Prepare(userID uuid.UUID, metadata SessionMetadata) (PreparedSession, error) {
 	if err := s.validateConfiguration(); err != nil {
-		return "", NewSession{}, err
+		return PreparedSession{}, err
 	}
 
 	token, err := security.RandomToken(s.random, sessionTokenBytes)
 	if err != nil {
-		return "", NewSession{}, err
+		return PreparedSession{}, err
 	}
 	now := s.clock().UTC()
-	csrfTokenHash := sha256.Sum256([]byte(security.DeriveCSRFToken(s.pepper, token)))
+	csrfToken := security.DeriveCSRFToken(s.pepper, token)
+	csrfTokenHash := sha256.Sum256([]byte(csrfToken))
 	created := NewSession{
 		UserID:        userID,
 		TokenHash:     security.TokenDigest(s.pepper, token),
@@ -94,7 +101,7 @@ func (s *SessionService) prepare(userID uuid.UUID, metadata SessionMetadata) (st
 		CreatedAt:     now,
 		ExpiresAt:     now.Add(sessionLifetime),
 	}
-	return token, created, nil
+	return PreparedSession{Token: token, CSRFToken: csrfToken, Created: created}, nil
 }
 
 func (s *SessionService) Authenticate(ctx context.Context, rawToken string) (Session, error) {

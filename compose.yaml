@@ -45,11 +45,19 @@ services:
       dockerfile: Dockerfile
     environment:
       TF_DATABASE_URL: ${TF_DATABASE_URL:-postgres://tallerflow_app:local-app-change-me@postgres:5432/tallerflow?sslmode=disable}
+      TF_BOOTSTRAP_DATABASE_URL: ${TF_BOOTSTRAP_DATABASE_URL:-postgres://tallerflow_bootstrap:local-bootstrap-change-me@postgres:5432/tallerflow?sslmode=disable}
       TF_HTTP_ADDRESS: ":8080"
       TF_ENVIRONMENT: ${TF_ENVIRONMENT:-development}
       TF_SESSION_PEPPER: ${TF_SESSION_PEPPER:-local-session-pepper-change-me}
       TF_ALLOWED_ORIGIN: ${TF_ALLOWED_ORIGIN:-http://localhost:8080}
       TF_TRUSTED_PROXIES: ${TF_TRUSTED_PROXIES:-172.16.0.0/12}
+      TF_PASSWORD_RESET_BASE_URL: ${TF_PASSWORD_RESET_BASE_URL:-http://localhost:8080}
+      TF_SMTP_HOST: ${TF_SMTP_HOST:-localhost}
+      TF_SMTP_PORT: ${TF_SMTP_PORT:-1025}
+      TF_SMTP_USER: ${TF_SMTP_USER:-}
+      TF_SMTP_PASSWORD: ${TF_SMTP_PASSWORD:-}
+      TF_SMTP_FROM: ${TF_SMTP_FROM:-soporte@tallerflow.pe}
+      TF_SMTP_REQUIRE_TLS: ${TF_SMTP_REQUIRE_TLS:-false}
     depends_on:
       flyway:
         condition: service_completed_successfully
