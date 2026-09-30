@@ -55,8 +55,8 @@ func NewSMTPDelivery(cfg SMTPDeliveryConfig) (*SMTPDelivery, error) {
 	if (cfg.Username != "" || cfg.Password != "") && !cfg.RequireTLS {
 		return nil, fmt.Errorf("smtp authentication requires TLS")
 	}
-	if !cfg.RequireTLS && !isLoopbackSMTPHost(cfg.Host) {
-		return nil, fmt.Errorf("SMTP TLS is required for non-loopback hosts")
+	if !cfg.RequireTLS && !isLocalDevelopmentSMTPHost(cfg.Host) {
+		return nil, fmt.Errorf("SMTP TLS is required for non-local hosts")
 	}
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = 10 * time.Second
@@ -64,8 +64,8 @@ func NewSMTPDelivery(cfg SMTPDeliveryConfig) (*SMTPDelivery, error) {
 	return &SMTPDelivery{config: cfg}, nil
 }
 
-func isLoopbackSMTPHost(host string) bool {
-	if strings.EqualFold(host, "localhost") {
+func isLocalDevelopmentSMTPHost(host string) bool {
+	if strings.EqualFold(host, "localhost") || strings.EqualFold(host, "mailpit") {
 		return true
 	}
 	ip := net.ParseIP(host)

@@ -49,9 +49,10 @@ func TestNewSMTPDeliveryRejectsPlaintextRemoteRelay(t *testing.T) {
 }
 
 func TestNewSMTPDeliveryAcceptsMailpitWithoutCredentials(t *testing.T) {
-	delivery, err := NewSMTPDelivery(SMTPDeliveryConfig{Host: "127.0.0.1", Port: "1025", Timeout: time.Second})
+	delivery, err := NewSMTPDelivery(SMTPDeliveryConfig{Host: "mailpit", Port: "1025", Timeout: time.Second})
 
 	require.NoError(t, err)
 	require.False(t, delivery.config.RequireTLS)
+	require.Equal(t, "mailpit", delivery.config.Host)
 	require.Equal(t, time.Second, delivery.config.Timeout)
 }
