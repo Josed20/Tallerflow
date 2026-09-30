@@ -88,7 +88,7 @@ describe('TeamView', () => {
     vi.mocked(teamApi.updateMember).mockResolvedValue({ data: { ...member, status: 'INACTIVE' } })
     await renderTeam()
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Desactivar' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Desactivar acceso' }))
 
     await waitFor(() => expect(screen.getByText('Desactivado')).toBeTruthy())
     expect(teamApi.list).toHaveBeenCalledTimes(1)

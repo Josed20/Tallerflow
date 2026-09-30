@@ -287,8 +287,8 @@ onBeforeUnmount(() => {
               <strong>{{ roleLabel(member.role) }}</strong>
               <span :class="['team-status', member.status === 'ACTIVE' ? 'team-status--active' : 'team-status--inactive']">{{ member.status === 'ACTIVE' ? 'Activo' : 'Desactivado' }}</span>
             </div>
-            <UiButton v-if="session.principal?.role === 'OWNER' && member.user_id !== session.principal.id" variant="secondary" @click="deactivate(member)">
-              {{ member.status === 'ACTIVE' ? 'Desactivar' : 'Activar' }}
+            <UiButton v-if="session.principal?.role === 'OWNER' && member.user_id !== session.principal.id" variant="secondary" :class="['team-member-action', member.status === 'ACTIVE' ? 'team-member-action--deactivate' : 'team-member-action--activate']" @click="deactivate(member)">
+              {{ member.status === 'ACTIVE' ? 'Desactivar acceso' : 'Activar acceso' }}
             </UiButton>
           </article>
         </div>

@@ -91,6 +91,11 @@ h1 { margin: 0; font-size: 1.5rem; line-height: 1.35; letter-spacing: -.02em; }
 .team-status { border-radius: 999px; padding: .25rem .5rem; font-size: .75rem; font-weight: 800; }
 .team-status--active { color: #00574f; background: #ecfff8; }
 .team-status--inactive { color: #7c2d12; background: #fff0e6; }
+.team-member-action { box-shadow: none; }
+.team-member-action--activate { border-color: #8edbc9; color: #00574f; background: #e8fbf4; }
+.team-member-action--activate:hover:not(:disabled) { border-color: #00776d; background: #d2f6e9; }
+.team-member-action--deactivate { border-color: #efd1b8; color: #92400e; background: #fff7ed; }
+.team-member-action--deactivate:hover:not(:disabled) { border-color: #c76a25; background: #ffedd5; }
 .team-empty { margin: 0; padding: 1rem; border: 1px dashed #b7caeb; border-radius: .5rem; color: var(--tf-text-muted); background: #fff; }
 .team-list { display: grid; gap: .75rem; padding: 0; margin: 0; list-style: none; }
 .team-invitation-item { display: grid; gap: .875rem; padding: 1rem; border: 1px solid #dce9ff; border-radius: .5rem; background: #fff; }
