@@ -148,7 +148,7 @@ func (h *Handler) Consume(c *gin.Context) {
 		h.fail(c, http.StatusBadRequest, "INVALID_REQUEST", "The request is invalid.")
 		return
 	}
-	if !h.consumeLimiter.Allow(c.ClientIP() + ":" + strings.TrimSpace(request.Token)) {
+	if !h.consumeLimiter.Allow(c.ClientIP()) {
 		c.Header("Retry-After", "900")
 		h.fail(c, http.StatusTooManyRequests, "RATE_LIMITED", "Demasiados intentos. Inténtalo más tarde.")
 		return
