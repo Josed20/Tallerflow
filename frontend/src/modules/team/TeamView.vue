@@ -233,11 +233,12 @@ onBeforeUnmount(() => {
       <div>
         <p class="eyebrow">Equipo</p>
         <h1>Miembros del taller</h1>
+        <p class="team-header__subtitle">Administra quién puede entrar y comparte accesos seguros con tu equipo.</p>
       </div>
       <RouterLink class="text-link" to="/app">Volver</RouterLink>
     </header>
 
-    <section class="team-panel" aria-labelledby="invite-title">
+    <section class="team-panel team-panel--invite" aria-labelledby="invite-title">
       <div class="team-panel__heading">
         <div>
           <h2 id="invite-title">Invitar al equipo</h2>
@@ -245,7 +246,7 @@ onBeforeUnmount(() => {
         </div>
         <span class="team-help">Los enlaces vencen en 7 días.</span>
       </div>
-      <form class="team-form" @submit.prevent="invite">
+      <form class="team-form" aria-label="Crear invitación" @submit.prevent="invite">
         <UiField id="invite-email" v-model="email" name="invite-email" label="Correo de la persona" type="email" autocomplete="email" :required="true" :spellcheck="false" />
         <label class="team-select">
           Rol
@@ -303,8 +304,8 @@ onBeforeUnmount(() => {
         </div>
         <p v-if="teamLoading" class="team-empty" role="status">Cargando equipo…</p>
         <div v-else-if="filteredMembers.length" class="team-grid">
-          <article v-for="member in visibleMembers" :key="member.id" class="team-card">
-            <div>
+          <article v-for="member in visibleMembers" :key="member.id" :class="['team-card', { 'team-card--inactive': member.status !== 'ACTIVE' }]">
+            <div class="team-card__identity">
               <h3>{{ member.display_name }}</h3>
               <p>{{ member.email }}</p>
             </div>
@@ -312,9 +313,12 @@ onBeforeUnmount(() => {
               <strong>{{ roleLabel(member.role) }}</strong>
               <span :class="['team-status', member.status === 'ACTIVE' ? 'team-status--active' : 'team-status--inactive']">{{ member.status === 'ACTIVE' ? 'Activo' : 'Desactivado' }}</span>
             </div>
-            <UiButton v-if="session.principal?.role === 'OWNER' && member.user_id !== session.principal.id" variant="secondary" :class="['team-member-action', member.status === 'ACTIVE' ? 'team-member-action--deactivate' : 'team-member-action--activate']" @click="deactivate(member)">
-              {{ member.status === 'ACTIVE' ? 'Desactivar acceso' : 'Activar acceso' }}
-            </UiButton>
+            <div class="team-card__footer">
+              <UiButton v-if="session.principal?.role === 'OWNER' && member.user_id !== session.principal.id" variant="secondary" :class="['team-member-action', member.status === 'ACTIVE' ? 'team-member-action--deactivate' : 'team-member-action--activate']" @click="deactivate(member)">
+                {{ member.status === 'ACTIVE' ? 'Desactivar acceso' : 'Activar acceso' }}
+              </UiButton>
+              <span v-else-if="member.role === 'OWNER'" class="team-card__owner-note">Acceso principal del taller</span>
+            </div>
           </article>
         </div>
         <p v-else class="team-empty">No se encontraron miembros con esa búsqueda.</p>
@@ -334,7 +338,10 @@ onBeforeUnmount(() => {
             <div class="team-invitation-item__row">
               <div class="team-list__identity">
                 <strong>{{ invitation.email }}</strong>
-                <span>{{ roleLabel(invitation.role) }} · {{ invitationExpiry(invitation.expires_at) }}</span>
+                <div class="team-list__meta">
+                  <span class="team-role-badge">{{ roleLabel(invitation.role) }}</span>
+                  <span class="team-expiry">{{ invitationExpiry(invitation.expires_at) }}</span>
+                </div>
               </div>
               <div class="team-list__actions">
                 <UiButton type="button" variant="secondary" :loading="busyInvitationId === invitation.id" @click="requestInvitationAction('regenerate', invitation)">Generar enlace nuevo</UiButton>

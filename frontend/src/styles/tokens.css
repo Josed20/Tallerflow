@@ -4,10 +4,18 @@
   background: #f8f9ff;
   --tf-primary: #00685f;
   --tf-primary-hover: #008378;
+  --tf-primary-strong: #004f48;
+  --tf-primary-soft: #e9f8f4;
+  --tf-primary-border: #9edbcf;
   --tf-surface: #ffffff;
   --tf-surface-soft: #eff4ff;
+  --tf-surface-subtle: #f7f9fc;
+  --tf-page: #f3f6fa;
+  --tf-ink: #0b1c30;
+  --tf-ink-soft: #334155;
   --tf-text-muted: #3d4947;
   --tf-border: #bcc9c6;
+  --tf-border-soft: #d8e2e8;
   --tf-error: #ba1a1a;
   --tf-error-bg: #ffdad6;
   --tf-success: #087f5b;
@@ -25,4 +33,6 @@
   --tf-danger-soft: #fff0ee;
   --tf-danger-border: #efa9a3;
   --tf-radius: 0.75rem;
+  --tf-shadow-sm: 0 1px 2px rgb(11 28 48 / 6%);
+  --tf-shadow-md: 0 10px 28px rgb(11 28 48 / 9%);
 }
