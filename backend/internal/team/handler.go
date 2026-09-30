@@ -7,6 +7,7 @@ import (
 	"mime"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/Josed20/Tallerflow/backend/platform/httpx"
 	"github.com/Josed20/Tallerflow/backend/platform/security"
@@ -15,18 +16,26 @@ import (
 )
 
 type Handler struct {
-	service       *Service
-	allowedOrigin string
+	service        *Service
+	allowedOrigin  string
+	consumeLimiter *security.MemoryRateLimiter
 }
 
-func NewHandler(service *Service, allowedOrigin string) (*Handler, error) {
+func NewHandler(service *Service, allowedOrigin string, rateLimitSecret ...[]byte) (*Handler, error) {
 	if service == nil {
 		return nil, errors.New("team service is required")
 	}
 	if strings.TrimSpace(allowedOrigin) == "" {
 		return nil, errors.New("allowed origin is required")
 	}
-	return &Handler{service: service, allowedOrigin: allowedOrigin}, nil
+	secret := []byte("team-invitation-consume-rate-limit")
+	if len(rateLimitSecret) > 0 && len(rateLimitSecret[0]) > 0 {
+		secret = rateLimitSecret[0]
+	}
+	return &Handler{
+		service: service, allowedOrigin: allowedOrigin,
+		consumeLimiter: security.NewMemoryRateLimiter(secret, time.Now, 15*time.Minute, 5, 10000),
+	}, nil
 }
 
 type inviteRequest struct {
@@ -137,6 +146,11 @@ func (h *Handler) Consume(c *gin.Context) {
 	var request consumeRequest
 	if err := decodeJSON(c, &request, 1<<20+4096); err != nil {
 		h.fail(c, http.StatusBadRequest, "INVALID_REQUEST", "The request is invalid.")
+		return
+	}
+	if !h.consumeLimiter.Allow(c.ClientIP() + ":" + strings.TrimSpace(request.Token)) {
+		c.Header("Retry-After", "900")
+		h.fail(c, http.StatusTooManyRequests, "RATE_LIMITED", "Demasiados intentos. Inténtalo más tarde.")
 		return
 	}
 	result, err := h.service.Consume(c.Request.Context(), ConsumeInput{

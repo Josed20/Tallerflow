@@ -152,7 +152,7 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 	if err != nil {
 		return nil, fmt.Errorf("create team service: %w", err)
 	}
-	teamHandler, err := team.NewHandler(teamService, cfg.AllowedOrigin)
+	teamHandler, err := team.NewHandler(teamService, cfg.AllowedOrigin, []byte("team-invitation-consume-rate-limit:"+cfg.SessionPepper))
 	if err != nil {
 		return nil, fmt.Errorf("create team handler: %w", err)
 	}
