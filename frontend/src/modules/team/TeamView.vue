@@ -41,6 +41,8 @@ const loading = ref(false)
 const error = ref('')
 const toast = ref<ToastMessage | null>(null)
 const busyInvitationId = ref('')
+const busyMemberId = ref('')
+const copiedUrl = ref('')
 const teamLoading = ref(false)
 const search = ref('')
 const membersLimit = ref(12)
@@ -49,6 +51,7 @@ const pendingInvitationAction = ref<PendingInvitationAction | null>(null)
 const revealedInvitationLink = ref<RevealedInvitationLink | null>(null)
 const replacementLinkVisible = ref(false)
 let toastTimeout: ReturnType<typeof setTimeout> | undefined
+let copyFeedbackTimeout: ReturnType<typeof setTimeout> | undefined
 
 const canInviteAdmin = computed(() => session.principal?.role === 'OWNER')
 const directoryView = computed<DirectoryView>(() => route.query.view === 'invitations' ? 'invitations' : 'members')
@@ -128,6 +131,9 @@ async function invite() {
 async function copyInvitationLink(url: string) {
   try {
     await navigator.clipboard.writeText(url)
+    copiedUrl.value = url
+    if (copyFeedbackTimeout) clearTimeout(copyFeedbackTimeout)
+    copyFeedbackTimeout = setTimeout(() => { copiedUrl.value = '' }, 2500)
     showToast('Enlace copiado', 'Ya puedes enviarlo por el medio que prefieras.', 'info')
   } catch {
     error.value = 'No se pudo copiar el enlace. Selecciónalo y cópialo manualmente.'
@@ -176,7 +182,8 @@ async function confirmInvitationAction() {
 }
 
 async function deactivate(member: TeamMember) {
-  if (!session.csrfToken) return
+  if (!session.csrfToken || busyMemberId.value) return
+  busyMemberId.value = member.id
   error.value = ''
   try {
     const response = await teamApi.updateMember(member.id, { status: member.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' }, session.csrfToken)
@@ -188,6 +195,8 @@ async function deactivate(member: TeamMember) {
     )
   } catch {
     error.value = 'No se pudo actualizar el miembro. Inténtalo otra vez.'
+  } finally {
+    busyMemberId.value = ''
   }
 }
 
@@ -224,6 +233,7 @@ function showReplacementInvitationLink(id: string) {
 onMounted(loadTeam)
 onBeforeUnmount(() => {
   if (toastTimeout) clearTimeout(toastTimeout)
+  if (copyFeedbackTimeout) clearTimeout(copyFeedbackTimeout)
 })
 </script>
 
@@ -262,7 +272,7 @@ onBeforeUnmount(() => {
         <label for="join-link">Enlace de invitación listo</label>
         <div class="team-link-result__row">
           <input id="join-link" :value="joinUrl" readonly aria-describedby="join-link-help" />
-          <UiButton type="button" @click="copyInvitationLink(joinUrl)">Copiar enlace</UiButton>
+          <UiButton type="button" @click="copyInvitationLink(joinUrl)">{{ copiedUrl === joinUrl ? 'Copiado' : 'Copiar enlace' }}</UiButton>
         </div>
         <div class="team-link-result__footer">
           <p id="join-link-help">Este enlace funciona hasta vencer, ser usado, cancelado o reemplazado por uno nuevo.</p>
@@ -314,7 +324,7 @@ onBeforeUnmount(() => {
               <span :class="['team-status', member.status === 'ACTIVE' ? 'team-status--active' : 'team-status--inactive']">{{ member.status === 'ACTIVE' ? 'Activo' : 'Desactivado' }}</span>
             </div>
             <div class="team-card__footer">
-              <UiButton v-if="session.principal?.role === 'OWNER' && member.user_id !== session.principal.id" variant="secondary" :class="['team-member-action', member.status === 'ACTIVE' ? 'team-member-action--deactivate' : 'team-member-action--activate']" @click="deactivate(member)">
+              <UiButton v-if="session.principal?.role === 'OWNER' && member.user_id !== session.principal.id" variant="secondary" :loading="busyMemberId === member.id" :aria-busy="busyMemberId === member.id" :class="['team-member-action', member.status === 'ACTIVE' ? 'team-member-action--deactivate' : 'team-member-action--activate']" @click="deactivate(member)">
                 {{ member.status === 'ACTIVE' ? 'Desactivar acceso' : 'Activar acceso' }}
               </UiButton>
               <span v-else-if="member.role === 'OWNER'" class="team-card__owner-note">Acceso principal del taller</span>
@@ -352,7 +362,7 @@ onBeforeUnmount(() => {
               <label :for="`invitation-link-${invitation.id}`">Enlace nuevo listo para copiar</label>
               <div class="team-link-result__row">
                 <input :id="`invitation-link-${invitation.id}`" :value="revealedInvitationLink.url" readonly />
-                <UiButton type="button" @click="copyInvitationLink(revealedInvitationLink.url)">Copiar enlace</UiButton>
+                <UiButton type="button" @click="copyInvitationLink(revealedInvitationLink.url)">{{ copiedUrl === revealedInvitationLink.url ? 'Copiado' : 'Copiar enlace' }}</UiButton>
               </div>
               <button class="team-text-button" type="button" @click="hideReplacementInvitationLink(invitation.id)">Ocultar enlace</button>
             </div>
