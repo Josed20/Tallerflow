@@ -1,0 +1,113 @@
+package orders
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/Josed20/Tallerflow/backend/platform/httpx"
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+)
+
+func TestUpdateStageRejectsSupervisor(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &handlerRepository{}
+	handler := NewHandler(NewService(repo))
+	router := gin.New()
+	router.PATCH("/api/v1/orders/:id/stages/:position", principalMiddleware("SUPERVISOR"), handler.UpdateStage)
+
+	request := httptest.NewRequest(http.MethodPatch, "/api/v1/orders/"+uuid.NewString()+"/stages/1", strings.NewReader(`{"status":"COMPLETED"}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("supervisor stage update = %d %s, want 403", response.Code, response.Body.String())
+	}
+	if repo.updateStageCalled {
+		t.Fatal("forbidden stage update reached the repository")
+	}
+}
+
+func TestUpdateStageRejectsStatusOtherThanCompleted(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &handlerRepository{}
+	handler := NewHandler(NewService(repo))
+	router := gin.New()
+	router.PATCH("/api/v1/orders/:id/stages/:position", principalMiddleware("OPERATOR"), handler.UpdateStage)
+
+	request := httptest.NewRequest(http.MethodPatch, "/api/v1/orders/"+uuid.NewString()+"/stages/1", strings.NewReader(`{"status":"PENDING"}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("non-completion update = %d %s, want 422", response.Code, response.Body.String())
+	}
+	if repo.updateStageCalled {
+		t.Fatal("invalid stage update reached the repository")
+	}
+}
+
+func TestAddStagePhotoRejectsOversizedPayloadBeforeRepository(t *testing.T) {
+	repo := &handlerRepository{}
+	service := NewService(repo)
+
+	_, err := service.AddStagePhoto(context.Background(), uuid.New(), uuid.New(), 1, "data:image/jpeg;base64,"+strings.Repeat("A", 4*1024*1024), "")
+
+	if !errors.Is(err, ErrOrderInvalid) {
+		t.Fatalf("oversized photo error = %v, want ErrOrderInvalid", err)
+	}
+	if repo.addStagePhotoCalled {
+		t.Fatal("oversized photo reached the repository")
+	}
+}
+
+func TestAddStagePhotoRejectsNonJPEGDataBeforeRepository(t *testing.T) {
+	repo := &handlerRepository{}
+	service := NewService(repo)
+
+	_, err := service.AddStagePhoto(context.Background(), uuid.New(), uuid.New(), 1, "data:image/png;base64,AAAA", "")
+
+	if !errors.Is(err, ErrOrderInvalid) {
+		t.Fatalf("non-JPEG photo error = %v, want ErrOrderInvalid", err)
+	}
+	if repo.addStagePhotoCalled {
+		t.Fatal("non-JPEG photo reached the repository")
+	}
+}
+
+func principalMiddleware(role string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		httpx.SetPrincipal(c, httpx.Principal{UserID: uuid.New(), WorkshopID: uuid.New(), Email: "worker@example.test", DisplayName: "Worker", Role: role})
+		c.Next()
+	}
+}
+
+type handlerRepository struct {
+	updateStageCalled   bool
+	addStagePhotoCalled bool
+}
+
+func (r *handlerRepository) List(context.Context, uuid.UUID) ([]Order, error) { return nil, nil }
+func (r *handlerRepository) GetByID(context.Context, uuid.UUID, uuid.UUID) (*Order, error) {
+	return nil, ErrOrderNotFound
+}
+func (r *handlerRepository) Create(context.Context, uuid.UUID, CreateOrderInput, string) (*Order, error) {
+	return nil, ErrOrderInvalid
+}
+func (r *handlerRepository) UpdateStage(context.Context, uuid.UUID, uuid.UUID, int, string) (*OrderStage, error) {
+	r.updateStageCalled = true
+	return &OrderStage{}, nil
+}
+func (r *handlerRepository) AddStagePhoto(context.Context, uuid.UUID, uuid.UUID, int, string, string) (*StagePhoto, error) {
+	r.addStagePhotoCalled = true
+	return nil, ErrOrderInvalid
+}
+func (r *handlerRepository) GetDashboardMetrics(context.Context, uuid.UUID) (*DashboardMetrics, error) {
+	return nil, nil
+}

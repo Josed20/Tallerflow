@@ -173,6 +173,10 @@ func (h *Handler) RequireSession() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead && c.Request.Method != http.MethodOptions && !h.requireCSRF(c, result) {
+			c.Abort()
+			return
+		}
 		httpx.SetPrincipal(c, result.Principal)
 		c.Next()
 	}

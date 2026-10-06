@@ -188,6 +188,23 @@ func TestRequireSessionStoresPrincipalInGin(t *testing.T) {
 	}
 }
 
+func TestRequireSessionRejectsMutationsWithoutValidCSRF(t *testing.T) {
+	fixture := newHandlerFixture(t, false)
+	fixture.router.POST("/api/v1/private-mutation", fixture.handler.RequireSession(), func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+
+	missing := fixture.request(http.MethodPost, "/api/v1/private-mutation", "", handlerOrigin, "", handlerToken)
+	if missing.Code != http.StatusForbidden || responseErrorCode(t, missing) != "CSRF_INVALID" {
+		t.Fatalf("mutation without csrf = %d %s, want 403 CSRF_INVALID", missing.Code, missing.Body.String())
+	}
+
+	valid := fixture.request(http.MethodPost, "/api/v1/private-mutation", "", handlerOrigin, handlerCSRF, handlerToken)
+	if valid.Code != http.StatusNoContent {
+		t.Fatalf("mutation with csrf = %d %s, want 204", valid.Code, valid.Body.String())
+	}
+}
+
 type handlerUseCases struct {
 	invalid    bool
 	mustChange bool
@@ -239,6 +256,7 @@ func (u *handlerUseCases) ChangePassword(_ context.Context, token, current, next
 
 type handlerFixture struct {
 	router   *gin.Engine
+	handler  *Handler
 	useCases *handlerUseCases
 }
 
@@ -262,7 +280,7 @@ func newHandlerFixture(t *testing.T, mustChange bool) *handlerFixture {
 		}
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"user_id": principal.UserID}})
 	})
-	return &handlerFixture{router: router, useCases: u}
+	return &handlerFixture{router: router, handler: handler, useCases: u}
 }
 
 func (f *handlerFixture) request(method, path, body, origin, csrf, token string) *httptest.ResponseRecorder {

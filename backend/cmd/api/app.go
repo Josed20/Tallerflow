@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/Josed20/Tallerflow/backend/internal/auth"
+	"github.com/Josed20/Tallerflow/backend/internal/clients"
 	"github.com/Josed20/Tallerflow/backend/internal/onboarding"
+	"github.com/Josed20/Tallerflow/backend/internal/orders"
 	"github.com/Josed20/Tallerflow/backend/internal/passwordreset"
 	"github.com/Josed20/Tallerflow/backend/internal/team"
 	"github.com/Josed20/Tallerflow/backend/internal/workshops"
@@ -157,6 +159,20 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 		return nil, fmt.Errorf("create team handler: %w", err)
 	}
 	passwordResetHandler := passwordreset.NewHandler(passwordResetService)
+	clientsRepo, err := clients.NewPostgresRepository(tenantRunner)
+	if err != nil {
+		return nil, fmt.Errorf("create clients repository: %w", err)
+	}
+	clientsService := clients.NewService(clientsRepo)
+	clientsHandler := clients.NewHandler(clientsService)
+
+	ordersRepo, err := orders.NewPostgresRepository(tenantRunner)
+	if err != nil {
+		return nil, fmt.Errorf("create orders repository: %w", err)
+	}
+	ordersService := orders.NewService(ordersRepo)
+	ordersHandler := orders.NewHandler(ordersService)
+
 	ping := func(ctx context.Context) error {
 		if err := database.Ping(ctx, db); err != nil {
 			return err
@@ -174,6 +190,12 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 			},
 			func(routes gin.IRouter) {
 				team.RegisterRoutes(routes, teamHandler, authHandler.RequireSession())
+			},
+			func(routes gin.IRouter) {
+				clients.RegisterRoutes(routes, clientsHandler, authHandler.RequireSession())
+			},
+			func(routes gin.IRouter) {
+				orders.RegisterRoutes(routes, ordersHandler, authHandler.RequireSession())
 			},
 		},
 	})

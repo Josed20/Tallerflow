@@ -6,6 +6,7 @@ dist/
 node_modules/
 tmp/
 .superpowers/
+gstack/
 sprint1-compose.log
 sprint2-compose.log
 frontend/playwright-report/

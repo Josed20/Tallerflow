@@ -1,8 +1,8 @@
 # TallerFlow — Sprint 2: acceso autónomo y operación básica
 
 - **Fecha:** 2026-09-27
-- **Duración propuesta:** 10 días hábiles
-- **Equipo:** José, Lucero, Michelle y Stephano
+- **Duración propuesta:** 5 días hábiles
+- **Equipo:** José, Lucero, Michelle y Stefano
 - **Estado:** especificación lista para revisión del equipo
 - **Objetivo:** un dueño nuevo crea el primer taller sin terminal, entra a TallerFlow, registra clientes y órdenes, consulta su operación y administra a su equipo.
 

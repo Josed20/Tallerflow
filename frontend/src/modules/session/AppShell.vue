@@ -7,6 +7,7 @@ import { canManageOperations } from './role-policy'
 const session = useSessionStore()
 const router = useRouter()
 const canManage = computed(() => canManageOperations(session.principal?.role))
+const isOperator = computed(() => session.principal?.role === 'OPERATOR')
 
 async function signOut() {
   await session.logout()
@@ -19,7 +20,8 @@ async function signOut() {
     <aside class="app-shell__sidebar" aria-label="Navegación principal">
       <RouterLink class="app-shell__brand" to="/app">TallerFlow</RouterLink>
       <nav class="app-shell__nav" aria-label="Secciones internas">
-        <RouterLink to="/app">Panel</RouterLink>
+        <RouterLink v-if="canManage" to="/app">Panel</RouterLink>
+        <RouterLink v-if="isOperator" to="/app/production">Producción</RouterLink>
         <RouterLink to="/app/orders">Órdenes</RouterLink>
         <RouterLink v-if="canManage" to="/app/clients">Clientes</RouterLink>
         <RouterLink v-if="canManage" to="/app/orders/new">Nueva orden</RouterLink>
@@ -30,7 +32,7 @@ async function signOut() {
 
     <div class="app-shell__main">
       <header v-if="$slots.header" class="app-shell__header"><slot name="header" /></header>
-      <main class="app-shell__content"><slot /></main>
+      <div class="app-shell__content"><slot /></div>
     </div>
   </div>
 </template>

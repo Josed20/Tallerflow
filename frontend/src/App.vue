@@ -1,7 +1,17 @@
 <script setup lang="ts">
-import { RouterView } from 'vue-router'
+import { computed } from 'vue'
+import { RouterView, useRoute } from 'vue-router'
+import AppShell from './modules/session/AppShell.vue'
+
+const route = useRoute()
+const usesInternalShell = computed(() => route.path.startsWith('/app'))
 </script>
 
 <template>
-  <RouterView />
+  <RouterView v-slot="{ Component }">
+    <AppShell v-if="usesInternalShell">
+      <component :is="Component" />
+    </AppShell>
+    <component :is="Component" v-else />
+  </RouterView>
 </template>

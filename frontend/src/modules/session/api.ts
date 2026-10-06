@@ -27,21 +27,23 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
 
 export const api = {
   get: <T>(path: string) => request<T>(path, { method: 'GET' }),
-  post: <T>(path: string, body?: unknown, csrfToken?: string) =>
+  post: <T>(path: string, body?: unknown, csrfToken?: string, headers?: Record<string, string>) =>
     request<T>(path, {
       method: 'POST',
       headers: {
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
         ...(csrfToken === undefined ? {} : { 'X-CSRF-Token': csrfToken }),
+        ...(headers ?? {}),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
-  patch: <T>(path: string, body?: unknown, csrfToken?: string) =>
+  patch: <T>(path: string, body?: unknown, csrfToken?: string, headers?: Record<string, string>) =>
     request<T>(path, {
       method: 'PATCH',
       headers: {
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
         ...(csrfToken === undefined ? {} : { 'X-CSRF-Token': csrfToken }),
+        ...(headers ?? {}),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     }),

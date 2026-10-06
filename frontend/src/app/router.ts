@@ -10,6 +10,14 @@ import ForgotPasswordView from '../modules/password-reset/ForgotPasswordView.vue
 import ResetPasswordView from '../modules/password-reset/ResetPasswordView.vue'
 import SessionHomeView from '../modules/session/SessionHomeView.vue'
 import TeamView from '../modules/team/TeamView.vue'
+import ClientsView from '../modules/clients/ClientsView.vue'
+import OrdersListView from '../modules/orders/OrdersListView.vue'
+import OrderCreateView from '../modules/orders/OrderCreateView.vue'
+import OrderDetailView from '../modules/orders/OrderDetailView.vue'
+import OperatorQueueView from '../modules/orders/OperatorQueueView.vue'
+import ClientPortalAccessView from '../modules/client-portal/ClientPortalAccessView.vue'
+import ClientPortalOrdersView from '../modules/client-portal/ClientPortalOrdersView.vue'
+import ClientPortalOrderDetailView from '../modules/client-portal/ClientPortalOrderDetailView.vue'
 import { useOnboardingStore } from '../modules/onboarding/onboarding.store'
 import { useSessionStore } from '../modules/session/session.store'
 
@@ -26,7 +34,15 @@ export const routes = [
   { path: '/forgot-password', name: 'forgot-password', component: ForgotPasswordView, meta: { public: true } },
   { path: '/reset-password', name: 'reset-password', component: ResetPasswordView, meta: { public: true, allowAuthenticated: true } },
   { path: '/change-password', name: 'change-password', component: ChangePasswordView },
+  { path: '/portal/access', name: 'portal-access', component: ClientPortalAccessView, meta: { public: true } },
+  { path: '/portal/orders', name: 'portal-orders', component: ClientPortalOrdersView, meta: { public: true } },
+  { path: '/portal/orders/:id', name: 'portal-order-detail', component: ClientPortalOrderDetailView, meta: { public: true } },
   { path: '/app', name: 'app', component: SessionHomeView },
+  { path: '/app/production', name: 'production', component: OperatorQueueView, meta: { roles: ['OWNER', 'ADMIN', 'OPERATOR'] } },
+  { path: '/app/clients', name: 'clients', component: ClientsView, meta: { roles: ['OWNER', 'ADMIN'] } },
+  { path: '/app/orders', name: 'orders', component: OrdersListView },
+  { path: '/app/orders/new', name: 'orders-new', component: OrderCreateView, meta: { roles: ['OWNER', 'ADMIN'] } },
+  { path: '/app/orders/:id', name: 'orders-detail', component: OrderDetailView },
   { path: '/app/team', name: 'team', component: TeamView, meta: { roles: ['OWNER', 'ADMIN'] } },
   { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundView, meta: { public: true } },
 ]
@@ -63,6 +79,10 @@ export function createAppRouter({ pinia, history }: AppRouterOptions) {
     const allowedRoles = to.meta.roles as string[] | undefined
     if (allowedRoles && !allowedRoles.includes(session.principal?.role ?? '')) {
       return '/app'
+    }
+
+    if (to.name === 'app' && session.principal?.role === 'OPERATOR') {
+      return '/app/production'
     }
 
     if (session.requiresPasswordChange && to.name !== 'change-password') {
