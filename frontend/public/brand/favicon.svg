@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="TallerFlow">
+  <rect width="64" height="64" rx="13" fill="#143e40"/>
+  <path fill="#86e0c8" d="M19 11h36l-6 11H23c-3 0-5 2-5 5v28L8 49V27c0-10 4-16 11-16Z"/>
+  <path fill="#fff" d="M23 27h31l-6 11H25c-4 0-6 2-7 5V34c0-4 2-7 5-7Z"/>
+</svg>

@@ -5,6 +5,7 @@ import { clientPortalApi } from './api'
 import type { ClientPortalOrder } from './types'
 import { Cog } from '@lucide/vue'
 import { formatOrderQuantity } from '../orders/order-display'
+import BrandLogo from '../../components/BrandLogo.vue'
 
 const route = useRoute()
 const order = ref<ClientPortalOrder | null>(null)
@@ -66,7 +67,7 @@ onMounted(loadOrder)
         <RouterLink class="portal-back-btn" to="/portal/orders">
           ← Volver a mis pedidos
         </RouterLink>
-        <span class="portal-brand-badge">TallerFlow · Seguimiento en vivo</span>
+        <div class="portal-brand-badge"><BrandLogo class="portal-brand-logo" /><span>Seguimiento en vivo</span></div>
       </nav>
 
       <!-- Estado de Carga -->
@@ -198,8 +199,8 @@ onMounted(loadOrder)
 <style scoped>
 .portal-detail-page {
   min-height: 100vh;
-  background: #f8f9ff;
-  color: #0b1c30;
+  background: var(--tf-page);
+  color: var(--tf-ink);
   font-family: Manrope, system-ui, sans-serif;
   padding: 1.25rem 1rem 3rem;
 }
@@ -228,12 +229,15 @@ onMounted(loadOrder)
 }
 
 .portal-brand-badge {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
   font-size: 0.75rem;
   font-weight: 700;
-  color: #565e74;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  color: var(--tf-text-subtle);
 }
+
+.portal-brand-logo { width: 7.5rem; }
 
 .portal-content {
   display: flex;
@@ -243,8 +247,8 @@ onMounted(loadOrder)
 
 /* Banner Taller */
 .workshop-banner {
-  background: #e5eeff;
-  border: 1px solid #d3e4fe;
+  background: var(--tf-primary-soft);
+  border: 1px solid var(--tf-primary-border);
   border-radius: 12px;
   padding: 0.85rem 1rem;
   display: flex;

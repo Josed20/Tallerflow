@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import UiButton from '../../components/UiButton.vue'
+import BrandLogo from '../../components/BrandLogo.vue'
 import { useSessionStore } from '../session/session.store'
 
 const router = useRouter()
@@ -18,7 +19,7 @@ function navigateHome() {
 <template>
   <main class="not-found-layout">
     <div class="not-found-card">
-      <div class="brand-mark" aria-hidden="true">TF</div>
+      <BrandLogo class="not-found-logo" />
       <p class="error-code" aria-hidden="true">404</p>
       <h1>Página no encontrada</h1>
       <p class="not-found-subtitle">
@@ -34,6 +35,7 @@ function navigateHome() {
 </template>
 
 <style scoped>
+.not-found-logo { width: 11.5rem; margin: 0 auto 1.5rem; }
 .not-found-layout {
   display: grid;
   min-height: 100vh;

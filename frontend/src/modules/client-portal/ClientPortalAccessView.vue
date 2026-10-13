@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { clientPortalApi } from './api'
+import BrandLogo from '../../components/BrandLogo.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -50,7 +51,7 @@ onMounted(() => {
 <template>
   <main class="portal-access">
     <section class="portal-access__card" aria-labelledby="portal-access-title">
-      <p class="portal-access__brand">TallerFlow</p>
+      <BrandLogo class="portal-access__brand" />
       <h1 id="portal-access-title">Consulta el avance de tus pedidos</h1>
       <p>Recibirás un enlace privado para ver únicamente los pedidos asociados a tu correo.</p>
       <p v-if="error" class="portal-access__error" role="alert">{{ error }}</p>
@@ -67,7 +68,7 @@ onMounted(() => {
 <style scoped>
 .portal-access { display: grid; min-height: 100vh; place-items: center; padding: 1rem; background: var(--tf-page); color: var(--tf-ink); }
 .portal-access__card { width: min(100%, 29rem); padding: 1.5rem; border: 1px solid var(--tf-border-soft); border-radius: .5rem; background: #fff; box-shadow: var(--tf-shadow-md); }
-.portal-access__brand { margin: 0 0 .5rem; color: var(--tf-primary); font-weight: 900; }
+.portal-access__brand { width: 11.5rem; margin: 0 0 1rem; }
 .portal-access h1 { margin: 0; font-size: 1.75rem; }
 .portal-access form { display: grid; gap: .6rem; margin-top: 1rem; font-weight: 700; }
 .portal-access input, .portal-access button { min-height: 44px; border-radius: .5rem; padding: .625rem .75rem; font: inherit; }

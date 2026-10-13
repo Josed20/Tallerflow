@@ -350,7 +350,7 @@ onUnmounted(closeScanner)
 
 .production-queue__eyebrow {
   margin: 0 0 .25rem;
-  color: var(--tf-primary);
+  color: var(--tf-role-ink);
   font-size: .8rem;
   font-weight: 800;
   text-transform: uppercase;

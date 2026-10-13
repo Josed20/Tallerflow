@@ -123,7 +123,7 @@ onMounted(loadDashboardData)
 .overview-header, .overview-section__head { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
 .overview-header h1 { margin: .2rem 0; color: var(--tf-ink); font-size: var(--tf-page-title-size); }
 .overview-header p:last-child { margin: .2rem 0 0; color: var(--tf-text-subtle); }
-.overview-kicker, .overview-section__kicker { margin: 0; color: var(--tf-primary); font-size: .77rem; font-weight: 800; text-transform: uppercase; }
+.overview-kicker, .overview-section__kicker { margin: 0; color: var(--tf-role-ink); font-size: .77rem; font-weight: 800; text-transform: uppercase; }
 .overview-kicker span { color: var(--tf-border); padding: 0 .35rem; }
 .overview-header__actions { display: flex; gap: .6rem; align-items: center; }
 .overview-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }

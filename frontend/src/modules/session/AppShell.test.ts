@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import AppShell from './AppShell.vue'
 import { useSessionStore } from './session.store'
 
-async function renderShell(role: 'OWNER' | 'OPERATOR') {
+async function renderShell(role: 'OWNER' | 'ADMIN' | 'OPERATOR') {
   const pinia = createPinia()
   const router = createRouter({
     history: createMemoryHistory(),
@@ -22,6 +22,14 @@ describe('AppShell navigation', () => {
     await renderShell('OWNER')
     expect(screen.getByRole('link', { name: 'Clientes' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Producción' })).toBeNull()
+    expect(screen.getByRole('link', { name: 'TallerFlow' }).querySelector('img')?.getAttribute('src')).toBe('/brand/logo-on-dark.svg')
+    expect(document.querySelector('.app-shell')?.getAttribute('data-role')).toBe('OWNER')
+  })
+
+  it('marks the administrator theme without changing shared navigation', async () => {
+    await renderShell('ADMIN')
+    expect(document.querySelector('.app-shell')?.getAttribute('data-role')).toBe('ADMIN')
+    expect(screen.getByRole('link', { name: 'Clientes' })).toBeTruthy()
   })
 
   it('shows the production queue to an operator without management controls', async () => {
@@ -29,5 +37,6 @@ describe('AppShell navigation', () => {
     expect(screen.getByRole('link', { name: 'Producción' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Clientes' })).toBeNull()
     expect(screen.queryByRole('link', { name: 'Nueva orden' })).toBeNull()
+    expect(document.querySelector('.app-shell')?.getAttribute('data-role')).toBe('OPERATOR')
   })
 })

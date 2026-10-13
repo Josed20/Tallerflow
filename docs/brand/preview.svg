@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675">
+  <rect width="1200" height="675" fill="#f3f6fa"/>
+  <text x="68" y="72" fill="#0b1c30" font-family="Arial,sans-serif" font-size="24" font-weight="700">TallerFlow · propuesta de identidad</text>
+  <text x="68" y="106" fill="#52606d" font-family="Arial,sans-serif" font-size="17">Un recorrido continuo, inspirado en una pieza de tela plegada.</text>
+  <rect x="68" y="142" width="510" height="292" rx="8" fill="#fff" stroke="#d8e2e8"/>
+  <text x="98" y="181" fill="#52606d" font-family="Arial,sans-serif" font-size="15">FONDO CLARO</text>
+  <image href="../../frontend/public/brand/logo.svg" x="98" y="214" width="370" height="86"/>
+  <image href="../../frontend/public/brand/symbol.svg" x="98" y="342" width="60" height="60"/>
+  <text x="176" y="376" fill="#334155" font-family="Arial,sans-serif" font-size="16">Símbolo independiente</text>
+  <rect x="602" y="142" width="530" height="292" rx="8" fill="#143e40"/>
+  <text x="632" y="181" fill="#c5ddda" font-family="Arial,sans-serif" font-size="15">FONDO OSCURO</text>
+  <image href="../../frontend/public/brand/logo-on-dark.svg" x="632" y="214" width="370" height="86"/>
+  <image href="../../frontend/public/brand/symbol-on-dark.svg" x="632" y="342" width="60" height="60"/>
+  <text x="710" y="376" fill="#d2e6e4" font-family="Arial,sans-serif" font-size="16">Para barra lateral o cabecera</text>
+  <text x="68" y="500" fill="#0b1c30" font-family="Arial,sans-serif" font-size="18" font-weight="700">Escala de uso</text>
+  <rect x="68" y="526" width="60" height="60" rx="13" fill="#143e40"/>
+  <image href="../../frontend/public/brand/favicon.svg" x="68" y="526" width="60" height="60"/>
+  <image href="../../frontend/public/brand/favicon.svg" x="166" y="540" width="32" height="32"/>
+  <image href="../../frontend/public/brand/favicon.svg" x="236" y="548" width="16" height="16"/>
+  <text x="284" y="559" fill="#52606d" font-family="Arial,sans-serif" font-size="16">Favicon · 64 / 32 / 16 px</text>
+  <rect x="610" y="510" width="42" height="42" rx="4" fill="#00685f"/>
+  <rect x="665" y="510" width="42" height="42" rx="4" fill="#53c7b2"/>
+  <rect x="720" y="510" width="42" height="42" rx="4" fill="#143e40"/>
+  <rect x="775" y="510" width="42" height="42" rx="4" fill="#0b1c30"/>
+  <text x="610" y="582" fill="#52606d" font-family="Arial,sans-serif" font-size="15">Colores del logo, no paleta final de la interfaz</text>
+</svg>

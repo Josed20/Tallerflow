@@ -4,6 +4,7 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { clientPortalApi } from './api'
 import type { ClientPortalOrder } from './types'
+import BrandLogo from '../../components/BrandLogo.vue'
 
 const router = useRouter()
 const orders = ref<ClientPortalOrder[]>([])
@@ -45,9 +46,8 @@ onMounted(loadOrders)
     <div class="portal-container">
       <header class="portal-orders__header">
         <div class="header-brand">
-          <span class="portal-logo-icon">🧵</span>
           <div>
-            <p class="portal-brand-title">TallerFlow</p>
+            <BrandLogo class="portal-brand-logo" />
             <h1>Mis pedidos en taller</h1>
           </div>
         </div>
@@ -102,8 +102,8 @@ onMounted(loadOrders)
 <style scoped>
 .portal-orders-page {
   min-height: 100vh;
-  background: #f8f9ff;
-  color: #0b1c30;
+  background: var(--tf-page);
+  color: var(--tf-ink);
   font-family: Manrope, system-ui, sans-serif;
   padding: 1.5rem 1rem 3rem;
 }
@@ -120,6 +120,7 @@ onMounted(loadOrders)
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
   gap: 1rem;
 }
 
@@ -129,24 +130,13 @@ onMounted(loadOrders)
   gap: 0.75rem;
 }
 
-.portal-logo-icon {
-  font-size: 1.75rem;
-}
-
-.portal-brand-title {
-  margin: 0;
-  color: #00685f;
-  font-size: 0.75rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
+.portal-brand-logo { width: 9.5rem; margin-bottom: .4rem; }
 
 h1 {
   margin: 0;
   font-size: 1.35rem;
   font-weight: 800;
-  color: #0b1c30;
+  color: var(--tf-ink);
 }
 
 .btn-logout {
@@ -161,8 +151,8 @@ h1 {
 }
 
 .portal-welcome-banner {
-  background: #e5eeff;
-  border: 1px solid #d3e4fe;
+  background: var(--tf-primary-soft);
+  border: 1px solid var(--tf-primary-border);
   border-radius: 10px;
   padding: 0.85rem 1rem;
   font-size: 0.85rem;

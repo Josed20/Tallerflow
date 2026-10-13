@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 310 72" role="img" aria-label="TallerFlow">
+  <path fill="#00685f" d="M22 11h39l-7 12H26c-3 0-5 2-5 5v33l-11-7V28c0-10 5-17 12-17Z"/>
+  <path fill="#53c7b2" d="M26 28h34l-7 12H28c-4 0-6 2-7 6V35c0-4 2-7 5-7Z"/>
+  <text x="80" y="48" fill="#0b1c30" font-family="Manrope, Arial, sans-serif" font-size="32" font-weight="800" letter-spacing="0">Taller<tspan fill="#00685f">Flow</tspan></text>
+</svg>
