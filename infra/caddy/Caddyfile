@@ -1,6 +1,14 @@
 {
 	auto_https off
 	admin off
+
+	# Requests reach Caddy through the Docker host or a local tunnel
+	# (cloudflared). Trust their forwarded client IP so the backend rate limits
+	# per visitor instead of per Docker gateway address.
+	servers {
+		trusted_proxies static private_ranges
+		client_ip_headers Cf-Connecting-IP X-Forwarded-For
+	}
 }
 
 :80 {
