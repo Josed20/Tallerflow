@@ -61,6 +61,18 @@ Como alternativa operativa, todavía puedes crear el único `OWNER` inicial por 
 
 Caddy sirve Vue y la API bajo el mismo origen. Los health checks son `/health/live` y `/health/ready`.
 
+## Desarrollo del frontend con recarga en vivo
+
+Con el entorno Docker iniciado (paso 3), levanta Vite para ver cada cambio de Vue al guardar, sin reconstruir el contenedor:
+
+```powershell
+npm --prefix frontend run dev
+```
+
+Abre [http://localhost:5173](http://localhost:5173). Vite reenvía `/api` y `/health` a `http://localhost:8080` y reescribe `Origin`/`Referer` para que el backend acepte las peticiones con CSRF. Para apuntar a otro backend, define `VITE_API_TARGET` (por ejemplo en `frontend/.env.local`).
+
+El contenedor del frontend sirve `index.html` con `Cache-Control: no-cache` y los archivos de `/assets/` con caché inmutable, así que tras reconstruirlo basta una recarga normal para ver la nueva versión.
+
 ## Verificación completa del Sprint 2
 
 En Windows:
