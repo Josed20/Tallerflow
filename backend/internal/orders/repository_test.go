@@ -35,6 +35,48 @@ func TestUpdateStageRejectsCompletingPendingStage(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestReopenStageRejectsWhenNextStageHasEvidence(t *testing.T) {
+	repository, mock := newOrderRepositoryFixture(t)
+	workshopID, orderID, stageID, nextID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT status FROM orders WHERE id = $1 FOR UPDATE")).WithArgs(orderID).
+		WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("ACTIVE"))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, workshop_id, order_id, position, name, status, completed_at FROM order_stages WHERE order_id = $1 AND position = $2")).WithArgs(orderID, 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "workshop_id", "order_id", "position", "name", "status", "completed_at"}).AddRow(stageID, workshopID, orderID, 1, "CORTE", "COMPLETED", time.Now()))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, workshop_id, order_id, position, name, status, completed_at FROM order_stages WHERE order_id = $1 AND position = $2")).WithArgs(orderID, 2).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "workshop_id", "order_id", "position", "name", "status", "completed_at"}).AddRow(nextID, workshopID, orderID, 2, "COSTURA", "IN_PROGRESS", nil))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT count(*) FROM stage_photos WHERE order_id = $1 AND stage_position = $2")).WithArgs(orderID, 2).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+	_, err := repository.ReopenStage(context.Background(), workshopID, orderID, 1, uuid.New(), "Se avanzó por error")
+	require.ErrorIs(t, err, ErrOrderInvalid)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestReopenStageRecordsCorrectionAndRestoresPreviousStage(t *testing.T) {
+	repository, mock := newOrderRepositoryFixture(t)
+	workshopID, orderID, stageID, nextID, actorID := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	now := time.Date(2026, 10, 13, 16, 0, 0, 0, time.UTC)
+	repository.now = func() time.Time { return now }
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT status FROM orders WHERE id = $1 FOR UPDATE")).WithArgs(orderID).
+		WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("ACTIVE"))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, workshop_id, order_id, position, name, status, completed_at FROM order_stages WHERE order_id = $1 AND position = $2")).WithArgs(orderID, 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "workshop_id", "order_id", "position", "name", "status", "completed_at"}).AddRow(stageID, workshopID, orderID, 1, "CORTE", "COMPLETED", now))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, workshop_id, order_id, position, name, status, completed_at FROM order_stages WHERE order_id = $1 AND position = $2")).WithArgs(orderID, 2).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "workshop_id", "order_id", "position", "name", "status", "completed_at"}).AddRow(nextID, workshopID, orderID, 2, "COSTURA", "IN_PROGRESS", nil))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT count(*) FROM stage_photos WHERE order_id = $1 AND stage_position = $2")).WithArgs(orderID, 2).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	mock.ExpectExec("UPDATE order_stages SET status = 'PENDING'").WithArgs(nextID).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE order_stages SET status = 'IN_PROGRESS', completed_at = NULL").WithArgs(stageID).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE orders SET status = 'ACTIVE'").WithArgs(now, orderID).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta("jsonb_build_object('order_id', $3::text, 'stage_position', $4::integer, 'reason', $5::text)")).WithArgs(workshopID, actorID, orderID.String(), 1, "Se marcó por error").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, workshop_id, order_id, position, name, status, completed_at FROM order_stages WHERE id = $1")).WithArgs(stageID).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "workshop_id", "order_id", "position", "name", "status", "completed_at"}).AddRow(stageID, workshopID, orderID, 1, "CORTE", "IN_PROGRESS", nil))
+
+	stage, err := repository.ReopenStage(context.Background(), workshopID, orderID, 1, actorID, "Se marcó por error")
+	require.NoError(t, err)
+	require.Equal(t, "IN_PROGRESS", stage.Status)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 type orderRepositoryTenantRunner struct {
 	db *gorm.DB
 }

@@ -14,7 +14,7 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium-360',
-      use: { ...devices['Desktop Chrome'], viewport: { width: 360, height: 800 } },
+      use: { ...devices['Desktop Chrome'], viewport: { width: 360, height: 800 }, channel: process.env.E2E_BROWSER_CHANNEL === 'chrome' ? 'chrome' : undefined },
     },
   ],
 })

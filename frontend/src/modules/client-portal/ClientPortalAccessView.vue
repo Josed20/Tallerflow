@@ -65,5 +65,16 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.portal-access { display: grid; min-height: 100vh; place-items: center; padding: 1rem; background: #f7faf9; color: #0f172a; }.portal-access__card { width: min(100%, 29rem); padding: 1.5rem; border: 1px solid #cbd5e1; border-radius: 1rem; background: #fff; box-shadow: 0 10px 25px rgb(15 23 42 / 8%); }.portal-access__brand { margin: 0 0 .5rem; color: #0d9488; font-weight: 900; }.portal-access h1 { margin: 0; font-size: clamp(1.5rem, 5vw, 2rem); }.portal-access form { display: grid; gap: .6rem; margin-top: 1rem; font-weight: 700; }.portal-access input, .portal-access button { min-height: 44px; border-radius: .5rem; padding: .625rem .75rem; font: inherit; }.portal-access input { border: 1px solid #94a3b8; }.portal-access button { border: 0; background: #0d9488; color: #fff; font-weight: 800; cursor: pointer; }.portal-access input:focus-visible, .portal-access button:focus-visible { outline: 3px solid #0284c7; outline-offset: 2px; }.portal-access__error { color: #b91c1c; }.portal-access__confirmation { border-radius: .5rem; padding: .75rem; background: #ecfdf5; color: #065f46; font-weight: 700; }
+.portal-access { display: grid; min-height: 100vh; place-items: center; padding: 1rem; background: var(--tf-page); color: var(--tf-ink); }
+.portal-access__card { width: min(100%, 29rem); padding: 1.5rem; border: 1px solid var(--tf-border-soft); border-radius: .5rem; background: #fff; box-shadow: var(--tf-shadow-md); }
+.portal-access__brand { margin: 0 0 .5rem; color: var(--tf-primary); font-weight: 900; }
+.portal-access h1 { margin: 0; font-size: 1.75rem; }
+.portal-access form { display: grid; gap: .6rem; margin-top: 1rem; font-weight: 700; }
+.portal-access input, .portal-access button { min-height: 44px; border-radius: .5rem; padding: .625rem .75rem; font: inherit; }
+.portal-access input { border: 1px solid var(--tf-border); }
+.portal-access button { border: 0; background: var(--tf-primary); color: #fff; font-weight: 800; cursor: pointer; }
+.portal-access button:hover { background: var(--tf-primary-hover); }
+.portal-access input:focus-visible, .portal-access button:focus-visible { outline: 3px solid var(--tf-focus); outline-offset: 2px; }
+.portal-access__error { color: var(--tf-danger); }
+.portal-access__confirmation { border-radius: .5rem; padding: .75rem; background: var(--tf-success-soft); color: var(--tf-success); font-weight: 700; }
 </style>

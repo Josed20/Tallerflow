@@ -21,7 +21,8 @@ test('owner completes the secure Sprint 1 authentication journey', async ({ page
   await page.getByLabel('Nueva contraseña').press('Enter')
   await expect(page).toHaveURL(/\/app$/)
   await expect(page.getByRole('heading', { name: 'Taller E2E' })).toBeVisible()
-  await expect(page.getByText(`${ownerEmail} · OWNER`)).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Panel' })).toBeVisible()
+  await expect(page.getByText('Propietario', { exact: true })).toBeVisible()
 
   const protectedResponses = await page.evaluate(async () => {
     const me = await fetch('/api/v1/me')

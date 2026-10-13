@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, nextTick } from 'vue'
+import { Check, Mail, Pencil, Phone, Plus, Search, X } from '@lucide/vue'
 import { clientsApi, type Client } from './api'
 import { useSessionStore } from '../session/session.store'
 import { canManageOperations } from '../session/role-policy'
 import UiButton from '../../components/UiButton.vue'
 import UiAlert from '../../components/UiAlert.vue'
 
-const router = useRouter()
 const session = useSessionStore()
 
 const clients = ref<Client[]>([])
@@ -15,6 +14,9 @@ const search = ref('')
 const loading = ref(true)
 const error = ref('')
 const showCreateModal = ref(false)
+const editing = ref<Client | null>(null)
+const notice = ref('')
+const nameInput = ref<HTMLInputElement | null>(null)
 
 // Form fields
 const name = ref('')
@@ -24,6 +26,17 @@ const submitting = ref(false)
 const formError = ref('')
 
 const isManager = computed(() => canManageOperations(session.principal?.role))
+
+async function openForm(client: Client | null = null) {
+  editing.value = client
+  name.value = client?.name ?? ''
+  phone.value = client?.phone ?? ''
+  email.value = client?.email ?? ''
+  formError.value = ''
+  showCreateModal.value = true
+  await nextTick()
+  nameInput.value?.focus()
+}
 
 const filteredClients = computed(() => {
   const q = search.value.trim().toLowerCase()
@@ -62,12 +75,20 @@ async function handleCreateClient() {
   submitting.value = true
   formError.value = ''
   try {
-    const res = await clientsApi.create({
+    const payload = {
       name: name.value.trim(),
       phone: phone.value.trim() || null,
       email: email.value.trim() || null,
-    }, session.csrfToken)
-    clients.value.unshift(res.data)
+    }
+    if (editing.value) {
+      const res = await clientsApi.update(editing.value.id, payload, session.csrfToken)
+      clients.value = clients.value.map((client) => client.id === res.data.id ? res.data : client)
+      notice.value = `${res.data.name} se actualizó.`
+    } else {
+      const res = await clientsApi.create(payload, session.csrfToken)
+      clients.value.unshift(res.data)
+      notice.value = `${res.data.name} se registró.`
+    }
     name.value = ''
     phone.value = ''
     email.value = ''
@@ -88,21 +109,25 @@ onMounted(() => {
   <main class="clients-page">
     <header class="page-header">
       <div class="header-nav">
-        <button class="btn-back" @click="router.push('/app')">← Inicio</button>
+        <p class="clients-kicker">Directorio</p>
         <h1>Clientes</h1>
+        <p class="clients-subtitle">Contactos para registrar y consultar órdenes.</p>
       </div>
-      <UiButton v-if="isManager" @click="showCreateModal = true">
-        + Nuevo Cliente
+      <UiButton v-if="isManager" @click="openForm()">
+        <Plus :size="17" aria-hidden="true" /> Nuevo cliente
       </UiButton>
     </header>
 
     <UiAlert v-if="error" :message="error" />
+    <div v-if="notice" class="clients-notice" role="status"><Check :size="17" /> {{ notice }} <button type="button" aria-label="Cerrar aviso" @click="notice = ''"><X :size="16" /></button></div>
 
     <section class="search-bar">
+      <Search :size="17" aria-hidden="true" />
       <input
         v-model="search"
         type="search"
-        placeholder="Buscar por nombre, teléfono..."
+        aria-label="Buscar clientes por nombre, teléfono o correo"
+        placeholder="Nombre, teléfono o correo"
         class="input-search"
       />
     </section>
@@ -112,10 +137,10 @@ onMounted(() => {
     </section>
 
     <section v-else-if="filteredClients.length === 0" class="empty-state">
-      <p v-if="search">No se encontraron clientes con "{{ search }}".</p>
+      <div v-if="search"><p>No se encontraron clientes con "{{ search }}".</p><button type="button" class="ops-button" @click="search = ''">Ver todos los clientes</button></div>
       <div v-else>
         <p>Aún no hay clientes registrados en este taller.</p>
-        <UiButton v-if="isManager" @click="showCreateModal = true">
+        <UiButton v-if="isManager" @click="openForm()">
           Registrar el primer cliente
         </UiButton>
       </div>
@@ -125,12 +150,13 @@ onMounted(() => {
       <div v-for="client in filteredClients" :key="client.id" class="client-card">
         <div class="client-info">
           <h3>{{ client.name }}</h3>
-          <p v-if="client.phone" class="client-meta">📱 {{ client.phone }}</p>
-          <p v-if="client.email" class="client-meta">✉️ {{ client.email }}</p>
+          <a v-if="client.phone" class="client-meta" :href="`tel:${client.phone}`"><Phone :size="15" aria-hidden="true" /> {{ client.phone }}</a>
+          <a v-if="client.email" class="client-meta" :href="`mailto:${client.email}`"><Mail :size="15" aria-hidden="true" /> {{ client.email }}</a>
         </div>
         <span class="status-badge" :class="{ active: client.is_active }">
           {{ client.is_active ? 'Activo' : 'Inactivo' }}
         </span>
+        <button v-if="isManager" type="button" class="ops-button client-edit" :aria-label="`Editar ${client.name}`" @click="openForm(client)"><Pencil :size="16" /> Editar</button>
       </div>
     </section>
 
@@ -138,8 +164,8 @@ onMounted(() => {
     <div v-if="showCreateModal" class="modal-backdrop" @click.self="showCreateModal = false">
       <div class="modal-card">
         <header class="modal-header">
-          <h2>Nuevo Cliente</h2>
-          <button class="btn-close" @click="showCreateModal = false">✕</button>
+          <h2>{{ editing ? 'Editar cliente' : 'Nuevo cliente' }}</h2>
+          <button class="btn-close" type="button" aria-label="Cerrar formulario" @click="showCreateModal = false"><X :size="18" /></button>
         </header>
 
         <form @submit.prevent="handleCreateClient" class="form-modal">
@@ -149,6 +175,7 @@ onMounted(() => {
             <label for="client-name">Nombre o Razón Social *</label>
             <input
               id="client-name"
+              ref="nameInput"
               v-model="name"
               type="text"
               required
@@ -164,6 +191,7 @@ onMounted(() => {
               id="client-phone"
               v-model="phone"
               type="tel"
+              maxlength="40"
               placeholder="Ej. 987654321"
               class="input-text"
             />
@@ -175,6 +203,7 @@ onMounted(() => {
               id="client-email"
               v-model="email"
               type="email"
+              maxlength="254"
               placeholder="Ej. contacto@cliente.com"
               class="input-text"
             />
@@ -189,7 +218,7 @@ onMounted(() => {
               Cancelar
             </button>
             <UiButton type="submit" :disabled="submitting">
-              {{ submitting ? 'Guardando...' : 'Guardar Cliente' }}
+              {{ submitting ? 'Guardando...' : editing ? 'Guardar cambios' : 'Guardar cliente' }}
             </UiButton>
           </div>
         </form>
@@ -394,4 +423,36 @@ h1 {
   color: #475569;
   cursor: pointer;
 }
+
+.clients-page { max-width: 72rem; padding: clamp(1rem, 2.5vw, 2rem); }
+.clients-page { display: grid; gap: 1rem; }
+.page-header { margin-bottom: 1.5rem; }
+.page-header h1 { font-size: var(--tf-page-title-size); color: var(--tf-ink); }
+.header-nav { display: block; }
+.clients-kicker { margin: 0; color: var(--tf-primary); font-size: .75rem; font-weight: 800; text-transform: uppercase; }
+.clients-subtitle { margin: .3rem 0 0; color: var(--tf-text-subtle); font-size: .86rem; }
+.btn-back { color: var(--tf-primary); min-height: 44px; }
+.input-search { max-width: 25rem; min-height: 46px; border-color: var(--tf-border); border-radius: .4rem; }
+.search-bar { display: flex; align-items: center; gap: .55rem; width: min(100%, 26rem); min-height: 46px; padding: 0 .75rem; border: 1px solid var(--tf-border); border-radius: .4rem; background: #fff; color: var(--tf-text-subtle); }
+.search-bar:focus-within { border-color: var(--tf-primary); outline: 2px solid var(--tf-focus); }
+.search-bar .input-search { width: 100%; min-height: 42px; padding: 0; border: 0; outline: 0; }
+.input-search:focus-visible, .input-text:focus-visible { outline: 2px solid var(--tf-focus); border-color: var(--tf-primary); }
+.clients-list { display: grid; grid-template-columns: 1fr; gap: .5rem; }
+.client-card { min-height: 9rem; gap: .75rem; border-color: var(--tf-border-soft); border-radius: .5rem; box-shadow: none; }
+.client-card { min-height: 6rem; align-items: center; }
+.client-info { min-width: 0; }
+.client-info h3 { color: var(--tf-ink); overflow-wrap: anywhere; }
+.client-meta { color: var(--tf-text-subtle); overflow-wrap: anywhere; }
+.client-meta { display: flex; align-items: center; gap: .4rem; text-decoration: none; }
+.client-meta:hover { color: var(--tf-primary); }
+.client-edit { min-width: 6rem; }
+.status-badge.active { color: var(--tf-primary-strong); background: var(--tf-success-soft); }
+.status-badge:not(.active) { color: var(--tf-warning); background: var(--tf-warning-soft); }
+.clients-notice { display: flex; align-items: center; gap: .5rem; padding: .75rem; border: 1px solid var(--tf-success-border); border-left: 4px solid var(--tf-success); border-radius: .4rem; color: var(--tf-primary-strong); background: var(--tf-success-soft); font-size: .85rem; font-weight: 700; }
+.clients-notice button { display: grid; margin-left: auto; place-items: center; border: 0; color: inherit; background: transparent; cursor: pointer; }
+.modal-card { border-radius: .5rem; }
+.modal-header h2 { color: var(--tf-ink); }
+.input-text { min-height: 46px; border-color: var(--tf-border); border-radius: .4rem; }
+.btn-secondary { min-height: 44px; color: var(--tf-primary); border-color: var(--tf-primary-border); }
+@media (max-width: 560px) { .page-header { align-items: flex-start; flex-direction: column; } .client-card { align-items: flex-start; flex-wrap: wrap; } .client-info { flex: 1 1 100%; } .modal-actions { flex-direction: column-reverse; } .modal-actions > * { width: 100%; } }
 </style>

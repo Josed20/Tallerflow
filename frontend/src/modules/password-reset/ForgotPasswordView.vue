@@ -6,6 +6,7 @@ import UiAlert from '../../components/UiAlert.vue'
 import UiButton from '../../components/UiButton.vue'
 import UiField from '../../components/UiField.vue'
 import { api } from '../session/api'
+import { Mail } from '@lucide/vue'
 
 const email = ref('')
 const attempted = ref(false)
@@ -74,7 +75,7 @@ async function submit() {
 
     <template v-else>
       <div class="recovery-sent" aria-live="polite">
-        <div class="recovery-sent__icon" aria-hidden="true">✉</div>
+        <div class="recovery-sent__icon" aria-hidden="true"><Mail :size="24" /></div>
         <h1 id="auth-title">Revisa tu correo</h1>
         <p class="auth-subtitle">
           Si la dirección ingresada está registrada en TallerFlow, recibirás un enlace seguro para restablecer tu contraseña.

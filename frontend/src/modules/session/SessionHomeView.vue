@@ -1,394 +1,167 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, ref } from 'vue'
+import { ArrowRight, CalendarDays, ClipboardList, Plus, RefreshCw } from '@lucide/vue'
 import { useSessionStore } from './session.store'
-import { canManageOperations } from './role-policy'
-import { ordersApi, type Order, type DashboardMetrics } from '../orders/api'
-import UiButton from '../../components/UiButton.vue'
+import { ordersApi, type DashboardMetrics, type Order } from '../orders/api'
 import UiAlert from '../../components/UiAlert.vue'
 
 const session = useSessionStore()
-const router = useRouter()
-
-const metrics = ref<DashboardMetrics>({
-  active: 0,
-  on_time: 0,
-  at_risk: 0,
-  late: 0,
-  completed: 0,
-})
-const recentOrders = ref<Order[]>([])
+const metrics = ref<DashboardMetrics>({ active: 0, on_time: 0, at_risk: 0, late: 0, completed: 0 })
+const orders = ref<Order[]>([])
 const loading = ref(true)
 const error = ref('')
 
-const isManager = computed(() => {
-  return canManageOperations(session.principal?.role)
-})
+const activeOrders = computed(() => orders.value.filter((order) => order.status === 'ACTIVE'))
+const todayKey = () => new Date().toLocaleDateString('en-CA')
+const dueToday = computed(() => activeOrders.value.filter((order) => new Date(order.promised_at).toLocaleDateString('en-CA') === todayKey()))
+const urgentOrders = computed(() => activeOrders.value
+  .filter((order) => order.traffic_light === 'LATE' || order.traffic_light === 'AT_RISK')
+  .sort((a, b) => new Date(a.promised_at).getTime() - new Date(b.promised_at).getTime())
+  .slice(0, 5))
+const upcomingOrders = computed(() => activeOrders.value
+  .filter((order) => order.traffic_light !== 'LATE' && order.traffic_light !== 'AT_RISK')
+  .sort((a, b) => new Date(a.promised_at).getTime() - new Date(b.promised_at).getTime())
+  .slice(0, 5))
+const attentionOrders = computed(() => urgentOrders.value.length ? urgentOrders.value : upcomingOrders.value)
+const stageOrder = ['CORTE', 'COSTURA', 'ACABADO', 'CONTROL DE CALIDAD', 'PLANCHADO', 'EMPAQUE', 'ENTREGA']
+const stageCounts = computed(() => stageOrder.map((name) => ({
+  name: name.charAt(0) + name.slice(1).toLocaleLowerCase('es-PE'),
+  count: activeOrders.value.filter((order) => order.current_stage?.toUpperCase() === name).length,
+})))
+const maxStageCount = computed(() => Math.max(1, ...stageCounts.value.map((stage) => stage.count)))
+const dateLabel = computed(() => new Intl.DateTimeFormat('es-PE', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date()))
 
 async function loadDashboardData() {
   loading.value = true
   error.value = ''
   try {
-    const [metricsRes, ordersRes] = await Promise.all([
-      ordersApi.getDashboard(),
-      ordersApi.list(),
-    ])
-    metrics.value = metricsRes.data
-    recentOrders.value = (ordersRes.data || []).slice(0, 5) // Show top 5 active/recent
-  } catch (err: any) {
-    error.value = 'No se pudieron cargar las métricas operativas del taller.'
+    const [metricsResponse, ordersResponse] = await Promise.all([ordersApi.getDashboard(), ordersApi.list()])
+    metrics.value = metricsResponse.data
+    orders.value = ordersResponse.data ?? []
+  } catch (cause: any) {
+    error.value = cause?.message || 'No se pudo cargar el estado del taller.'
   } finally {
     loading.value = false
   }
 }
 
-function formatDate(iso: string) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  return d.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat('es-PE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
 }
 
-onMounted(() => {
-  loadDashboardData()
-})
+onMounted(loadDashboardData)
 </script>
 
 <template>
-    <!-- Header del Taller -->
-    <header class="workshop-header">
+  <main class="overview-page">
+    <header class="overview-header">
       <div>
-        <p class="eyebrow">Taller de Confección</p>
+        <p class="overview-kicker">Panel del taller <span aria-hidden="true">/</span> {{ dateLabel }}</p>
         <h1>{{ session.principal?.workshop.name }}</h1>
-        <p class="user-badge">
-          {{ session.principal?.displayName || session.principal?.email }} ·
-          <strong>{{ session.principal?.role }}</strong>
-        </p>
+        <p>Así marcha la producción en este momento.</p>
+      </div>
+      <div class="overview-header__actions">
+        <button class="ops-icon-button" type="button" title="Actualizar panel" aria-label="Actualizar panel" :disabled="loading" @click="loadDashboardData"><RefreshCw :size="19" /></button>
+        <RouterLink class="ops-button ops-button--primary" to="/app/orders/new"><Plus :size="18" /> Nueva orden</RouterLink>
       </div>
     </header>
 
-    <main class="dashboard-page">
-
     <UiAlert v-if="error" :message="error" />
 
-    <!-- Semáforo Operativo (Métricas Clave) -->
-    <section class="metrics-grid">
-      <div class="metric-card card-total" @click="router.push('/app/orders')">
-        <span class="metric-num">{{ metrics.active }}</span>
-        <span class="metric-label">Órdenes Activas</span>
-      </div>
-
-      <div class="metric-card card-ontime" @click="router.push('/app/orders')">
-        <span class="metric-num">🟢 {{ metrics.on_time }}</span>
-        <span class="metric-label">A tiempo</span>
-      </div>
-
-      <div class="metric-card card-atrisk" @click="router.push('/app/orders')">
-        <span class="metric-num">🟡 {{ metrics.at_risk }}</span>
-        <span class="metric-label">En riesgo (&lt;48h)</span>
-      </div>
-
-      <div class="metric-card card-late" @click="router.push('/app/orders')">
-        <span class="metric-num">🔴 {{ metrics.late }}</span>
-        <span class="metric-label">Atrasadas</span>
-      </div>
+    <section class="overview-metrics" aria-label="Resumen de órdenes">
+      <RouterLink to="/app/orders" class="overview-metric overview-metric--main">
+        <span>Órdenes activas</span><strong>{{ loading ? '—' : metrics.active }}</strong><small>Ver tablero <ArrowRight :size="15" /></small>
+      </RouterLink>
+      <RouterLink to="/app/orders?filter=ON_TIME" class="overview-metric">
+        <span>A tiempo</span><strong>{{ loading ? '—' : metrics.on_time }}</strong><small class="ops-status ops-status--good">Sin urgencia</small>
+      </RouterLink>
+      <RouterLink to="/app/orders?filter=AT_RISK" class="overview-metric">
+        <span>En riesgo</span><strong>{{ loading ? '—' : metrics.at_risk }}</strong><small class="ops-status" :class="metrics.at_risk ? 'ops-status--warning' : 'ops-status--good'">{{ metrics.at_risk ? 'Menos de 48 h' : 'Sin riesgo' }}</small>
+      </RouterLink>
+      <RouterLink to="/app/orders?filter=LATE" class="overview-metric">
+        <span>Atrasadas</span><strong>{{ loading ? '—' : metrics.late }}</strong><small class="ops-status" :class="metrics.late ? 'ops-status--danger' : 'ops-status--good'">{{ metrics.late ? 'Requieren atención' : 'Sin atrasos' }}</small>
+      </RouterLink>
     </section>
 
-    <!-- Accesos Rápidos Principales -->
-    <section class="quick-nav-section">
-      <h2>Acciones Rápidas</h2>
-      <div class="quick-buttons-grid">
-        <button class="quick-nav-btn primary" @click="router.push('/app/orders')">
-          📋 <span>Ver Órdenes de Trabajo</span>
-        </button>
-
-        <button v-if="isManager" class="quick-nav-btn accent" @click="router.push('/app/orders/new')">
-          ➕ <span>Nueva Orden de Trabajo</span>
-        </button>
-
-        <button v-if="isManager" class="quick-nav-btn" @click="router.push('/app/clients')">
-          👥 <span>Gestión de Clientes</span>
-        </button>
-
-        <button v-if="isManager" class="quick-nav-btn" @click="router.push('/app/team')">
-          ⚙️ <span>Equipo y Roles</span>
-        </button>
-      </div>
-    </section>
-
-    <!-- Órdenes que requieren atención inmediata -->
-    <section class="recent-orders-section">
-      <div class="section-top">
-        <h2>Órdenes en Producción</h2>
-        <RouterLink to="/app/orders" class="text-link">Ver todas →</RouterLink>
-      </div>
-
-      <div v-if="loading" class="loading-state">
-        <p>Cargando avance del taller...</p>
-      </div>
-
-      <div v-else-if="recentOrders.length === 0" class="empty-state">
-        <p>No hay órdenes activas en este momento.</p>
-        <UiButton v-if="isManager" @click="router.push('/app/orders/new')">
-          + Crear primera orden
-        </UiButton>
-      </div>
-
-      <div v-else class="recent-list">
-        <div
-          v-for="o in recentOrders"
-          :key="o.id"
-          class="recent-order-item"
-          :class="'item-' + o.traffic_light.toLowerCase()"
-          @click="router.push(`/app/orders/${o.id}`)"
-        >
-          <div class="recent-main">
-            <span class="recent-code">{{ o.code }}</span>
-            <h4>{{ o.product }}</h4>
-            <p class="recent-client">{{ o.client_name }} · {{ o.quantity }} {{ o.unit }}</p>
-          </div>
-          <div class="recent-side">
-            <span class="recent-stage">{{ o.current_stage || 'Corte' }}</span>
-            <span class="recent-date">Entrega: {{ formatDate(o.promised_at) }}</span>
-          </div>
+    <div class="overview-grid">
+      <section class="overview-section overview-section--priority" aria-labelledby="priority-title">
+        <div class="overview-section__head"><div><p class="overview-section__kicker">Prioridad</p><h2 id="priority-title">{{ urgentOrders.length ? 'Pedidos que requieren atención' : 'Próximas entregas' }}</h2></div><RouterLink to="/app/orders">Ver todas <ArrowRight :size="16" /></RouterLink></div>
+        <div v-if="loading" class="ops-empty">Cargando pedidos...</div>
+        <div v-else-if="!attentionOrders.length" class="ops-empty"><ClipboardList :size="24" /><strong>Aún no hay pedidos activos</strong><span>Al crear una orden aparecerá aquí y en el tablero.</span></div>
+        <div v-else class="overview-order-list">
+          <RouterLink v-for="order in attentionOrders" :key="order.id" :to="`/app/orders/${order.id}`" class="overview-order">
+            <span class="overview-order__signal" :class="`overview-order__signal--${order.traffic_light.toLowerCase()}`" aria-hidden="true" />
+            <span class="overview-order__identity"><strong>{{ order.product }}</strong><small>{{ order.code }} · {{ order.client_name }}</small></span>
+            <span class="overview-order__due"><strong>{{ formatDate(order.promised_at) }}</strong><small>{{ order.current_stage || 'En producción' }}</small></span>
+            <ArrowRight :size="17" aria-hidden="true" />
+          </RouterLink>
         </div>
+      </section>
+
+      <section class="overview-section overview-section--today" aria-labelledby="today-title">
+        <div class="overview-section__head"><div><p class="overview-section__kicker">Agenda</p><h2 id="today-title">Entregas de hoy</h2></div><CalendarDays :size="20" aria-hidden="true" /></div>
+        <p class="overview-today-count">{{ loading ? '—' : dueToday.length }} <span>{{ dueToday.length === 1 ? 'pedido' : 'pedidos' }} con entrega prevista</span></p>
+        <div v-if="!loading && dueToday.length" class="overview-today-list">
+          <RouterLink v-for="order in dueToday.slice(0, 4)" :key="order.id" :to="`/app/orders/${order.id}`"><span>{{ order.code }} · {{ order.product }}</span><strong>{{ formatDate(order.promised_at).split(', ').at(-1) }}</strong></RouterLink>
+        </div>
+        <p v-else-if="!loading" class="overview-today-note">No hay entregas programadas para hoy.</p>
+        <RouterLink class="overview-today-link" to="/app/orders?due=today">Revisar pedidos del día <ArrowRight :size="16" /></RouterLink>
+      </section>
+    </div>
+
+    <section class="overview-flow" aria-labelledby="flow-title">
+      <div class="overview-section__head"><div><p class="overview-section__kicker">Producción</p><h2 id="flow-title">Trabajo por estación</h2></div><RouterLink to="/app/orders?view=board">Abrir tablero <ArrowRight :size="16" /></RouterLink></div>
+      <div class="overview-flow__grid">
+        <div v-for="stage in stageCounts" :key="stage.name" class="overview-flow__item"><span>{{ stage.name }}</span><strong>{{ loading ? '—' : stage.count }}</strong><div class="overview-flow__track"><div :style="{ width: `${stage.count / maxStageCount * 100}%` }" /></div></div>
       </div>
     </section>
-    </main>
+  </main>
 </template>
 
 <style scoped>
-.dashboard-page {
-  max-width: 680px;
-  margin: 0 auto;
-  padding: 1rem;
-}
-
-.workshop-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 1.25rem;
-  background: #fff;
-  padding: 1rem;
-  border-radius: 12px;
-  border: 1px solid var(--color-border, #cbd9df);
-}
-
-.eyebrow {
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #64748b;
-  margin: 0;
-}
-
-h1 {
-  font-size: 1.35rem;
-  color: var(--color-primary, #0a5a70);
-  margin: 0.15rem 0 0.25rem 0;
-}
-
-.user-badge {
-  font-size: 0.85rem;
-  color: #475569;
-  margin: 0;
-}
-
-.btn-logout {
-  background: none;
-  border: 1px solid #cbd9df;
-  border-radius: 6px;
-  padding: 0.35rem 0.65rem;
-  font-size: 0.8rem;
-  color: #64748b;
-  cursor: pointer;
-}
-
-/* Semáforo de Métricas */
-.metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.65rem;
-  margin-bottom: 1.25rem;
-}
-
-@media (min-width: 480px) {
-  .metrics-grid {
-    grid-template-columns: repeat(4, 1fr);
-  }
-}
-
-.metric-card {
-  background: #fff;
-  border: 1px solid var(--color-border, #cbd9df);
-  border-radius: 10px;
-  padding: 0.85rem 0.5rem;
-  text-align: center;
-  cursor: pointer;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  transition: transform 0.1s ease;
-}
-
-.metric-card:active {
-  transform: scale(0.98);
-}
-
-.metric-num {
-  display: block;
-  font-size: 1.35rem;
-  font-weight: 800;
-  margin-bottom: 0.2rem;
-}
-
-.metric-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #64748b;
-}
-
-.card-total .metric-num { color: #0284c7; }
-.card-ontime { border-top: 4px solid #22c55e; }
-.card-atrisk { border-top: 4px solid #eab308; }
-.card-late { border-top: 4px solid #ef4444; }
-
-/* Accesos rápidos */
-.quick-nav-section {
-  margin-bottom: 1.25rem;
-}
-
-.quick-nav-section h2 {
-  font-size: 1.1rem;
-  margin: 0 0 0.65rem 0;
-  color: var(--color-text-dark, #10242d);
-}
-
-.quick-buttons-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.65rem;
-}
-
-.quick-nav-btn {
-  background: #fff;
-  border: 1px solid var(--color-border, #cbd9df);
-  border-radius: 10px;
-  padding: 0.85rem 0.75rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #334155;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.35rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-}
-
-.quick-nav-btn.primary {
-  background: #f0f9ff;
-  border-color: #7dd3fc;
-  color: #0369a1;
-}
-
-.quick-nav-btn.accent {
-  background: #ecfdf5;
-  border-color: #6ee7b7;
-  color: #047857;
-}
-
-/* Órdenes recientes */
-.recent-orders-section {
-  background: #fff;
-  border: 1px solid var(--color-border, #cbd9df);
-  border-radius: 12px;
-  padding: 1rem;
-}
-
-.section-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.75rem;
-}
-
-.section-top h2 {
-  font-size: 1.1rem;
-  margin: 0;
-  color: var(--color-text-dark, #10242d);
-}
-
-.text-link {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--color-primary, #0a5a70);
-  text-decoration: none;
-}
-
-.recent-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-
-.recent-order-item {
-  border: 1px solid #e2e8f0;
-  border-left: 4px solid #cbd9df;
-  border-radius: 8px;
-  padding: 0.75rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-  background: #fafafa;
-}
-
-.recent-order-item.item-on_time { border-left-color: #22c55e; }
-.recent-order-item.item-at_risk { border-left-color: #eab308; }
-.recent-order-item.item-late { border-left-color: #ef4444; }
-
-.recent-code {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: #0284c7;
-}
-
-.recent-main h4 {
-  margin: 0.1rem 0;
-  font-size: 0.95rem;
-  color: #1e293b;
-}
-
-.recent-client {
-  margin: 0;
-  font-size: 0.8rem;
-  color: #64748b;
-}
-
-.recent-side {
-  text-align: right;
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.recent-stage {
-  font-size: 0.8rem;
-  font-weight: 700;
-  background: #e2e8f0;
-  padding: 0.15rem 0.45rem;
-  border-radius: 4px;
-  color: #334155;
-}
-
-.recent-date {
-  font-size: 0.75rem;
-  color: #64748b;
-}
-
-.loading-state,
-.empty-state {
-  text-align: center;
-  padding: 2rem 1rem;
-  color: #64748b;
-}
+.overview-page { width: min(100%, 82rem); margin: 0 auto; padding: clamp(1rem, 2.5vw, 2.25rem); display: grid; gap: 1.5rem; }
+.overview-header, .overview-section__head { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
+.overview-header h1 { margin: .2rem 0; color: var(--tf-ink); font-size: var(--tf-page-title-size); }
+.overview-header p:last-child { margin: .2rem 0 0; color: var(--tf-text-subtle); }
+.overview-kicker, .overview-section__kicker { margin: 0; color: var(--tf-primary); font-size: .77rem; font-weight: 800; text-transform: uppercase; }
+.overview-kicker span { color: var(--tf-border); padding: 0 .35rem; }
+.overview-header__actions { display: flex; gap: .6rem; align-items: center; }
+.overview-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
+.overview-metric { min-height: 9rem; display: flex; flex-direction: column; gap: .35rem; padding: 1.15rem; border: 1px solid var(--tf-border-soft); border-radius: .5rem; background: #fff; color: var(--tf-ink); text-decoration: none; }
+.overview-metric:hover, .overview-order:hover { border-color: var(--tf-primary-border); }
+.overview-metric--main { background: var(--tf-primary); color: #fff; border-color: var(--tf-primary); }
+.overview-metric > span { font-size: .86rem; font-weight: 700; }
+.overview-metric > strong { font-size: 2rem; line-height: 1.1; }
+.overview-metric > small { display: inline-flex; align-items: center; gap: .3rem; margin-top: auto; font-size: .75rem; font-weight: 700; }
+.overview-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(17rem, 1fr); gap: 1rem; }
+.overview-section, .overview-flow { padding: 1.2rem; border: 1px solid var(--tf-border-soft); border-radius: .5rem; background: #fff; }
+.overview-section__head { align-items: center; margin-bottom: 1rem; }
+.overview-section__head h2 { margin: .2rem 0 0; font-size: 1.125rem; }
+.overview-section__head a, .overview-today-link { display: inline-flex; align-items: center; gap: .25rem; color: var(--tf-primary); font-size: .83rem; font-weight: 800; text-decoration: none; white-space: nowrap; }
+.overview-section__head a:hover, .overview-today-link:hover { text-decoration: underline; }
+.overview-order-list { display: grid; gap: .45rem; }
+.overview-order { min-width: 0; display: grid; grid-template-columns: .3rem minmax(0, 1fr) auto auto; gap: .75rem; align-items: center; padding: .65rem .5rem; border-bottom: 1px solid var(--tf-border-soft); color: var(--tf-ink); text-decoration: none; }
+.overview-order:last-child { border-bottom: 0; }
+.overview-order__signal { width: .3rem; height: 2.65rem; border-radius: 1rem; background: var(--tf-info); }
+.overview-order__signal--late { background: var(--tf-danger); }
+.overview-order__signal--at_risk { background: var(--tf-warning); }
+.overview-order__identity, .overview-order__due { min-width: 0; display: grid; gap: .15rem; }
+.overview-order__identity strong, .overview-order__identity small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.overview-order__identity small, .overview-order__due small { color: var(--tf-text-subtle); font-size: .75rem; }
+.overview-order__due { text-align: right; font-size: .8rem; }
+.overview-today-count { margin: .5rem 0 1rem; font-size: 2rem; font-weight: 800; }
+.overview-today-count span { display: block; color: var(--tf-text-subtle); font-size: .8rem; font-weight: 500; }
+.overview-today-list { display: grid; gap: .4rem; margin-bottom: 1rem; }
+.overview-today-list a { display: flex; justify-content: space-between; gap: .7rem; color: var(--tf-ink); text-decoration: none; font-size: .82rem; }
+.overview-today-list a span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.overview-today-note { min-height: 3rem; color: var(--tf-text-subtle); font-size: .85rem; }
+.overview-flow__grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .8rem; }
+.overview-flow__item { min-width: 0; display: grid; gap: .4rem; }
+.overview-flow__item span { color: var(--tf-text-subtle); font-size: .76rem; overflow-wrap: anywhere; }
+.overview-flow__item strong { font-size: 1.2rem; }
+.overview-flow__track { height: .35rem; border-radius: 1rem; background: var(--tf-neutral-soft); overflow: hidden; }
+.overview-flow__track div { height: 100%; background: var(--tf-primary); border-radius: inherit; }
+@media (max-width: 980px) { .overview-flow__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .overview-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .overview-grid { grid-template-columns: 1fr; } }
+@media (max-width: 480px) { .overview-header { flex-direction: column; } .overview-header__actions { width: 100%; } .overview-header__actions .ops-button { flex: 1; } .overview-flow__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .overview-order { grid-template-columns: .3rem minmax(0, 1fr) auto; } .overview-order__due { grid-column: 2; grid-row: 2; text-align: left; } }
 </style>

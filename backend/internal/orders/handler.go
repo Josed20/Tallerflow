@@ -150,6 +150,53 @@ func (h *Handler) UpdateStage(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": stage})
 }
 
+func (h *Handler) ReopenStage(c *gin.Context) {
+	principal, err := httpx.PrincipalFromGin(c)
+	if err != nil {
+		httpx.RespondError(c, http.StatusUnauthorized, "SESSION_INVALID", "The session is invalid or has expired.")
+		return
+	}
+	if principal.Role != "OWNER" && principal.Role != "ADMIN" {
+		httpx.RespondError(c, http.StatusForbidden, "ROLE_FORBIDDEN", "Only workshop managers can correct a completed stage.")
+		return
+	}
+	orderID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.RespondError(c, http.StatusNotFound, "ORDER_NOT_FOUND", "The order does not exist.")
+		return
+	}
+	position, err := strconv.Atoi(c.Param("position"))
+	if err != nil || position < 1 || position > 7 {
+		httpx.RespondError(c, http.StatusBadRequest, "STAGE_INVALID", "The stage position must be between 1 and 7.")
+		return
+	}
+	var input struct {
+		Reason string `json:"reason" binding:"required"`
+	}
+	if c.ShouldBindJSON(&input) != nil || len([]rune(strings.TrimSpace(input.Reason))) < 5 || len([]rune(input.Reason)) > 300 {
+		httpx.RespondError(c, http.StatusUnprocessableEntity, "REASON_INVALID", "A correction reason of 5 to 300 characters is required.")
+		return
+	}
+	stage, err := h.service.ReopenStage(c.Request.Context(), principal.WorkshopID, orderID, position, principal.UserID, input.Reason)
+	if err != nil {
+		if errors.Is(err, ErrOrderNotFound) {
+			httpx.RespondError(c, http.StatusNotFound, "ORDER_NOT_FOUND", "The order does not exist.")
+			return
+		}
+		if errors.Is(err, ErrStageNotFound) {
+			httpx.RespondError(c, http.StatusNotFound, "STAGE_NOT_FOUND", "The specified stage does not exist.")
+			return
+		}
+		if errors.Is(err, ErrOrderInvalid) {
+			httpx.RespondError(c, http.StatusConflict, "STAGE_NOT_REOPENABLE", "Only the last completed stage can be reopened before work starts in the next stage.")
+			return
+		}
+		httpx.RespondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "An unexpected error occurred.")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": stage})
+}
+
 func (h *Handler) AddPhoto(c *gin.Context) {
 	principal, err := httpx.PrincipalFromGin(c)
 	if err != nil {
@@ -215,6 +262,7 @@ func RegisterRoutes(routes gin.IRouter, handler *Handler, requireSession gin.Han
 	routes.GET("/api/v1/orders/:id", requireSession, handler.GetByID)
 	routes.POST("/api/v1/orders", requireSession, handler.Create)
 	routes.PATCH("/api/v1/orders/:id/stages/:position", requireSession, handler.UpdateStage)
+	routes.POST("/api/v1/orders/:id/stages/:position/reopen", requireSession, handler.ReopenStage)
 	routes.POST("/api/v1/orders/:id/stages/:position/photos", requireSession, handler.AddPhoto)
 	routes.GET("/api/v1/dashboard", requireSession, handler.Dashboard)
 }

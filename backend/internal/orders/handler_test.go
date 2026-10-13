@@ -53,6 +53,34 @@ func TestUpdateStageRejectsStatusOtherThanCompleted(t *testing.T) {
 	}
 }
 
+func TestReopenStageRejectsOperator(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &handlerRepository{}
+	router := gin.New()
+	router.POST("/api/v1/orders/:id/stages/:position/reopen", principalMiddleware("OPERATOR"), NewHandler(NewService(repo)).ReopenStage)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/orders/"+uuid.NewString()+"/stages/1/reopen", strings.NewReader(`{"reason":"Se marcó por error"}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden || repo.reopenStageCalled {
+		t.Fatalf("operator correction = %d, repository called = %v", response.Code, repo.reopenStageCalled)
+	}
+}
+
+func TestReopenStageRequiresReason(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &handlerRepository{}
+	router := gin.New()
+	router.POST("/api/v1/orders/:id/stages/:position/reopen", principalMiddleware("ADMIN"), NewHandler(NewService(repo)).ReopenStage)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/orders/"+uuid.NewString()+"/stages/1/reopen", strings.NewReader(`{"reason":"x"}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusUnprocessableEntity || repo.reopenStageCalled {
+		t.Fatalf("short reason = %d, repository called = %v", response.Code, repo.reopenStageCalled)
+	}
+}
+
 func TestAddStagePhotoRejectsOversizedPayloadBeforeRepository(t *testing.T) {
 	repo := &handlerRepository{}
 	service := NewService(repo)
@@ -90,6 +118,7 @@ func principalMiddleware(role string) gin.HandlerFunc {
 
 type handlerRepository struct {
 	updateStageCalled   bool
+	reopenStageCalled   bool
 	addStagePhotoCalled bool
 }
 
@@ -102,6 +131,11 @@ func (r *handlerRepository) Create(context.Context, uuid.UUID, CreateOrderInput,
 }
 func (r *handlerRepository) UpdateStage(context.Context, uuid.UUID, uuid.UUID, int, string) (*OrderStage, error) {
 	r.updateStageCalled = true
+	return &OrderStage{}, nil
+}
+
+func (r *handlerRepository) ReopenStage(context.Context, uuid.UUID, uuid.UUID, int, uuid.UUID, string) (*OrderStage, error) {
+	r.reopenStageCalled = true
 	return &OrderStage{}, nil
 }
 func (r *handlerRepository) AddStagePhoto(context.Context, uuid.UUID, uuid.UUID, int, string, string) (*StagePhoto, error) {

@@ -55,4 +55,15 @@ describe('ClientsView', () => {
     expect(screen.queryByRole('button', { name: /nuevo cliente/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /registrar el primer cliente/i })).toBeNull()
   })
+
+  it('lets a manager correct client contact details', async () => {
+    const client = { id: 'client-1', workshop_id: 'workshop-1', name: 'Confecciones Demo', email: null, phone: null, is_active: true, created_at: '', updated_at: '' }
+    vi.mocked(clientsApi.list).mockResolvedValue({ data: [client] })
+    vi.mocked(clientsApi.update).mockResolvedValue({ data: { ...client, phone: '987654321' } })
+    await renderClients()
+    await fireEvent.click(await screen.findByRole('button', { name: /editar confecciones demo/i }))
+    await fireEvent.update(screen.getByLabelText('Teléfono / WhatsApp'), '987654321')
+    await fireEvent.click(screen.getByRole('button', { name: /guardar cambios/i }))
+    expect(clientsApi.update).toHaveBeenCalledWith('client-1', { name: 'Confecciones Demo', phone: '987654321', email: null }, 'csrf-client')
+  })
 })

@@ -4,6 +4,8 @@ Cimientos seguros de los Sprints 1 y 2 para la plataforma de trazabilidad de tal
 
 El recorrido integrado permite crear desde la web el primer taller y su `OWNER`, entrar directamente con una sesión segura, consultar el usuario y taller actuales, cerrar la sesión y aislar los datos por taller. El bootstrap por CLI del Sprint 1 se conserva para operación y recuperación.
 
+La operación diaria cuenta con un panel de urgencias y entregas, un tablero Kanban de siete estaciones, vista de lista y una cola compartida para operarios. El recorrido y sus limites actuales estan en [Operacion visual del taller](docs/sprints/sprint-03-operations-ux.md).
+
 ## Requisitos
 
 - Docker Desktop con Docker Compose v2.

@@ -3,6 +3,8 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { clientPortalApi } from './api'
 import type { ClientPortalOrder } from './types'
+import { Cog } from '@lucide/vue'
+import { formatOrderQuantity } from '../orders/order-display'
 
 const route = useRoute()
 const order = ref<ClientPortalOrder | null>(null)
@@ -111,7 +113,7 @@ onMounted(loadOrder)
           <div class="order-stats-row">
             <div class="stat-item">
               <span class="stat-label">Cantidad solicitada:</span>
-              <strong class="stat-value">{{ order.quantity }} {{ order.unit }}</strong>
+              <strong class="stat-value">{{ formatOrderQuantity(order.quantity, order.unit) }}</strong>
             </div>
             <div class="stat-item">
               <span class="stat-label">Estado general:</span>
@@ -159,7 +161,7 @@ onMounted(loadOrder)
                   </span>
                 </div>
                 <p v-if="stage.status === 'IN_PROGRESS'" class="stage-active-note">
-                  ⚙️ Tus prendas están siendo procesadas en esta estación en este momento.
+                  <Cog :size="16" aria-hidden="true" /> Tus prendas están siendo procesadas en esta estación.
                 </p>
                 <p v-else-if="stage.status === 'COMPLETED'" class="stage-completed-time">
                   Completado {{ formatDate(stage.completed_at || order.updated_at) }}

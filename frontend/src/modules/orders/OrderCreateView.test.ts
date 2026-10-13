@@ -31,7 +31,7 @@ describe('OrderCreateView', () => {
 
     expect(await screen.findByText(/no tienes clientes registrados/i)).toBeTruthy()
     expect(screen.queryByRole('form')).toBeNull()
-    expect(screen.getByRole('button', { name: /ir a registrar cliente/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /registrar cliente/i })).toBeTruthy()
   })
 
   it('submits an order with the current CSRF token', async () => {
@@ -54,10 +54,11 @@ describe('OrderCreateView', () => {
 
     await screen.findByLabelText(/producto/i)
     await fireEvent.update(screen.getByLabelText(/producto/i), 'Polo demo')
-    await fireEvent.click(screen.getByRole('button', { name: /crear orden de trabajo/i }))
+    await fireEvent.update(screen.getByLabelText(/cantidad/i), '24')
+    await fireEvent.click(screen.getByRole('button', { name: /^crear orden$/i }))
 
     expect(ordersApi.create).toHaveBeenCalledWith(
-      expect.objectContaining({ client_id: 'client-1', product: 'Polo demo' }),
+      expect.objectContaining({ client_id: 'client-1', product: 'Polo demo', quantity: 24 }),
       expect.any(String),
       'csrf-order',
     )

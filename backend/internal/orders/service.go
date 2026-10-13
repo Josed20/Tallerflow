@@ -36,6 +36,10 @@ func (s *Service) UpdateStage(ctx context.Context, workshopID uuid.UUID, orderID
 	return s.repo.UpdateStage(ctx, workshopID, orderID, position, status)
 }
 
+func (s *Service) ReopenStage(ctx context.Context, workshopID uuid.UUID, orderID uuid.UUID, position int, actorID uuid.UUID, reason string) (*OrderStage, error) {
+	return s.repo.ReopenStage(ctx, workshopID, orderID, position, actorID, reason)
+}
+
 func (s *Service) AddStagePhoto(ctx context.Context, workshopID uuid.UUID, orderID uuid.UUID, position int, photoData string, caption string) (*StagePhoto, error) {
 	if !validStagePhoto(photoData) || len([]rune(strings.TrimSpace(caption))) > 300 {
 		return nil, ErrOrderInvalid

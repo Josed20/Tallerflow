@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatOrderQuantity } from '../orders/order-display'
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { clientPortalApi } from './api'
@@ -85,7 +86,7 @@ onMounted(loadOrders)
           <strong class="order-product-title">{{ order.product }}</strong>
 
           <div class="card-meta">
-            <span class="meta-qty">{{ order.quantity }} {{ order.unit }}</span>
+            <span class="meta-qty">{{ formatOrderQuantity(order.quantity, order.unit) }}</span>
             <span class="meta-delivery">Entrega prometida: <strong>{{ formatDate(order.promised_at) }}</strong></span>
           </div>
 

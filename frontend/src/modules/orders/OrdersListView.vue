@@ -1,427 +1,261 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, nextTick, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import { ArrowRight, Check, Columns3, List, Plus, RefreshCw, Search } from '@lucide/vue'
 import { ordersApi, type Order, type TrafficLight } from './api'
 import { useSessionStore } from '../session/session.store'
-import { canManageOperations } from '../session/role-policy'
-import UiButton from '../../components/UiButton.vue'
+import { canManageOperations, canAdvanceProduction } from '../session/role-policy'
 import UiAlert from '../../components/UiAlert.vue'
+import { matchesOrderSearch } from './order-search'
+import { formatOrderQuantity } from './order-display'
+import StageAdvanceDialog from './StageAdvanceDialog.vue'
 
-const router = useRouter()
+const route = useRoute()
 const session = useSessionStore()
-
+const stages = ['CORTE', 'COSTURA', 'ACABADO', 'CONTROL DE CALIDAD', 'PLANCHADO', 'EMPAQUE', 'ENTREGA']
+const filterOptions: { value: 'ALL' | TrafficLight; label: string }[] = [
+  { value: 'ALL', label: 'Todas' }, { value: 'ON_TIME', label: 'A tiempo' },
+  { value: 'AT_RISK', label: 'En riesgo' }, { value: 'LATE', label: 'Atrasadas' },
+  { value: 'COMPLETED', label: 'Completadas' },
+]
 const orders = ref<Order[]>([])
 const loading = ref(true)
+const busyOrderId = ref<string | null>(null)
+const pendingAdvance = ref<Order | null>(null)
+const boardScroll = ref<HTMLElement | null>(null)
 const error = ref('')
+const notice = ref('')
 const search = ref('')
-const activeFilter = ref<'ALL' | TrafficLight>('ALL')
-
+const view = ref<'board' | 'list'>(route.query.view === 'list' ? 'list' : 'board')
+const trafficFilter = ref<'ALL' | TrafficLight>(['ON_TIME', 'AT_RISK', 'LATE', 'COMPLETED'].includes(String(route.query.filter)) ? route.query.filter as TrafficLight : 'ALL')
+const dueTodayOnly = ref(route.query.due === 'today')
 const isManager = computed(() => canManageOperations(session.principal?.role))
+const canAdvance = computed(() => canAdvanceProduction(session.principal?.role))
+const todayKey = () => new Date().toLocaleDateString('en-CA')
 
-const filteredOrders = computed(() => {
-  let list = orders.value
+function selectTrafficFilter(value: 'ALL' | TrafficLight) {
+  trafficFilter.value = value
+  dueTodayOnly.value = false
+}
 
-  if (activeFilter.value !== 'ALL') {
-    list = list.filter((o) => o.traffic_light === activeFilter.value)
-  }
+function toggleDueToday() {
+  dueTodayOnly.value = !dueTodayOnly.value
+  if (dueTodayOnly.value) trafficFilter.value = 'ALL'
+}
 
-  const q = search.value.trim().toLowerCase()
-  if (!q) return list
+function clearFilters() {
+  trafficFilter.value = 'ALL'
+  dueTodayOnly.value = false
+  search.value = ''
+}
 
-  return list.filter(
-    (o) =>
-      o.code.toLowerCase().includes(q) ||
-      o.product.toLowerCase().includes(q) ||
-      o.client_name.toLowerCase().includes(q)
-  )
-})
+const filteredOrders = computed(() => orders.value.filter((order) => {
+  if (trafficFilter.value !== 'ALL' && order.traffic_light !== trafficFilter.value) return false
+  if (dueTodayOnly.value && new Date(order.promised_at).toLocaleDateString('en-CA') !== todayKey()) return false
+  return matchesOrderSearch(order, search.value)
+}))
+const columns = computed(() => [
+  ...stages.map((name, index) => ({ name, label: name.charAt(0) + name.slice(1).toLocaleLowerCase('es-PE'), index, orders: filteredOrders.value.filter((order) => order.status === 'ACTIVE' && order.current_stage?.toUpperCase() === name) })),
+  { name: 'COMPLETED', label: 'Completadas', index: stages.length, orders: filteredOrders.value.filter((order) => order.status === 'COMPLETED') },
+])
+const counts = computed(() => ({
+  ALL: orders.value.length,
+  ON_TIME: orders.value.filter((order) => order.traffic_light === 'ON_TIME').length,
+  AT_RISK: orders.value.filter((order) => order.traffic_light === 'AT_RISK').length,
+  LATE: orders.value.filter((order) => order.traffic_light === 'LATE').length,
+  COMPLETED: orders.value.filter((order) => order.traffic_light === 'COMPLETED').length,
+}))
 
-const countOnTime = computed(() => orders.value.filter((o) => o.traffic_light === 'ON_TIME').length)
-const countAtRisk = computed(() => orders.value.filter((o) => o.traffic_light === 'AT_RISK').length)
-const countLate = computed(() => orders.value.filter((o) => o.traffic_light === 'LATE').length)
-const countCompleted = computed(() => orders.value.filter((o) => o.traffic_light === 'COMPLETED').length)
-
-async function fetchOrders() {
-  loading.value = true
+async function loadOrders(showLoading = true) {
+  if (showLoading) loading.value = true
   error.value = ''
   try {
-    const res = await ordersApi.list()
-    orders.value = res.data || []
-  } catch (err: any) {
-    error.value = err?.message || 'No se pudieron cargar las órdenes de trabajo.'
+    const response = await ordersApi.list()
+    orders.value = response.data ?? []
+    return true
+  } catch (cause: any) {
+    error.value = cause?.message || 'No se pudieron cargar las órdenes.'
+    return false
   } finally {
     loading.value = false
   }
 }
 
-function formatDate(iso: string) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  return d.toLocaleDateString('es-PE', {
-    day: '2-digit',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-function getTrafficLightLabel(tl: TrafficLight) {
-  switch (tl) {
-    case 'ON_TIME':
-      return 'A tiempo'
-    case 'AT_RISK':
-      return 'En riesgo (<48h)'
-    case 'LATE':
-      return 'Atrasada'
-    case 'COMPLETED':
-      return 'Completada'
+async function advance(order: Order) {
+  if (!canAdvance.value || busyOrderId.value) return
+  if (!session.csrfToken) {
+    error.value = 'Tu sesión necesita renovarse para registrar avances. Vuelve a iniciar sesión.'
+    return
+  }
+  busyOrderId.value = order.id
+  error.value = ''
+  notice.value = ''
+  try {
+    const response = await ordersApi.getByID(order.id)
+    const current = response.data.stages?.find((stage) => stage.status === 'IN_PROGRESS')
+    if (!current) throw new Error('Esta orden ya no tiene una etapa en curso. Actualiza el tablero.')
+    if (current.name.toUpperCase() !== order.current_stage?.toUpperCase()) {
+      await loadOrders(false)
+      throw new Error('La orden cambió mientras la veías. Revisa su etapa actual antes de avanzar.')
+    }
+    await ordersApi.updateStage(order.id, current.position, 'COMPLETED', session.csrfToken)
+    if (!await loadOrders(false)) {
+      error.value = 'La etapa se guardó, pero no pudimos actualizar el tablero. Pulsa Actualizar para ver el estado más reciente.'
+      return
+    }
+    const next = stages[current.position]
+    notice.value = next ? `${order.code} pasó a ${next.toLocaleLowerCase('es-PE')}.` : `${order.code} quedó completada.`
+    if (view.value === 'board') {
+      await nextTick()
+      const target = boardScroll.value?.querySelector<HTMLElement>(`[data-stage-index="${current.position}"]`)
+      if (target && boardScroll.value) {
+        const container = boardScroll.value.getBoundingClientRect()
+        const desiredLeft = boardScroll.value.scrollLeft + target.getBoundingClientRect().left - container.left
+        boardScroll.value.scrollTo({ left: desiredLeft, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+      }
+    }
+  } catch (cause: any) {
+    error.value = cause?.status === 409 ? 'La orden cambió mientras la veías. Actualiza el tablero y vuelve a intentarlo.' : cause?.message || 'No se pudo avanzar la orden.'
+    if (cause?.status === 409) {
+      await loadOrders(false)
+      error.value = 'La orden cambió mientras la veías. Revisa el tablero y vuelve a intentarlo.'
+    }
+  } finally {
+    busyOrderId.value = null
+    pendingAdvance.value = null
   }
 }
 
-function openOrder(id: string) {
-  router.push(`/app/orders/${id}`)
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat('es-PE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
 }
 
-onMounted(() => {
-  fetchOrders()
-})
+function advanceLabel(order: Order) {
+  const index = stages.indexOf(order.current_stage?.toUpperCase() ?? '')
+  return index >= 0 && index < stages.length - 1 ? `Pasar a ${stages[index + 1].toLocaleLowerCase('es-PE')}` : 'Completar pedido'
+}
+
+function trafficLabel(value: TrafficLight) {
+  return ({ ON_TIME: 'A tiempo', AT_RISK: 'En riesgo', LATE: 'Atrasada', COMPLETED: 'Completada' })[value]
+}
+
+onMounted(loadOrders)
 </script>
 
 <template>
-  <main class="orders-page">
-    <header class="page-header">
-      <div class="header-nav">
-        <button class="btn-back" @click="router.push('/app')">← Inicio</button>
-        <h1>Órdenes de Trabajo</h1>
+  <main class="board-page">
+    <header class="board-header">
+      <div><p class="board-kicker">Producción</p><h1>Tablero de órdenes</h1><p>El avance de cada pedido, estación por estación.</p></div>
+      <div class="board-header__actions">
+        <button class="ops-icon-button" type="button" title="Actualizar órdenes" aria-label="Actualizar órdenes" :disabled="loading" @click="loadOrders()"><RefreshCw :size="18" /></button>
+        <RouterLink v-if="isManager" class="ops-button ops-button--primary" to="/app/orders/new"><Plus :size="17" /> Nueva orden</RouterLink>
       </div>
-      <UiButton v-if="isManager" @click="router.push('/app/orders/new')">
-        + Nueva Orden
-      </UiButton>
     </header>
 
     <UiAlert v-if="error" :message="error" />
+    <div v-if="notice" class="board-notice" role="status"><Check :size="18" /> {{ notice }} <button type="button" aria-label="Cerrar aviso" @click="notice = ''">×</button></div>
 
-    <!-- Filtros por Semáforo -->
-    <section class="traffic-light-tabs">
-      <button
-        class="tab-btn"
-        :class="{ active: activeFilter === 'ALL' }"
-        @click="activeFilter = 'ALL'"
-      >
-        Todas ({{ orders.length }})
-      </button>
-      <button
-        class="tab-btn tab-on-time"
-        :class="{ active: activeFilter === 'ON_TIME' }"
-        @click="activeFilter = 'ON_TIME'"
-      >
-        🟢 A tiempo ({{ countOnTime }})
-      </button>
-      <button
-        class="tab-btn tab-at-risk"
-        :class="{ active: activeFilter === 'AT_RISK' }"
-        @click="activeFilter = 'AT_RISK'"
-      >
-        🟡 En riesgo ({{ countAtRisk }})
-      </button>
-      <button
-        class="tab-btn tab-late"
-        :class="{ active: activeFilter === 'LATE' }"
-        @click="activeFilter = 'LATE'"
-      >
-        🔴 Atrasadas ({{ countLate }})
-      </button>
-      <button
-        class="tab-btn tab-completed"
-        :class="{ active: activeFilter === 'COMPLETED' }"
-        @click="activeFilter = 'COMPLETED'"
-      >
-        ✓ Listas ({{ countCompleted }})
-      </button>
-    </section>
+    <div class="board-toolbar">
+      <div class="board-view-switch" role="group" aria-label="Vista de órdenes">
+        <button type="button" :class="{ active: view === 'board' }" :aria-pressed="view === 'board'" @click="view = 'board'"><Columns3 :size="17" /> Tablero</button>
+        <button type="button" :class="{ active: view === 'list' }" :aria-pressed="view === 'list'" @click="view = 'list'"><List :size="17" /> Lista</button>
+      </div>
+      <label class="board-search"><Search :size="17" aria-hidden="true" /><span class="sr-only">Buscar órdenes por código, número, prenda o cliente</span><input v-model="search" type="search" placeholder="Código o número (ej. 3), prenda, cliente" /></label>
+    </div>
+    <div class="board-filters" aria-label="Filtros de órdenes">
+      <button v-for="option in filterOptions" :key="option.value" type="button" :class="{ active: trafficFilter === option.value && !dueTodayOnly }" :aria-pressed="trafficFilter === option.value && !dueTodayOnly" @click="selectTrafficFilter(option.value)"><span>{{ option.label }}</span><strong>{{ counts[option.value] }}</strong></button>
+      <button type="button" :class="{ active: dueTodayOnly }" :aria-pressed="dueTodayOnly" @click="toggleDueToday">Entrega hoy</button>
+    </div>
 
-    <!-- Barra de Búsqueda -->
-    <section class="search-bar">
-      <input
-        v-model="search"
-        type="search"
-        placeholder="Buscar por código (OT-000001), cliente o producto..."
-        class="input-search"
-      />
-    </section>
+    <p class="board-results" role="status">{{ filteredOrders.length }} {{ filteredOrders.length === 1 ? 'orden' : 'órdenes' }} {{ search || trafficFilter !== 'ALL' || dueTodayOnly ? 'en este resultado' : 'en total' }}</p>
 
-    <!-- Estados -->
-    <section v-if="loading" class="loading-state">
-      <p>Cargando órdenes del taller...</p>
-    </section>
+    <div v-if="loading" class="ops-empty">Cargando tablero...</div>
+    <div v-else-if="filteredOrders.length === 0" class="ops-empty board-empty"><strong>No hay órdenes que coincidan</strong><span v-if="search || trafficFilter !== 'ALL' || dueTodayOnly">No hay pedidos en esta selección. Puedes quitar los filtros.</span><span v-else>Cuando registres una orden, aparecerá en Corte.</span><button v-if="search || trafficFilter !== 'ALL' || dueTodayOnly" class="ops-button" type="button" @click="clearFilters">Ver todas las órdenes</button><RouterLink v-if="isManager && !orders.length" class="ops-button ops-button--primary" to="/app/orders/new">Crear la primera orden</RouterLink></div>
 
-    <section v-else-if="filteredOrders.length === 0" class="empty-state">
-      <p v-if="search">No hay órdenes que coincidan con la búsqueda.</p>
-      <div v-else>
-        <p>No hay órdenes registradas en esta categoría.</p>
-        <UiButton v-if="isManager" @click="router.push('/app/orders/new')">
-          Crear la primera orden
-        </UiButton>
+    <section v-else-if="view === 'board'" ref="boardScroll" class="kanban-scroll" aria-label="Tablero por estaciones">
+      <div class="kanban-grid">
+        <section v-for="column in columns" :key="column.name" class="kanban-column" :data-stage-index="column.index" :aria-label="`${column.label}, ${column.orders.length} órdenes`">
+          <header class="kanban-column__header"><div><span class="kanban-column__number">{{ String(column.index + 1).padStart(2, '0') }}</span><h2>{{ column.label }}</h2></div><strong>{{ column.orders.length }}</strong></header>
+          <div class="kanban-column__items">
+            <article v-for="order in column.orders" :key="order.id" class="kanban-card" :class="`kanban-card--${order.traffic_light.toLowerCase()}`">
+              <div class="kanban-card__top"><span>{{ order.code }}</span><span class="ops-status" :class="`ops-status--${order.traffic_light === 'LATE' ? 'danger' : order.traffic_light === 'AT_RISK' ? 'warning' : 'good'}`">{{ trafficLabel(order.traffic_light) }}</span></div>
+              <h3>{{ order.product }}</h3><p>{{ order.client_name }}</p>
+              <div class="kanban-card__meta"><span>{{ formatOrderQuantity(order.quantity, order.unit) }}</span><span>Entrega {{ formatDate(order.promised_at) }}</span></div>
+              <div class="kanban-card__actions"><RouterLink :to="`/app/orders/${order.id}`">Ver orden <ArrowRight :size="14" /></RouterLink><button v-if="canAdvance && order.status === 'ACTIVE'" type="button" :disabled="busyOrderId !== null" @click="pendingAdvance = order">{{ busyOrderId === order.id ? 'Guardando...' : advanceLabel(order) }}</button></div>
+            </article>
+            <p v-if="!column.orders.length" class="kanban-column__empty">Sin pedidos</p>
+          </div>
+        </section>
       </div>
     </section>
 
-    <!-- Lista de Órdenes -->
-    <section v-else class="orders-list">
-      <article
-        v-for="order in filteredOrders"
-        :key="order.id"
-        class="order-card"
-        :class="'card-' + order.traffic_light.toLowerCase()"
-        @click="openOrder(order.id)"
-      >
-        <div class="order-top">
-          <span class="order-code">{{ order.code }}</span>
-          <span class="traffic-badge" :class="'badge-' + order.traffic_light.toLowerCase()">
-            {{ getTrafficLightLabel(order.traffic_light) }}
-          </span>
-        </div>
-
-        <h3 class="order-product">{{ order.product }}</h3>
-        <p class="order-client">Cliente: <strong>{{ order.client_name }}</strong></p>
-
-        <div class="order-meta-grid">
-          <div>
-            <span class="meta-label">Cantidad:</span>
-            <span class="meta-val">{{ order.quantity }} {{ order.unit }}</span>
-          </div>
-          <div>
-            <span class="meta-label">Entrega prometida:</span>
-            <span class="meta-val">{{ formatDate(order.promised_at) }}</span>
-          </div>
-        </div>
-
-        <div class="order-footer">
-          <span class="stage-pill">
-            📍 Estación: <strong>{{ order.current_stage || 'Corte' }}</strong>
-          </span>
-          <span class="action-hint">Ver avance →</span>
-        </div>
+    <section v-else class="board-list" aria-label="Lista de órdenes">
+      <article v-for="order in filteredOrders" :key="order.id" class="board-list__row">
+        <div><span class="board-list__code">{{ order.code }}</span><h2>{{ order.product }}</h2><p>{{ order.client_name }} · {{ formatOrderQuantity(order.quantity, order.unit) }}</p></div>
+        <div class="board-list__details"><strong>{{ order.status === 'COMPLETED' ? 'Completada' : order.current_stage || 'En producción' }}</strong><span>Entrega {{ formatDate(order.promised_at) }}</span></div>
+        <span class="ops-status" :class="`ops-status--${order.traffic_light === 'LATE' ? 'danger' : order.traffic_light === 'AT_RISK' ? 'warning' : 'good'}`">{{ trafficLabel(order.traffic_light) }}</span>
+        <div class="board-list__actions"><RouterLink class="ops-button" :to="`/app/orders/${order.id}`">Ver orden</RouterLink><button v-if="canAdvance && order.status === 'ACTIVE'" class="ops-button ops-button--primary" type="button" :disabled="busyOrderId !== null" @click="pendingAdvance = order">{{ busyOrderId === order.id ? 'Guardando...' : advanceLabel(order) }}</button></div>
       </article>
     </section>
+    <StageAdvanceDialog v-if="pendingAdvance" :code="pendingAdvance.code" :stage="pendingAdvance.current_stage || 'etapa actual'" :next-stage="stages[stages.indexOf(pendingAdvance.current_stage?.toUpperCase() ?? '') + 1] || null" :busy="busyOrderId !== null" @cancel="pendingAdvance = null" @confirm="advance(pendingAdvance)" />
   </main>
 </template>
 
 <style scoped>
-.orders-page {
-  max-width: 680px;
-  margin: 0 auto;
-  padding: 1rem;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-  gap: 0.5rem;
-}
-
-.header-nav {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.btn-back {
-  background: none;
-  border: none;
-  color: var(--color-primary, #0a5a70);
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0.25rem 0.5rem;
-}
-
-h1 {
-  font-size: 1.4rem;
-  color: var(--color-text-dark, #10242d);
-  margin: 0;
-}
-
-.traffic-light-tabs {
-  display: flex;
-  gap: 0.35rem;
-  overflow-x: auto;
-  padding-bottom: 0.5rem;
-  margin-bottom: 0.75rem;
-  -webkit-overflow-scrolling: touch;
-}
-
-.tab-btn {
-  white-space: nowrap;
-  padding: 0.4rem 0.75rem;
-  border: 1px solid var(--color-border, #cbd9df);
-  background: #fff;
-  border-radius: 20px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: #475569;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.tab-btn.active {
-  background: var(--color-primary, #0a5a70);
-  color: #fff;
-  border-color: var(--color-primary, #0a5a70);
-}
-
-.search-bar {
-  margin-bottom: 1rem;
-}
-
-.input-search {
-  width: 100%;
-  padding: 0.65rem 0.85rem;
-  border: 1px solid var(--color-border, #cbd9df);
-  border-radius: 8px;
-  font-size: 0.95rem;
-  background: #fff;
-}
-
-.orders-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-}
-
-.order-card {
-  background: #fff;
-  border: 1px solid var(--color-border, #cbd9df);
-  border-radius: 10px;
-  padding: 1rem;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-  cursor: pointer;
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
-  border-left: 5px solid #cbd9df;
-}
-
-.order-card:active {
-  transform: scale(0.99);
-}
-
-.order-card.card-on_time {
-  border-left-color: #22c55e;
-}
-
-.order-card.card-at_risk {
-  border-left-color: #eab308;
-}
-
-.order-card.card-late {
-  border-left-color: #ef4444;
-}
-
-.order-card.card-completed {
-  border-left-color: #3b82f6;
-  opacity: 0.85;
-}
-
-.order-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.4rem;
-}
-
-.order-code {
-  font-weight: 700;
-  font-size: 0.95rem;
-  color: var(--color-primary, #0a5a70);
-  background: #f0f9ff;
-  padding: 0.15rem 0.45rem;
-  border-radius: 4px;
-}
-
-.traffic-badge {
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 0.2rem 0.5rem;
-  border-radius: 12px;
-}
-
-.badge-on_time {
-  background: #dcfce7;
-  color: #166534;
-}
-
-.badge-at_risk {
-  background: #fef9c3;
-  color: #854d0e;
-}
-
-.badge-late {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.badge-completed {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-.order-product {
-  margin: 0 0 0.25rem 0;
-  font-size: 1.1rem;
-  color: var(--color-text-dark, #10242d);
-}
-
-.order-client {
-  margin: 0 0 0.5rem 0;
-  font-size: 0.9rem;
-  color: #475569;
-}
-
-.order-meta-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.5rem;
-  background: #f8fafc;
-  padding: 0.5rem 0.75rem;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  margin-bottom: 0.6rem;
-}
-
-.meta-label {
-  display: block;
-  color: #64748b;
-  font-size: 0.75rem;
-}
-
-.meta-val {
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.order-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-top: 0.4rem;
-  border-top: 1px dashed #e2e8f0;
-}
-
-.stage-pill {
-  font-size: 0.85rem;
-  color: #334155;
-}
-
-.action-hint {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--color-primary, #0a5a70);
-}
-
-.loading-state,
-.empty-state {
-  text-align: center;
-  padding: 3rem 1rem;
-  color: #64748b;
-}
+.board-page { width: 100%; min-width: 0; margin: 0 auto; padding: clamp(1rem, 2.5vw, 2rem); display: grid; gap: 1rem; }
+.board-header, .board-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.board-header h1 { margin: .2rem 0; font-size: var(--tf-page-title-size); }
+.board-header p:last-child { margin: 0; color: var(--tf-text-subtle); font-size: .88rem; }
+.board-kicker { margin: 0; color: var(--tf-primary); font-size: .76rem; font-weight: 800; text-transform: uppercase; }
+.board-header__actions { display: flex; align-items: center; gap: .5rem; }
+.board-toolbar { padding-top: .3rem; }
+.board-view-switch { display: inline-flex; gap: .2rem; padding: .2rem; border: 1px solid var(--tf-border-soft); border-radius: .5rem; background: #fff; }
+.board-view-switch button { display: inline-flex; min-height: 38px; align-items: center; gap: .4rem; padding: .35rem .7rem; border: 0; border-radius: .3rem; color: var(--tf-text-subtle); background: transparent; font: inherit; font-size: .82rem; font-weight: 800; cursor: pointer; }
+.board-view-switch button.active { color: var(--tf-primary-strong); background: var(--tf-primary-soft); }
+.board-search { display: flex; width: min(100%, 21rem); min-height: 44px; align-items: center; gap: .5rem; padding: 0 .75rem; border: 1px solid var(--tf-border-soft); border-radius: .5rem; color: var(--tf-text-subtle); background: #fff; }
+.board-search:focus-within { border-color: var(--tf-primary); outline: 2px solid var(--tf-focus); }
+.board-search input { min-width: 0; width: 100%; border: 0; outline: 0; background: transparent; font-size: .85rem; }
+.board-filters { display: flex; gap: .4rem; overflow-x: auto; padding-bottom: .3rem; }
+.board-filters button { display: inline-flex; min-height: 38px; flex: 0 0 auto; align-items: center; gap: .4rem; padding: .35rem .65rem; border: 1px solid var(--tf-border-soft); border-radius: .35rem; color: var(--tf-text-subtle); background: #fff; font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer; }
+.board-filters button.active { border-color: var(--tf-primary); color: var(--tf-primary-strong); background: var(--tf-primary-soft); }
+.board-filters strong { color: var(--tf-ink); }
+.board-results { margin: -.6rem 0 0; color: var(--tf-text-subtle); font-size: .78rem; }
+.board-notice { display: flex; align-items: center; gap: .5rem; padding: .7rem .8rem; border: 1px solid var(--tf-success-border); border-left: 4px solid var(--tf-success); border-radius: .4rem; color: var(--tf-primary-strong); background: var(--tf-success-soft); font-size: .86rem; font-weight: 700; }
+.board-notice button { margin-left: auto; border: 0; background: transparent; color: inherit; font-size: 1.25rem; cursor: pointer; }
+.board-empty { padding: 3rem 1rem; border: 1px dashed var(--tf-border); border-radius: .5rem; background: #fff; }
+.kanban-scroll { max-width: 100%; overflow-x: auto; padding-bottom: .75rem; scrollbar-color: var(--tf-border) transparent; }
+.kanban-grid { display: grid; width: max-content; grid-template-columns: repeat(8, minmax(15.5rem, 15.5rem)); gap: .7rem; }
+.kanban-column { min-height: 24rem; border: 1px solid var(--tf-border-soft); border-radius: .5rem; background: #eef3f3; }
+.kanban-column__header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .8rem; border-bottom: 1px solid var(--tf-border-soft); }
+.kanban-column__header > div { display: flex; align-items: center; gap: .5rem; min-width: 0; }
+.kanban-column__number { color: var(--tf-primary); font-size: .7rem; font-weight: 800; }
+.kanban-column__header h2 { margin: 0; font-size: .83rem; }
+.kanban-column__header > strong { display: grid; min-width: 1.55rem; height: 1.55rem; place-items: center; border-radius: .3rem; color: var(--tf-primary-strong); background: #fff; font-size: .72rem; }
+.kanban-column__items { display: grid; align-content: start; gap: .6rem; padding: .65rem; }
+.kanban-column__empty { margin: 1.2rem 0; color: var(--tf-text-subtle); font-size: .78rem; text-align: center; }
+.kanban-card { display: grid; gap: .6rem; padding: .85rem; border: 1px solid var(--tf-border-soft); border-left: 3px solid var(--tf-success); border-radius: .4rem; background: #fff; box-shadow: var(--tf-shadow-sm); }
+.kanban-card--at_risk { border-left-color: var(--tf-warning); }
+.kanban-card--late { border-left-color: var(--tf-danger); }
+.kanban-card--completed { border-left-color: var(--tf-info); }
+.kanban-card__top { display: flex; align-items: center; justify-content: space-between; gap: .3rem; }
+.kanban-card__top > span:first-child { color: var(--tf-primary-strong); font-size: .74rem; font-weight: 800; }
+.kanban-card h3 { margin: 0; color: var(--tf-ink); font-size: .94rem; overflow-wrap: anywhere; }
+.kanban-card p { margin: -.3rem 0 0; color: var(--tf-text-subtle); font-size: .78rem; }
+.kanban-card__meta { display: grid; gap: .15rem; padding-top: .55rem; border-top: 1px solid var(--tf-border-soft); color: var(--tf-text-subtle); font-size: .75rem; }
+.kanban-card__actions { display: grid; gap: .35rem; }
+.kanban-card__actions a { display: inline-flex; align-items: center; gap: .2rem; color: var(--tf-primary); font-size: .78rem; font-weight: 800; text-decoration: none; }
+.kanban-card__actions button { min-height: 38px; border: 1px solid var(--tf-primary-border); border-radius: .3rem; color: var(--tf-primary-strong); background: var(--tf-primary-soft); font: inherit; font-size: .76rem; font-weight: 800; text-transform: capitalize; cursor: pointer; }
+.kanban-card__actions button:hover:not(:disabled) { color: #fff; background: var(--tf-primary); }
+.kanban-card__actions button:disabled { opacity: .55; cursor: wait; }
+.board-list { display: grid; gap: .55rem; }
+.board-list__row { display: grid; grid-template-columns: minmax(10rem, 1.5fr) minmax(9rem, 1fr) auto auto; align-items: center; gap: .8rem; padding: .9rem 1rem; border: 1px solid var(--tf-border-soft); border-radius: .4rem; background: #fff; }
+.board-list__code { color: var(--tf-primary); font-size: .75rem; font-weight: 800; }
+.board-list__row h2 { margin: .1rem 0; font-size: .94rem; }
+.board-list__row p { margin: 0; color: var(--tf-text-subtle); font-size: .8rem; }
+.board-list__details { display: grid; gap: .2rem; font-size: .78rem; }
+.board-list__details span { color: var(--tf-text-subtle); }
+.board-list__actions { display: flex; flex-wrap: wrap; gap: .4rem; justify-content: flex-end; }
+.board-list__actions .ops-button { min-height: 38px; font-size: .76rem; }
+@media (max-width: 1060px) { .board-list__row { grid-template-columns: minmax(10rem, 1fr) auto; } .board-list__actions { grid-column: 1 / -1; justify-content: flex-start; } }
+@media (max-width: 620px) { .board-header { align-items: start; flex-direction: column; } .board-header__actions { width: 100%; } .board-header__actions .ops-button { flex: 1; } .board-toolbar { align-items: stretch; flex-direction: column; } .board-search { width: 100%; } .board-list__row { grid-template-columns: 1fr auto; } .board-list__details { grid-column: 1 / -1; } }
 </style>

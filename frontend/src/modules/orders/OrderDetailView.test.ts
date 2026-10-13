@@ -6,7 +6,7 @@ import OrderDetailView from './OrderDetailView.vue'
 import { ordersApi } from './api'
 import { useSessionStore } from '../session/session.store'
 
-vi.mock('./api', () => ({ ordersApi: { getByID: vi.fn(), updateStage: vi.fn(), addStagePhoto: vi.fn() } }))
+vi.mock('./api', () => ({ ordersApi: { getByID: vi.fn(), updateStage: vi.fn(), reopenStage: vi.fn(), addStagePhoto: vi.fn() } }))
 
 const order = {
   id: 'order-1', code: 'OT-000001', product: 'Polo Demo', client_name: 'Cliente Demo', quantity: 12, unit: 'UNITS', status: 'ACTIVE',
@@ -41,6 +41,11 @@ describe('OrderDetailView', () => {
     expect(screen.getByRole('button', { name: /completar etapa/i })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /^iniciar$/i })).toBeNull()
     await fireEvent.click(screen.getByRole('button', { name: /completar etapa/i }))
+    expect(ordersApi.updateStage).not.toHaveBeenCalled()
+    await fireEvent.click(screen.getByRole('button', { name: /seguir en esta etapa/i }))
+    expect(ordersApi.updateStage).not.toHaveBeenCalled()
+    await fireEvent.click(screen.getByRole('button', { name: /completar etapa/i }))
+    await fireEvent.click(screen.getByRole('button', { name: /confirmar avance/i }))
 
     await waitFor(() => expect(ordersApi.updateStage).toHaveBeenCalledWith('order-1', 1, 'COMPLETED', 'csrf-stage'))
   })
@@ -76,5 +81,43 @@ describe('OrderDetailView', () => {
 
     const ticketButton = await screen.findByRole('button', { name: /imprimir ficha viajera/i })
     expect(ticketButton.textContent).not.toMatch(/qr/i)
+  })
+
+  it('lets a manager correct only the last completed stage with a reason', async () => {
+    const pinia = createPinia()
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/app/orders/:id', component: OrderDetailView }, { path: '/app/orders', component: { template: '<main />' } }] })
+    await router.push('/app/orders/order-1')
+    await router.isReady()
+    const session = useSessionStore(pinia)
+    session.csrfToken = 'csrf-correction'
+    session.principal = { id: 'owner-1', email: 'owner@example.test', displayName: 'Owner', role: 'OWNER', workshop: { id: 'workshop-1', name: 'Taller' }, mustChangePassword: false }
+    const advanced = { ...order, stages: [
+      { ...order.stages[0], status: 'COMPLETED', completed_at: '2026-10-12T12:00:00Z' },
+      { ...order.stages[1], status: 'IN_PROGRESS' },
+    ] }
+    vi.mocked(ordersApi.getByID).mockResolvedValue({ data: advanced } as never)
+    vi.mocked(ordersApi.reopenStage).mockResolvedValue({ data: order.stages[0] } as never)
+    render(OrderDetailView, { global: { plugins: [pinia, router] } })
+
+    await fireEvent.click(await screen.findByRole('button', { name: /corregir avance/i }))
+    await fireEvent.update(screen.getByLabelText(/motivo de la corrección/i), 'Se marcó por error')
+    await fireEvent.click(screen.getByRole('button', { name: /confirmar corrección/i }))
+    await waitFor(() => expect(ordersApi.reopenStage).toHaveBeenCalledWith('order-1', 1, 'Se marcó por error', 'csrf-correction'))
+  })
+
+  it('hides correction when the next stage already has evidence', async () => {
+    const pinia = createPinia()
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/app/orders/:id', component: OrderDetailView }, { path: '/app/orders', component: { template: '<main />' } }] })
+    await router.push('/app/orders/order-1')
+    await router.isReady()
+    useSessionStore(pinia).principal = { id: 'owner-1', email: 'owner@example.test', displayName: 'Owner', role: 'OWNER', workshop: { id: 'workshop-1', name: 'Taller' }, mustChangePassword: false }
+    vi.mocked(ordersApi.getByID).mockResolvedValue({ data: {
+      ...order,
+      stages: [{ ...order.stages[0], status: 'COMPLETED' }, { ...order.stages[1], status: 'IN_PROGRESS' }],
+      photos: [{ id: 'photo-1', stage_position: 2, photo_data: 'data:image/png;base64,AA', created_at: '2026-10-12T12:00:00Z' }],
+    } } as never)
+    render(OrderDetailView, { global: { plugins: [pinia, router] } })
+    await screen.findByText('Costura')
+    expect(screen.queryByRole('button', { name: /corregir avance/i })).toBeNull()
   })
 })

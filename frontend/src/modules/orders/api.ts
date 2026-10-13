@@ -79,6 +79,12 @@ export const ordersApi = {
       { status },
       csrfToken
     ),
+  reopenStage: (orderId: string, position: number, reason: string, csrfToken?: string) =>
+    api.post<{ data: OrderStage }>(
+      `/api/v1/orders/${orderId}/stages/${position}/reopen`,
+      { reason },
+      csrfToken
+    ),
   addStagePhoto: (orderId: string, position: number, photoData: string, caption?: string, csrfToken?: string) =>
     api.post<{ data: StagePhoto }>(
       `/api/v1/orders/${orderId}/stages/${position}/photos`,

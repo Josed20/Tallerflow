@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ordersApi, type Order } from './api'
 import UiAlert from '../../components/UiAlert.vue'
+import { matchesOrderSearch, orderNumberFromQuery } from './order-search'
+import { formatOrderQuantity } from './order-display'
 
 const router = useRouter()
 const orders = ref<Order[]>([])
@@ -19,17 +21,13 @@ const videoRef = ref<HTMLVideoElement | null>(null)
 let mediaStream: MediaStream | null = null
 let scanInterval: ReturnType<typeof setInterval> | null = null
 
-const activeOrders = computed(() => {
-  const query = search.value.trim().toLowerCase()
-  return orders.value.filter((order) => {
-    if (order.status !== 'ACTIVE') return false
-    return !query || [order.code, order.product, order.client_name, order.current_stage ?? '']
-      .some((value) => value.toLowerCase().includes(query))
-  })
-})
+const allActiveOrders = computed(() => orders.value.filter((order) => order.status === 'ACTIVE'))
+const activeOrders = computed(() => allActiveOrders.value.filter((order) => matchesOrderSearch(order, search.value))
+  .sort((a, b) => new Date(a.promised_at).getTime() - new Date(b.promised_at).getTime()))
 
-const onTimeCount = computed(() => activeOrders.value.filter((o) => o.traffic_light === 'ON_TIME').length)
-const atRiskCount = computed(() => activeOrders.value.filter((o) => o.traffic_light === 'AT_RISK' || o.traffic_light === 'LATE').length)
+const onTimeCount = computed(() => allActiveOrders.value.filter((o) => o.traffic_light === 'ON_TIME').length)
+const atRiskCount = computed(() => allActiveOrders.value.filter((o) => o.traffic_light === 'AT_RISK' || o.traffic_light === 'LATE').length)
+const dueTodayCount = computed(() => allActiveOrders.value.filter((order) => new Date(order.promised_at).toLocaleDateString('en-CA') === new Date().toLocaleDateString('en-CA')).length)
 
 async function loadQueue() {
   loading.value = true
@@ -59,15 +57,11 @@ function resolveScannedText(rawText: string): string | null {
     return text
   }
 
-  // Case 3: Order code like OT-000001
-  const found = orders.value.find((o) => o.code.toUpperCase() === text.toUpperCase())
+  // A printed code or its short numeric form both identify the same order.
+  const orderNumber = orderNumberFromQuery(text)
+  const found = orders.value.find((o) => o.code.toUpperCase() === text.toUpperCase() || (orderNumber !== null && o.order_number === orderNumber))
   if (found) {
     return found.id
-  }
-
-  // Fallback: return raw text if alphanumeric
-  if (/^[A-Za-z0-9_-]+$/.test(text)) {
-    return text
   }
 
   return null
@@ -78,6 +72,13 @@ async function openScanner() {
   scannerError.value = ''
   manualCodeInput.value = ''
   isScanning.value = true
+  await nextTick()
+
+  if (!('BarcodeDetector' in window)) {
+    scannerError.value = 'Este navegador no admite lectura automática. Ingresa el código de la orden manualmente.'
+    isScanning.value = false
+    return
+  }
 
   // Start video stream if camera available
   if (navigator?.mediaDevices?.getUserMedia) {
@@ -89,6 +90,9 @@ async function openScanner() {
         videoRef.value.srcObject = mediaStream
         await videoRef.value.play()
         startBarcodeDetection()
+      } else {
+        scannerError.value = 'No se pudo iniciar la vista de cámara. Ingresa el código manualmente.'
+        isScanning.value = false
       }
     } catch (err: any) {
       scannerError.value = 'No se pudo acceder a la cámara. Puedes escribir el código de la orden manualmente.'
@@ -124,6 +128,8 @@ function startBarcodeDetection() {
       // Fallback
     }
   }
+  scannerError.value = 'Este navegador no admite lectura automática. Ingresa el código de la orden manualmente.'
+  isScanning.value = false
 }
 
 async function handleCodeScanned(text: string) {
@@ -162,8 +168,9 @@ onUnmounted(closeScanner)
   <main class="production-queue">
     <header class="production-queue__header">
       <div>
-        <p class="production-queue__eyebrow">Taller en Vivo · Operación</p>
-        <h1>Mi cola de trabajo</h1>
+        <p class="production-queue__eyebrow">Producción</p>
+        <h1>Cola del taller</h1>
+        <p class="production-queue__subtitle">Órdenes activas, ordenadas por fecha de entrega.</p>
       </div>
       <div class="production-queue__actions">
         <button
@@ -171,7 +178,7 @@ onUnmounted(closeScanner)
           type="button"
           @click="openScanner"
         >
-          <span class="icon">📷</span>
+          <span class="icon" aria-hidden="true">▣</span>
           <span>Escanear Ficha Viajera</span>
         </button>
         <button
@@ -189,7 +196,7 @@ onUnmounted(closeScanner)
     <!-- Metrics Bar -->
     <section class="production-queue__metrics">
       <div class="metric-pill metric-pill--total">
-        <span class="metric-pill__num">{{ activeOrders.length }}</span>
+        <span class="metric-pill__num">{{ allActiveOrders.length }}</span>
         <span class="metric-pill__label">Órdenes activas</span>
       </div>
       <div class="metric-pill metric-pill--ontime">
@@ -200,6 +207,7 @@ onUnmounted(closeScanner)
         <span class="metric-pill__num">{{ atRiskCount }}</span>
         <span class="metric-pill__label">En riesgo o atrasadas</span>
       </div>
+      <div class="metric-pill metric-pill--today"><span class="metric-pill__num">{{ dueTodayCount }}</span><span class="metric-pill__label">Entrega hoy</span></div>
     </section>
 
     <!-- Search filter -->
@@ -209,15 +217,15 @@ onUnmounted(closeScanner)
         id="production-search"
         v-model="search"
         type="search"
-        placeholder="Código (OT-...), prenda, cliente o estación (Corte, Costura...)"
+        placeholder="Código o número (ej. 3), prenda o cliente"
       />
     </label>
 
     <p v-if="loading" class="production-queue__state">Cargando trabajo activo del taller…</p>
     <section v-else-if="activeOrders.length === 0" class="production-queue__empty" aria-live="polite">
-      <div class="empty-icon">✂️</div>
-      <h2>No hay trabajo activo en tu cola</h2>
-      <p>Cuando se cree una orden o esté lista para producción en el taller, aparecerá aquí con su Ficha Viajera.</p>
+      <h2>No hay órdenes activas</h2>
+      <p v-if="search">No encontramos órdenes con esa búsqueda. Prueba con otro código, prenda o cliente.</p>
+      <p v-else>Cuando se cree una orden, aparecerá aquí para registrar su avance.</p>
     </section>
     <section v-else class="production-queue__list" aria-label="Órdenes activas">
       <RouterLink
@@ -237,11 +245,11 @@ onUnmounted(closeScanner)
             <span
               v-else-if="order.traffic_light === 'AT_RISK'"
               class="traffic-badge traffic-badge--yellow"
-            >⚠️ En riesgo</span>
+            >● En riesgo</span>
             <span
               v-else-if="order.traffic_light === 'LATE'"
               class="traffic-badge traffic-badge--red"
-            >🚨 Atrasada</span>
+            >● Atrasada</span>
           </div>
           <span class="production-queue__stage-tag">
             {{ order.current_stage || 'Pendiente' }}
@@ -251,14 +259,14 @@ onUnmounted(closeScanner)
         <div class="card-body">
           <strong class="product-title">{{ order.product }}</strong>
           <p class="product-meta">
-            <span>{{ order.quantity }} {{ order.unit }}</span>
+            <span>{{ formatOrderQuantity(order.quantity, order.unit) }}</span>
             <span class="meta-sep">·</span>
             <span>{{ order.client_name }}</span>
           </p>
         </div>
 
         <div class="card-footer">
-          <span class="advance-hint">Abrir hoja de ruta y registrar avance →</span>
+          <span class="advance-hint">Ver orden y registrar avance →</span>
         </div>
       </RouterLink>
     </section>
@@ -309,7 +317,7 @@ onUnmounted(closeScanner)
                 id="manual-code-input"
                 v-model="manualCodeInput"
                 type="text"
-                placeholder="Ej: OT-000001 o pega enlace"
+                placeholder="Ej. OT-000003, 3 o pega el enlace"
                 autocomplete="off"
               />
               <button class="manual-submit-btn" type="submit" @click.prevent="handleManualSubmit">
@@ -325,10 +333,10 @@ onUnmounted(closeScanner)
 
 <style scoped>
 .production-queue {
-  max-width: 54rem;
+  max-width: 82rem;
   margin: 0 auto;
   padding: 1.5rem 1rem;
-  color: #0f172a;
+  color: var(--tf-ink);
 }
 
 .production-queue__header {
@@ -342,18 +350,20 @@ onUnmounted(closeScanner)
 
 .production-queue__eyebrow {
   margin: 0 0 .25rem;
-  color: #0d9488;
+  color: var(--tf-primary);
   font-size: .8rem;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: .08em;
 }
 
+.production-queue__subtitle { margin: .3rem 0 0; color: var(--tf-text-subtle); font-size: .86rem; }
+
 h1 {
   margin: 0;
-  font-size: 1.6rem;
+  font-size: var(--tf-page-title-size);
   font-weight: 800;
-  color: #0b1c30;
+  color: var(--tf-ink);
 }
 
 .production-queue__actions {
@@ -367,7 +377,7 @@ h1 {
   align-items: center;
   gap: .4rem;
   min-height: 44px;
-  background: #0284c7;
+  background: var(--tf-primary);
   color: #ffffff;
   border: none;
   border-radius: .5rem;
@@ -375,21 +385,21 @@ h1 {
   font: inherit;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 2px 4px rgba(2, 132, 199, 0.25);
+  box-shadow: var(--tf-shadow-sm);
   transition: background 0.15s ease;
 }
 
 .production-queue__scan-btn:hover {
-  background: #0369a1;
+  background: var(--tf-primary-hover);
 }
 
 .production-queue__refresh {
   min-height: 44px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--tf-border-soft);
   border-radius: .5rem;
   padding: .5rem .75rem;
   background: #fff;
-  color: #334155;
+  color: var(--tf-ink-soft);
   font: inherit;
   font-weight: 700;
   cursor: pointer;
@@ -413,22 +423,24 @@ h1 {
 }
 
 .metric-pill--total {
-  background: #f1f5f9;
-  color: #334155;
-  border: 1px solid #cbd5e1;
+  background: var(--tf-neutral-soft);
+  color: var(--tf-ink-soft);
+  border: 1px solid var(--tf-border-soft);
 }
 
 .metric-pill--ontime {
-  background: #ecfdf5;
-  color: #065f46;
-  border: 1px solid #a7f3d0;
+  background: var(--tf-success-soft);
+  color: var(--tf-success);
+  border: 1px solid var(--tf-success-border);
 }
 
 .metric-pill--risk {
-  background: #fef2f2;
-  color: #991b1b;
-  border: 1px solid #fecaca;
+  background: var(--tf-danger-soft);
+  color: var(--tf-danger);
+  border: 1px solid var(--tf-danger-border);
 }
+
+.metric-pill--today { background: var(--tf-info-soft); color: var(--tf-info); border: 1px solid var(--tf-info-border); }
 
 .metric-pill__num {
   font-size: 1rem;
@@ -445,7 +457,7 @@ h1 {
 
 .production-queue__search input {
   min-height: 46px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--tf-border);
   border-radius: .5rem;
   padding: .625rem .875rem;
   font: inherit;
@@ -453,7 +465,7 @@ h1 {
 }
 
 .production-queue__search input:focus-visible {
-  outline: 3px solid #0284c7;
+  outline: 3px solid var(--tf-focus);
   outline-offset: 1px;
 }
 
@@ -491,12 +503,16 @@ h1 {
   gap: .875rem;
 }
 
+@media (min-width: 1080px) {
+  .production-queue__list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 .production-queue__card {
   display: grid;
   gap: .625rem;
   border: 1px solid #e2e8f0;
-  border-left: .375rem solid #0d9488;
-  border-radius: .75rem;
+  border-left: .375rem solid var(--tf-primary);
+  border-radius: .5rem;
   padding: 1.125rem 1.25rem;
   color: inherit;
   background: #ffffff;
@@ -511,7 +527,7 @@ h1 {
 }
 
 .production-queue__card:focus-visible {
-  outline: 3px solid #0284c7;
+  outline: 3px solid var(--tf-focus);
   outline-offset: 2px;
 }
 
@@ -528,7 +544,7 @@ h1 {
 }
 
 .production-queue__code {
-  color: #0d9488;
+  color: var(--tf-primary);
   font-weight: 800;
   font-size: 1.05rem;
 }
@@ -541,24 +557,24 @@ h1 {
 }
 
 .traffic-badge--green {
-  background: #dcfce7;
-  color: #15803d;
+  background: var(--tf-success-soft);
+  color: var(--tf-success);
 }
 
 .traffic-badge--yellow {
-  background: #fef9c3;
-  color: #854d0e;
+  background: var(--tf-warning-soft);
+  color: var(--tf-warning);
 }
 
 .traffic-badge--red {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: var(--tf-danger-soft);
+  color: var(--tf-danger);
 }
 
 .production-queue__stage-tag {
-  background: #f0fdfa;
-  color: #0f766e;
-  border: 1px solid #99f6e4;
+  background: var(--tf-primary-soft);
+  color: var(--tf-primary-strong);
+  border: 1px solid var(--tf-primary-border);
   font-weight: 700;
   font-size: .8rem;
   padding: .25rem .6rem;
@@ -593,7 +609,7 @@ h1 {
 }
 
 .advance-hint {
-  color: #0284c7;
+  color: var(--tf-primary);
   font-weight: 700;
   font-size: .85rem;
 }
@@ -624,7 +640,7 @@ h1 {
   justify-content: space-between;
   align-items: flex-start;
   padding: 1.25rem 1.5rem;
-  background: #0b1c30;
+  background: var(--tf-ink);
   color: #ffffff;
 }
 
@@ -684,7 +700,7 @@ h1 {
   position: absolute;
   width: 20px;
   height: 20px;
-  border-color: #38bdf8;
+  border-color: var(--tf-focus);
 }
 
 .reticle-corner--tl { top: 0; left: 0; border-top: 3px solid; border-left: 3px solid; }
@@ -698,8 +714,8 @@ h1 {
   left: 0;
   right: 0;
   height: 2px;
-  background: #ef4444;
-  box-shadow: 0 0 8px #ef4444;
+  background: var(--tf-danger);
+  box-shadow: 0 0 8px var(--tf-danger);
   animation: laser-sweep 2s infinite ease-in-out;
 }
 
@@ -712,10 +728,10 @@ h1 {
 .scanner-error-text {
   margin: 0;
   padding: .75rem;
-  background: #fef2f2;
-  border-left: 3px solid #ef4444;
+  background: var(--tf-danger-soft);
+  border-left: 3px solid var(--tf-danger);
   border-radius: .375rem;
-  color: #991b1b;
+  color: var(--tf-danger);
   font-size: .85rem;
 }
 
@@ -745,7 +761,7 @@ h1 {
 }
 
 .manual-submit-btn {
-  background: #0284c7;
+  background: var(--tf-primary);
   color: #ffffff;
   border: none;
   border-radius: .5rem;
@@ -757,6 +773,19 @@ h1 {
 }
 
 .manual-submit-btn:hover {
-  background: #0369a1;
+  background: var(--tf-primary-hover);
+}
+
+@media (max-width: 640px) {
+  .production-queue__actions { width: 100%; }
+  .production-queue__scan-btn { flex: 1; justify-content: center; }
+  .card-top, .code-and-traffic { align-items: flex-start; flex-wrap: wrap; }
+  .manual-input-row { flex-direction: column; }
+  .manual-submit-btn { min-height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scanner-laser { animation: none; }
+  .production-queue__card { transition: none; }
 }
 </style>

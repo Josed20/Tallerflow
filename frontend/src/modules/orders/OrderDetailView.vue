@@ -6,6 +6,10 @@ import UiAlert from '../../components/UiAlert.vue'
 import { useSessionStore } from '../session/session.store'
 import { canAdvanceProduction } from '../session/role-policy'
 import { compressImageFile } from '../../utils/image'
+import { AlertTriangle, Camera, Check, Printer, RotateCcw, X } from '@lucide/vue'
+import { canManageOperations } from '../session/role-policy'
+import { formatOrderQuantity } from './order-display'
+import StageAdvanceDialog from './StageAdvanceDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -14,22 +18,71 @@ const session = useSessionStore()
 const order = ref<Order | null>(null)
 const loading = ref(true)
 const error = ref('')
+const notice = ref('')
 const updatingStage = ref<number | null>(null)
 const uploadingPhotoStage = ref<number | null>(null)
 const showTicketModal = ref(false)
 const previewPhoto = ref<StagePhoto | null>(null)
+const correctionStage = ref<OrderStage | null>(null)
+const correctionReason = ref('')
+const correctionError = ref('')
+const correcting = ref(false)
+const pendingAdvanceStage = ref<OrderStage | null>(null)
 
 const canAdvance = computed(() => canAdvanceProduction(session.principal?.role))
+const canCorrect = computed(() => canManageOperations(session.principal?.role))
+const lastCompletedPosition = computed(() => Math.max(0, ...(order.value?.stages?.filter((stage) => stage.status === 'COMPLETED').map((stage) => stage.position) ?? [])))
 
-async function loadOrder() {
+function canReopen(stage: OrderStage) {
+  if (!canCorrect.value || stage.status !== 'COMPLETED' || stage.position !== lastCompletedPosition.value) return false
+  if (stage.position === 7) return order.value?.status === 'COMPLETED'
+  const next = order.value?.stages?.find((item) => item.position === stage.position + 1)
+  return next?.status === 'IN_PROGRESS' && getStagePhotos(stage.position + 1).length === 0
+}
+
+async function handleCorrection() {
+  if (!order.value || !correctionStage.value || correcting.value) return
+  if (correctionReason.value.trim().length < 5) {
+    correctionError.value = 'Escribe un motivo de al menos 5 caracteres.'
+    return
+  }
+  if (!session.csrfToken) {
+    correctionError.value = 'Tu sesión necesita renovarse. Vuelve a iniciar sesión.'
+    return
+  }
+  correcting.value = true
+  error.value = ''
+  correctionError.value = ''
+  const stageName = correctionStage.value.name
+  try {
+    await ordersApi.reopenStage(order.value.id, correctionStage.value.position, correctionReason.value.trim(), session.csrfToken)
+    correctionStage.value = null
+    correctionReason.value = ''
+    if (await loadOrder(false)) notice.value = `La orden volvió a ${stageName}. La corrección quedó registrada.`
+  } catch (err: any) {
+    if (err?.status === 409) {
+      correctionStage.value = null
+      await loadOrder(false)
+      error.value = 'La orden cambió o la siguiente etapa ya tiene evidencia. Mostramos el estado más reciente.'
+    } else {
+      correctionError.value = err?.message || 'No pudimos corregir la etapa.'
+    }
+  } finally {
+    correcting.value = false
+  }
+}
+
+async function loadOrder(showLoading = true) {
   const id = route.params.id as string
-  loading.value = true
+  if (showLoading) loading.value = true
   error.value = ''
   try {
     const res = await ordersApi.getByID(id)
     order.value = res.data
+    return true
   } catch (err: any) {
     error.value = err?.message || 'No se pudo cargar la orden de trabajo.'
+    return false
   } finally {
     loading.value = false
   }
@@ -42,18 +95,29 @@ async function handleAdvanceStage(stage: OrderStage, nextStatus: StageStatus) {
     return
   }
   updatingStage.value = stage.position
+  notice.value = ''
   try {
+    const latest = await ordersApi.getByID(order.value.id)
+    if (latest.data.stages?.find((item) => item.position === stage.position)?.status !== 'IN_PROGRESS') {
+      order.value = latest.data
+      error.value = 'La orden cambió mientras la veías. Revisa la etapa actual antes de avanzar.'
+      return
+    }
     await ordersApi.updateStage(order.value.id, stage.position, nextStatus, session.csrfToken)
-    await loadOrder()
+    if (await loadOrder(false)) {
+      const next = order.value?.stages?.find((item) => item.status === 'IN_PROGRESS')
+      notice.value = next ? `${stage.name} completada. La orden pasó a ${next.name}.` : `${stage.name} completada. La orden está lista.`
+    }
   } catch (err: any) {
     if (err?.status === 409) {
+      await loadOrder(false)
       error.value = 'Otro usuario actualizó esta orden. Mostramos el avance más reciente.'
-      await loadOrder()
     } else {
       error.value = err?.message || 'Error al actualizar el estado de la etapa.'
     }
   } finally {
     updatingStage.value = null
+    pendingAdvanceStage.value = null
   }
 }
 
@@ -88,7 +152,7 @@ async function handlePhotoFileSelected(stagePosition: number, event: Event) {
   try {
     const compressed = await compressImageFile(file, 1200, 0.8)
     await ordersApi.addStagePhoto(order.value.id, stagePosition, compressed, '', session.csrfToken)
-    await loadOrder()
+    if (await loadOrder(false)) notice.value = 'La foto quedó guardada en la etapa.'
   } catch (err: any) {
     error.value = err?.message || 'No se pudo adjuntar la foto a la etapa.'
   } finally {
@@ -100,6 +164,12 @@ async function handlePhotoFileSelected(stagePosition: number, event: Event) {
 function getStagePhotos(position: number): StagePhoto[] {
   if (!order.value?.photos) return []
   return order.value.photos.filter((p) => p.stage_position === position)
+}
+
+function nextStageName(position: number) {
+  if (position >= 7) return null
+  return order.value?.stages?.find((stage) => stage.position === position + 1)?.name
+    ?? ['Corte', 'Costura', 'Acabado', 'Control de calidad', 'Planchado', 'Empaque', 'Entrega'][position]
 }
 
 function formatDate(iso: string) {
@@ -140,34 +210,27 @@ onMounted(() => {
           <h1>{{ order.product }}</h1>
         </div>
         <button class="btn-ticket" type="button" @click="showTicketModal = true">
-          🖨️ Imprimir Ficha Viajera
+          <Printer :size="17" aria-hidden="true" /> Imprimir ficha viajera
         </button>
       </div>
     </header>
 
     <UiAlert v-if="error" :message="error" />
+    <p v-if="notice" class="detail-notice" role="status">{{ notice }}</p>
 
     <section v-if="loading" class="loading-state">
       <p>Cargando detalle de la orden...</p>
     </section>
 
     <div v-else-if="order" class="detail-container">
-      <!-- Banner de Semáforo -->
-      <section class="traffic-banner" :class="'banner-' + order.traffic_light.toLowerCase()">
-        <div class="traffic-icon">
-          <span v-if="order.traffic_light === 'ON_TIME'">🟢</span>
-          <span v-else-if="order.traffic_light === 'AT_RISK'">🟡</span>
-          <span v-else-if="order.traffic_light === 'LATE'">🔴</span>
-          <span v-else>🔵</span>
-        </div>
-        <div class="traffic-info">
-          <h2 v-if="order.traffic_light === 'ON_TIME'">A tiempo para la entrega</h2>
-          <h2 v-else-if="order.traffic_light === 'AT_RISK'">En riesgo de retraso (menos de 48h)</h2>
-          <h2 v-else-if="order.traffic_light === 'LATE'">Orden atrasada respecto a la fecha prometida</h2>
-          <h2 v-else>Orden completada y entregada</h2>
-          <p>Fecha prometida: <strong>{{ formatDate(order.promised_at) }}</strong></p>
-        </div>
-      </section>
+      <div class="order-delivery-line">
+        <span class="order-delivery-line__state" :class="'order-delivery-line__state--' + order.traffic_light.toLowerCase()">
+          <Check v-if="order.traffic_light === 'ON_TIME' || order.traffic_light === 'COMPLETED'" :size="16" aria-hidden="true" />
+          <AlertTriangle v-else :size="16" aria-hidden="true" />
+          {{ order.traffic_light === 'ON_TIME' ? 'A tiempo' : order.traffic_light === 'AT_RISK' ? 'En riesgo' : order.traffic_light === 'LATE' ? 'Atrasada' : 'Completada' }}
+        </span>
+        <span class="order-delivery-line__date">Entrega prometida <strong>{{ formatDate(order.promised_at) }}</strong></span>
+      </div>
 
       <!-- Ficha de Datos del Pedido -->
       <section class="order-summary-card">
@@ -178,12 +241,12 @@ onMounted(() => {
           </div>
           <div>
             <span class="label">Cantidad:</span>
-            <span class="val bold">{{ order.quantity }} {{ order.unit }}</span>
+            <span class="val bold">{{ formatOrderQuantity(order.quantity, order.unit) }}</span>
           </div>
           <div>
             <span class="label">Estado de la Orden:</span>
             <span class="val status-pill" :class="'status-' + order.status.toLowerCase()">
-              {{ order.status === 'ACTIVE' ? 'En Producción' : order.status }}
+              {{ order.status === 'ACTIVE' ? 'En producción' : order.status === 'COMPLETED' ? 'Completada' : 'Cancelada' }}
             </span>
           </div>
           <div>
@@ -202,7 +265,7 @@ onMounted(() => {
       <section class="stages-section">
         <div class="stages-header">
           <div>
-            <h2>Flujo Productivo por Estaciones</h2>
+            <h2>Etapas de producción</h2>
             <p class="stages-subtitle">Solo puedes completar la estación que está actualmente en proceso.</p>
           </div>
         </div>
@@ -220,9 +283,9 @@ onMounted(() => {
                 <div class="stage-text">
                   <h3>{{ stage.name }}</h3>
                   <span class="stage-status-label">
-                    <span v-if="stage.status === 'COMPLETED'">✓ Completado {{ formatShortTime(stage.completed_at) }}</span>
-                    <span v-else-if="stage.status === 'IN_PROGRESS'">⚙️ En Proceso en este momento</span>
-                    <span v-else>⏳ En espera</span>
+                    <span v-if="stage.status === 'COMPLETED'">Completada {{ formatShortTime(stage.completed_at) }}</span>
+                    <span v-else-if="stage.status === 'IN_PROGRESS'">En proceso</span>
+                    <span v-else>En espera</span>
                   </span>
                 </div>
               </div>
@@ -244,21 +307,20 @@ onMounted(() => {
                     :disabled="uploadingPhotoStage === stage.position"
                     @change="handlePhotoFileSelected(stage.position, $event)"
                   />
-                  <span>{{ uploadingPhotoStage === stage.position ? 'Subiendo…' : '📷 Foto' }}</span>
+                  <span><Camera :size="16" aria-hidden="true" /> {{ uploadingPhotoStage === stage.position ? 'Subiendo...' : 'Añadir foto' }}</span>
                 </label>
 
                 <button
                   v-if="stage.status === 'IN_PROGRESS' && canAdvance"
                   class="btn-complete-stage"
                   :disabled="updatingStage === stage.position"
-                  @click="handleAdvanceStage(stage, 'COMPLETED')"
+                  @click="pendingAdvanceStage = stage"
                 >
-                  {{ updatingStage === stage.position ? 'Guardando...' : '✓ Completar Etapa' }}
+                  {{ updatingStage === stage.position ? 'Guardando...' : nextStageName(stage.position) ? `Completar etapa · pasar a ${nextStageName(stage.position)}` : 'Completar etapa y pedido' }}
                 </button>
 
-                <span v-else-if="stage.status === 'COMPLETED'" class="done-badge">
-                  ✓ Listo
-                </span>
+                <span v-else-if="stage.status === 'COMPLETED'" class="done-badge"><Check :size="15" aria-hidden="true" /> Listo</span>
+                <button v-if="canReopen(stage)" class="btn-correct-stage" type="button" @click="correctionStage = stage; correctionReason = ''; correctionError = ''"><RotateCcw :size="15" aria-hidden="true" /> Corregir avance</button>
               </div>
             </div>
 
@@ -282,6 +344,8 @@ onMounted(() => {
       </section>
     </div>
 
+    <StageAdvanceDialog v-if="pendingAdvanceStage && order" :code="order.code" :stage="pendingAdvanceStage.name" :next-stage="nextStageName(pendingAdvanceStage.position)" :busy="updatingStage !== null" @cancel="pendingAdvanceStage = null" @confirm="handleAdvanceStage(pendingAdvanceStage, 'COMPLETED')" />
+
     <!-- Modal Ficha Viajera imprimible -->
     <div v-if="showTicketModal && order" class="modal-backdrop" @click.self="showTicketModal = false">
       <div class="ticket-card printable-ticket">
@@ -291,13 +355,13 @@ onMounted(() => {
             <h2>{{ order.code }}</h2>
             <p>{{ order.product }}</p>
           </div>
-          <button class="btn-close-modal" @click="showTicketModal = false">✕</button>
+          <button class="btn-close-modal" type="button" aria-label="Cerrar ficha" @click="showTicketModal = false"><X :size="18" /></button>
         </div>
 
         <div class="ticket-body">
           <div class="ticket-meta">
             <p><strong>Cliente:</strong> {{ order.client_name }}</p>
-            <p><strong>Cantidad:</strong> {{ order.quantity }} {{ order.unit }}</p>
+            <p><strong>Cantidad:</strong> {{ formatOrderQuantity(order.quantity, order.unit) }}</p>
             <p><strong>Fecha Entrega:</strong> {{ formatDate(order.promised_at) }}</p>
             <p v-if="order.specification"><strong>Detalles:</strong> {{ order.specification }}</p>
           </div>
@@ -311,12 +375,25 @@ onMounted(() => {
 
         <div class="ticket-actions no-print">
           <button class="btn-print" type="button" @click="printTicket">
-            🖨️ Imprimir Hoja de Ruta
+            <Printer :size="17" aria-hidden="true" /> Imprimir hoja de ruta
           </button>
           <button class="btn-secondary" type="button" @click="showTicketModal = false">
             Cerrar
           </button>
         </div>
+      </div>
+    </div>
+
+    <div v-if="correctionStage" class="modal-backdrop" @click.self="correctionStage = null">
+      <div class="correction-dialog" role="dialog" aria-modal="true" aria-labelledby="correction-title">
+        <h2 id="correction-title">Volver a {{ correctionStage.name }}</h2>
+        <p>Solo se puede corregir la última etapa si la siguiente aún no tiene evidencia. Esta acción quedará registrada.</p>
+        <form @submit.prevent="handleCorrection">
+          <UiAlert v-if="correctionError" :message="correctionError" />
+          <label for="correction-reason">Motivo de la corrección</label>
+          <textarea id="correction-reason" v-model="correctionReason" required minlength="5" maxlength="300" rows="3" placeholder="Ej. Se marcó por error antes de terminar la revisión" />
+          <div class="correction-dialog__actions"><button type="button" class="ops-button" @click="correctionStage = null">Mantener etapa</button><button type="submit" class="ops-button ops-button--primary" :disabled="correcting">{{ correcting ? 'Corrigiendo...' : 'Confirmar corrección' }}</button></div>
+        </form>
       </div>
     </div>
 
@@ -344,7 +421,7 @@ onMounted(() => {
 .btn-back {
   background: none;
   border: none;
-  color: var(--color-primary, #0a5a70);
+  color: var(--tf-primary);
   font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
@@ -369,7 +446,7 @@ onMounted(() => {
 .order-code-badge {
   font-size: 0.95rem;
   font-weight: 800;
-  background: var(--color-primary, #0a5a70);
+  background: var(--tf-primary);
   color: #fff;
   padding: 0.2rem 0.6rem;
   border-radius: 6px;
@@ -377,7 +454,7 @@ onMounted(() => {
 
 h1 {
   font-size: 1.35rem;
-  color: var(--color-text-dark, #10242d);
+  color: var(--tf-ink);
   margin: 0;
 }
 
@@ -404,59 +481,19 @@ h1 {
   gap: 1rem;
 }
 
-/* Banner de Semáforo */
-.traffic-banner {
-  border-radius: 12px;
-  padding: 1rem;
-  display: flex;
-  gap: 0.85rem;
-  align-items: center;
-  border: 1px solid transparent;
-}
-
-.traffic-icon {
-  font-size: 2rem;
-  line-height: 1;
-}
-
-.traffic-info h2 {
-  font-size: 1.1rem;
-  margin: 0 0 0.2rem 0;
-}
-
-.traffic-info p {
-  margin: 0;
-  font-size: 0.9rem;
-}
-
-.banner-on_time {
-  background: #f0fdf4;
-  border-color: #86efac;
-  color: #14532d;
-}
-
-.banner-at_risk {
-  background: #fefce8;
-  border-color: #fde047;
-  color: #713f12;
-}
-
-.banner-late {
-  background: #fef2f2;
-  border-color: #fca5a5;
-  color: #7f1d1d;
-}
-
-.banner-completed {
-  background: #eff6ff;
-  border-color: #93c5fd;
-  color: #1e3a8a;
-}
+.order-delivery-line { display: flex; align-items: center; flex-wrap: wrap; gap: .55rem 1rem; padding: .3rem 0 .75rem; border-bottom: 1px solid var(--tf-border-soft); }
+.order-delivery-line__state { display: inline-flex; align-items: center; gap: .35rem; font-size: .83rem; font-weight: 800; }
+.order-delivery-line__state--on_time { color: var(--tf-success); }
+.order-delivery-line__state--at_risk { color: var(--tf-warning); }
+.order-delivery-line__state--late { color: var(--tf-danger); }
+.order-delivery-line__state--completed { color: var(--tf-info); }
+.order-delivery-line__date { color: var(--tf-text-subtle); font-size: .84rem; }
+.order-delivery-line__date strong { color: var(--tf-ink); font-weight: 700; }
 
 /* Ficha de datos */
 .order-summary-card {
   background: #fff;
-  border: 1px solid var(--color-border, #cbd9df);
+  border: 1px solid var(--tf-border-soft);
   border-radius: 10px;
   padding: 1rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
@@ -493,13 +530,13 @@ h1 {
 }
 
 .status-active {
-  background: #e0f2fe;
-  color: #0369a1;
+  background: var(--tf-info-soft);
+  color: var(--tf-info);
 }
 
 .status-completed {
-  background: #dcfce7;
-  color: #15803d;
+  background: var(--tf-success-soft);
+  color: var(--tf-success);
 }
 
 .specification-box {
@@ -524,9 +561,9 @@ h1 {
 }
 
 .stages-header h2 {
-  font-size: 1.15rem;
+  font-size: var(--tf-section-title-size);
   margin: 0 0 0.2rem 0;
-  color: var(--color-primary, #0a5a70);
+  color: var(--tf-ink);
 }
 
 .stages-subtitle {
@@ -552,9 +589,9 @@ h1 {
 }
 
 .stage-card.stage-in_progress {
-  border-color: #3b82f6;
-  background: #f8faff;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+  border-color: var(--tf-primary-border);
+  background: var(--tf-primary-soft);
+  box-shadow: 0 0 0 2px rgb(0 104 95 / 12%);
 }
 
 .stage-card.stage-completed {
@@ -588,12 +625,12 @@ h1 {
 }
 
 .stage-in_progress .stage-num {
-  background: #3b82f6;
+  background: var(--tf-primary);
   color: #fff;
 }
 
 .stage-completed .stage-num {
-  background: #22c55e;
+  background: var(--tf-success);
   color: #fff;
 }
 
@@ -609,7 +646,7 @@ h1 {
 }
 
 .stage-in_progress .stage-status-label {
-  color: #2563eb;
+  color: var(--tf-primary);
   font-weight: 600;
 }
 
@@ -620,7 +657,7 @@ h1 {
 }
 
 .btn-complete-stage {
-  background: #22c55e;
+  background: var(--tf-primary);
   color: #fff;
   border: none;
   font-weight: 700;
@@ -628,7 +665,7 @@ h1 {
   padding: 0.65rem 1.1rem;
   border-radius: 8px;
   cursor: pointer;
-  box-shadow: 0 2px 4px rgba(34, 197, 94, 0.3);
+  box-shadow: var(--tf-shadow-sm);
 }
 
 .btn-complete-stage:active {
@@ -666,7 +703,7 @@ h1 {
 .done-badge {
   font-size: 0.85rem;
   font-weight: 700;
-  color: #16a34a;
+  color: var(--tf-success);
 }
 
 /* Fotos de la etapa */
@@ -854,8 +891,39 @@ h1 {
   color: #64748b;
 }
 
+.order-detail-page { max-width: 82rem; padding: clamp(1rem, 2.5vw, 2rem); }
+.detail-notice { margin: 0 0 1rem; padding: .8rem 1rem; border: 1px solid var(--tf-success-border); border-left: 4px solid var(--tf-success); border-radius: .4rem; color: var(--tf-primary-strong); background: var(--tf-success-soft); font-size: .88rem; font-weight: 700; }
+.btn-back { min-height: 44px; color: var(--tf-primary); }
+.order-code-badge { background: var(--tf-primary); }
+.header-left { flex-wrap: wrap; }
+.header-left h1 { font-size: var(--tf-page-title-size); color: var(--tf-ink); }
+.btn-ticket { min-height: 44px; color: var(--tf-primary); border-color: var(--tf-primary-border); background: #fff; }
+.order-summary-card, .stages-section { border-radius: .5rem; box-shadow: none; }
+.stage-card.stage-in_progress { border-color: var(--tf-primary-border); background: var(--tf-primary-soft); box-shadow: none; }
+.stage-in_progress .stage-num { background: var(--tf-primary); }
+.stage-completed .stage-num { background: var(--tf-success); }
+.btn-complete-stage { min-height: 44px; color: #fff; background: var(--tf-primary); box-shadow: none; }
+.btn-complete-stage:hover:not(:disabled) { background: var(--tf-primary-hover); }
+.btn-complete-stage:disabled { opacity: .6; cursor: wait; }
+.btn-photo-capture { min-height: 44px; color: var(--tf-primary); border-color: var(--tf-primary-border); background: #fff; }
+.stage-top-row { gap: 1rem; }
+.stage-actions { flex-wrap: wrap; justify-content: flex-end; }
+.btn-ticket, .btn-print, .btn-photo-capture, .done-badge, .btn-correct-stage { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; }
+.btn-correct-stage { min-height: 40px; padding: .5rem .7rem; border: 1px solid var(--tf-warning-border); border-radius: .4rem; color: var(--tf-warning); background: var(--tf-warning-soft); font: inherit; font-size: .79rem; font-weight: 700; cursor: pointer; }
+.btn-correct-stage:hover { border-color: var(--tf-warning); }
+.correction-dialog { width: min(100%, 29rem); padding: 1.35rem; border: 1px solid var(--tf-border-soft); border-radius: .5rem; background: #fff; box-shadow: var(--tf-shadow-md); }
+.correction-dialog h2 { margin: 0 0 .45rem; font-size: 1.15rem; color: var(--tf-ink); }
+.correction-dialog p { margin: 0 0 1rem; color: var(--tf-text-subtle); font-size: .87rem; }
+.correction-dialog form { display: grid; gap: .6rem; }
+.correction-dialog label { font-size: .83rem; font-weight: 700; }
+.correction-dialog textarea { width: 100%; padding: .7rem; border: 1px solid var(--tf-border); border-radius: .4rem; font: inherit; resize: vertical; }
+.correction-dialog textarea:focus-visible { outline: 2px solid var(--tf-focus); border-color: var(--tf-primary); }
+.correction-dialog__actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: .5rem; margin-top: .45rem; }
+@media (min-width: 980px) { .detail-container { display: grid; grid-template-columns: minmax(0, 1fr) minmax(16rem, 19rem); align-items: start; } .order-delivery-line { grid-column: 1 / -1; } .stages-section { grid-column: 1; grid-row: 2; } .order-summary-card { grid-column: 2; grid-row: 2; } .summary-grid { grid-template-columns: 1fr; } }
+@media (max-width: 580px) { .stage-top-row { align-items: stretch; flex-direction: column; } .stage-actions { justify-content: flex-start; } .btn-complete-stage { width: 100%; } .summary-grid { grid-template-columns: 1fr; } }
+
 @media print {
-  .no-print, .page-header, .stages-section, .traffic-banner {
+  .no-print, .page-header, .stages-section, .order-delivery-line {
     display: none !important;
   }
   .modal-backdrop {
