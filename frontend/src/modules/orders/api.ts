@@ -79,6 +79,8 @@ export const ordersApi = {
       { status },
       csrfToken
     ),
+  createTrackingLink: (orderId: string, csrfToken?: string) =>
+    api.post<{ data: { token: string } }>(`/api/v1/orders/${orderId}/tracking-link`, undefined, csrfToken),
   reopenStage: (orderId: string, position: number, reason: string, csrfToken?: string) =>
     api.post<{ data: OrderStage }>(
       `/api/v1/orders/${orderId}/stages/${position}/reopen`,

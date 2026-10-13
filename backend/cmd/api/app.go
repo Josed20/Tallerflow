@@ -172,6 +172,11 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 	}
 	ordersService := orders.NewService(ordersRepo)
 	ordersHandler := orders.NewHandler(ordersService)
+	trackingRepo, err := orders.NewPostgresTrackingRepository(db, tenantRunner)
+	if err != nil {
+		return nil, fmt.Errorf("create tracking repository: %w", err)
+	}
+	trackingHandler := orders.NewTrackingHandler(orders.NewTrackingService(trackingRepo, nil))
 
 	ping := func(ctx context.Context) error {
 		if err := database.Ping(ctx, db); err != nil {
@@ -196,6 +201,9 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 			},
 			func(routes gin.IRouter) {
 				orders.RegisterRoutes(routes, ordersHandler, authHandler.RequireSession())
+			},
+			func(routes gin.IRouter) {
+				orders.RegisterTrackingRoutes(routes, trackingHandler, authHandler.RequireSession())
 			},
 		},
 	})

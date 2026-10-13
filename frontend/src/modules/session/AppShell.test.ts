@@ -9,7 +9,7 @@ async function renderShell(role: 'OWNER' | 'OPERATOR') {
   const pinia = createPinia()
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: ['/app', '/app/orders', '/app/production', '/app/clients', '/app/orders/new', '/app/team'].map((path) => ({ path, component: { template: '<main />' } })),
+    routes: ['/app', '/app/orders', '/app/clients', '/app/orders/new', '/app/team'].map((path) => ({ path, component: { template: '<main />' } })),
   })
   await router.push('/app')
   await router.isReady()
@@ -18,16 +18,15 @@ async function renderShell(role: 'OWNER' | 'OPERATOR') {
 }
 
 describe('AppShell navigation', () => {
-  it('shows management navigation to an owner but not the operator production queue', async () => {
+  it('shows management navigation to an owner', async () => {
     await renderShell('OWNER')
+    expect(screen.getByRole('link', { name: 'Panel' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Clientes' })).toBeTruthy()
-    expect(screen.queryByRole('link', { name: 'Producción' })).toBeNull()
   })
 
-  it('shows the production queue to an operator without management controls', async () => {
+  it('shows only the orders section to an operator', async () => {
     await renderShell('OPERATOR')
-    expect(screen.getByRole('link', { name: 'Producción' })).toBeTruthy()
-    expect(screen.queryByRole('link', { name: 'Clientes' })).toBeNull()
-    expect(screen.queryByRole('link', { name: 'Nueva orden' })).toBeNull()
+    const sections = screen.getByRole('navigation', { name: 'Secciones internas' })
+    expect([...sections.querySelectorAll('a')].map((link) => link.textContent?.trim())).toEqual(['Órdenes'])
   })
 })

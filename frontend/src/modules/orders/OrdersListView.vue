@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { ArrowRight, Check, Columns3, List, Plus, RefreshCw, Search } from '@lucide/vue'
+import { ArrowRight, Check, Columns3, List, Plus, RefreshCw, ScanLine, Search } from '@lucide/vue'
 import { ordersApi, type Order, type TrafficLight } from './api'
 import { useSessionStore } from '../session/session.store'
 import { canManageOperations, canAdvanceProduction } from '../session/role-policy'
@@ -9,6 +9,7 @@ import UiAlert from '../../components/UiAlert.vue'
 import { matchesOrderSearch } from './order-search'
 import { formatOrderQuantity } from './order-display'
 import StageAdvanceDialog from './StageAdvanceDialog.vue'
+import OrderScannerDialog from './OrderScannerDialog.vue'
 
 const route = useRoute()
 const session = useSessionStore()
@@ -22,6 +23,7 @@ const orders = ref<Order[]>([])
 const loading = ref(true)
 const busyOrderId = ref<string | null>(null)
 const pendingAdvance = ref<Order | null>(null)
+const showScanner = ref(false)
 const boardScroll = ref<HTMLElement | null>(null)
 const error = ref('')
 const notice = ref('')
@@ -147,6 +149,7 @@ onMounted(loadOrders)
     <header class="board-header">
       <div><p class="board-kicker">Producción</p><h1>Tablero de órdenes</h1><p>El avance de cada pedido, estación por estación.</p></div>
       <div class="board-header__actions">
+        <button class="ops-button" type="button" @click="showScanner = true"><ScanLine :size="17" /> Escanear ficha viajera</button>
         <button class="ops-icon-button" type="button" title="Actualizar órdenes" aria-label="Actualizar órdenes" :disabled="loading" @click="loadOrders()"><RefreshCw :size="18" /></button>
         <RouterLink v-if="isManager" class="ops-button ops-button--primary" to="/app/orders/new"><Plus :size="17" /> Nueva orden</RouterLink>
       </div>
@@ -198,6 +201,7 @@ onMounted(loadOrders)
       </article>
     </section>
     <StageAdvanceDialog v-if="pendingAdvance" :code="pendingAdvance.code" :stage="pendingAdvance.current_stage || 'etapa actual'" :next-stage="stages[stages.indexOf(pendingAdvance.current_stage?.toUpperCase() ?? '') + 1] || null" :busy="busyOrderId !== null" @cancel="pendingAdvance = null" @confirm="advance(pendingAdvance)" />
+    <OrderScannerDialog v-if="showScanner" :orders="orders" @close="showScanner = false" />
   </main>
 </template>
 

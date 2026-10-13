@@ -6,7 +6,7 @@ import UiAlert from '../../components/UiAlert.vue'
 import { useSessionStore } from '../session/session.store'
 import { canAdvanceProduction } from '../session/role-policy'
 import { compressImageFile } from '../../utils/image'
-import { AlertTriangle, Camera, Check, Printer, RotateCcw, X } from '@lucide/vue'
+import { AlertTriangle, Camera, Check, Copy, ExternalLink, Link2, Printer, RotateCcw, X } from '@lucide/vue'
 import { canManageOperations } from '../session/role-policy'
 import { formatOrderQuantity } from './order-display'
 import StageAdvanceDialog from './StageAdvanceDialog.vue'
@@ -28,6 +28,12 @@ const correctionReason = ref('')
 const correctionError = ref('')
 const correcting = ref(false)
 const pendingAdvanceStage = ref<OrderStage | null>(null)
+const showSharePanel = ref(false)
+const trackingUrl = ref('')
+const generatingLink = ref(false)
+const shareError = ref('')
+const copied = ref(false)
+const trackingInput = ref<HTMLInputElement | null>(null)
 
 const canAdvance = computed(() => canAdvanceProduction(session.principal?.role))
 const canCorrect = computed(() => canManageOperations(session.principal?.role))
@@ -191,6 +197,39 @@ function formatShortTime(iso: string | null) {
   return d.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
 }
 
+const whatsappUrl = computed(() => order.value && trackingUrl.value
+  ? `https://wa.me/?text=${encodeURIComponent(`Hola, puedes ver el avance de tu pedido ${order.value.code} (${order.value.product}) aquí: ${trackingUrl.value}`)}`
+  : '')
+
+async function generateTrackingLink() {
+  if (!order.value || generatingLink.value) return
+  if (!session.csrfToken) {
+    shareError.value = 'Tu sesión necesita renovarse. Vuelve a iniciar sesión.'
+    return
+  }
+  generatingLink.value = true
+  shareError.value = ''
+  copied.value = false
+  try {
+    const response = await ordersApi.createTrackingLink(order.value.id, session.csrfToken)
+    trackingUrl.value = `${window.location.origin}/seguimiento/${response.data.token}`
+  } catch (err: any) {
+    shareError.value = err?.message || 'No pudimos generar el enlace.'
+  } finally {
+    generatingLink.value = false
+  }
+}
+
+async function copyTrackingLink() {
+  try {
+    await navigator.clipboard.writeText(trackingUrl.value)
+    copied.value = true
+  } catch {
+    trackingInput.value?.select()
+    shareError.value = 'No pudimos copiar automáticamente. El enlace quedó seleccionado: cópialo con Ctrl+C.'
+  }
+}
+
 function printTicket() {
   window.print()
 }
@@ -209,11 +248,43 @@ onMounted(() => {
           <span class="order-code-badge">{{ order.code }}</span>
           <h1>{{ order.product }}</h1>
         </div>
-        <button class="btn-ticket" type="button" @click="showTicketModal = true">
-          <Printer :size="17" aria-hidden="true" /> Imprimir ficha viajera
-        </button>
+        <div class="header-actions">
+          <button v-if="canCorrect" class="btn-ticket" type="button" :aria-expanded="showSharePanel" @click="showSharePanel = !showSharePanel">
+            <Link2 :size="17" aria-hidden="true" /> Compartir con el cliente
+          </button>
+          <button class="btn-ticket" type="button" @click="showTicketModal = true">
+            <Printer :size="17" aria-hidden="true" /> Imprimir ficha viajera
+          </button>
+        </div>
       </div>
     </header>
+
+    <section v-if="showSharePanel && order" class="share-panel" aria-labelledby="share-title">
+      <div class="share-panel__head">
+        <h2 id="share-title">Enlace de seguimiento para el cliente</h2>
+        <button class="share-panel__close" type="button" aria-label="Cerrar" @click="showSharePanel = false"><X :size="18" /></button>
+      </div>
+      <p class="share-panel__text">El cliente verá la estación actual, la fecha de entrega, el semáforo y las fotos de evidencia de <strong>{{ order.code }}</strong>, sin crear una cuenta. No verá datos internos ni otras órdenes.</p>
+      <template v-if="trackingUrl">
+        <label class="share-panel__label" for="tracking-url">Enlace privado</label>
+        <div class="share-panel__row">
+          <input id="tracking-url" ref="trackingInput" class="share-panel__input" type="text" readonly :value="trackingUrl" @focus="($event.target as HTMLInputElement).select()" />
+          <button class="share-panel__primary" type="button" @click="copyTrackingLink"><Copy :size="16" aria-hidden="true" /> {{ copied ? 'Copiado' : 'Copiar' }}</button>
+        </div>
+        <div class="share-panel__links">
+          <a :href="whatsappUrl" target="_blank" rel="noopener noreferrer">Enviar por WhatsApp</a>
+          <a :href="trackingUrl" target="_blank" rel="noopener noreferrer"><ExternalLink :size="14" aria-hidden="true" /> Ver como cliente</a>
+        </div>
+        <p class="share-panel__note">Guárdalo ahora: por seguridad no se puede volver a mostrar. Si lo pierdes, genera uno nuevo.</p>
+      </template>
+      <template v-else>
+        <p class="share-panel__note">Si ya enviaste un enlace de esta orden antes, generar uno nuevo lo desactiva.</p>
+        <button class="share-panel__primary" type="button" :disabled="generatingLink" @click="generateTrackingLink">
+          <Link2 :size="16" aria-hidden="true" /> {{ generatingLink ? 'Generando...' : 'Generar enlace' }}
+        </button>
+      </template>
+      <p v-if="shareError" class="share-panel__error" role="alert">{{ shareError }}</p>
+    </section>
 
     <UiAlert v-if="error" :message="error" />
     <p v-if="notice" class="detail-notice" role="status">{{ notice }}</p>
@@ -897,7 +968,24 @@ h1 {
 .order-code-badge { background: var(--tf-primary); }
 .header-left { flex-wrap: wrap; }
 .header-left h1 { font-size: var(--tf-page-title-size); color: var(--tf-ink); }
-.btn-ticket { min-height: 44px; color: var(--tf-primary); border-color: var(--tf-primary-border); background: #fff; }
+.btn-ticket { min-height: 44px; color: var(--tf-primary); border-color: var(--tf-primary-border); background: #fff; display: inline-flex; align-items: center; gap: .45rem; }
+.header-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.share-panel { display: grid; gap: .75rem; margin: 0 0 1rem; padding: 1rem 1.1rem; border: 1px solid var(--tf-primary-border); border-radius: .5rem; background: var(--tf-primary-soft); }
+.share-panel__head { display: flex; justify-content: space-between; align-items: center; gap: .75rem; }
+.share-panel__head h2 { margin: 0; color: var(--tf-ink); font-size: var(--tf-section-title-size); }
+.share-panel__close { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: .4rem; color: var(--tf-ink-soft); background: transparent; cursor: pointer; }
+.share-panel__text, .share-panel__note { margin: 0; color: var(--tf-text-subtle); font-size: .88rem; line-height: 1.5; }
+.share-panel__label { color: var(--tf-ink); font-size: .82rem; font-weight: 700; }
+.share-panel__row { display: flex; gap: .5rem; }
+.share-panel__input { flex: 1; min-width: 0; min-height: 44px; padding: .5rem .7rem; border: 1px solid var(--tf-border); border-radius: .4rem; color: var(--tf-ink); background: #fff; font: inherit; font-size: .85rem; }
+.share-panel__primary { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; min-height: 44px; padding: .5rem 1rem; border: 0; border-radius: .4rem; color: #fff; background: var(--tf-primary); font: inherit; font-size: .88rem; font-weight: 750; cursor: pointer; justify-self: start; white-space: nowrap; }
+.share-panel__primary:hover:not(:disabled) { background: var(--tf-primary-hover); }
+.share-panel__primary:disabled { opacity: .65; cursor: wait; }
+.share-panel__links { display: flex; flex-wrap: wrap; gap: 1.1rem; }
+.share-panel__links a { display: inline-flex; align-items: center; gap: .3rem; min-height: 32px; color: var(--tf-primary-strong); font-size: .88rem; font-weight: 700; }
+.share-panel__error { margin: 0; color: var(--tf-error); font-size: .85rem; font-weight: 700; }
+.share-panel button:focus-visible, .share-panel a:focus-visible, .share-panel__input:focus-visible { outline: 3px solid var(--tf-focus); outline-offset: 2px; }
+@media (max-width: 480px) { .share-panel__row { flex-direction: column; } .header-actions, .header-actions .btn-ticket { width: 100%; justify-content: center; } }
 .order-summary-card, .stages-section { border-radius: .5rem; box-shadow: none; }
 .stage-card.stage-in_progress { border-color: var(--tf-primary-border); background: var(--tf-primary-soft); box-shadow: none; }
 .stage-in_progress .stage-num { background: var(--tf-primary); }

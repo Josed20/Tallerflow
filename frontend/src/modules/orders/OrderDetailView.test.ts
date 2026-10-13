@@ -6,7 +6,7 @@ import OrderDetailView from './OrderDetailView.vue'
 import { ordersApi } from './api'
 import { useSessionStore } from '../session/session.store'
 
-vi.mock('./api', () => ({ ordersApi: { getByID: vi.fn(), updateStage: vi.fn(), reopenStage: vi.fn(), addStagePhoto: vi.fn() } }))
+vi.mock('./api', () => ({ ordersApi: { getByID: vi.fn(), updateStage: vi.fn(), reopenStage: vi.fn(), addStagePhoto: vi.fn(), createTrackingLink: vi.fn() } }))
 
 const order = {
   id: 'order-1', code: 'OT-000001', product: 'Polo Demo', client_name: 'Cliente Demo', quantity: 12, unit: 'UNITS', status: 'ACTIVE',
@@ -119,5 +119,37 @@ describe('OrderDetailView', () => {
     render(OrderDetailView, { global: { plugins: [pinia, router] } })
     await screen.findByText('Costura')
     expect(screen.queryByRole('button', { name: /corregir avance/i })).toBeNull()
+  })
+
+  async function renderAs(role: 'OWNER' | 'OPERATOR') {
+    const pinia = createPinia()
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/app/orders/:id', component: OrderDetailView }, { path: '/app/orders', component: { template: '<main />' } }],
+    })
+    await router.push('/app/orders/order-1')
+    await router.isReady()
+    const session = useSessionStore(pinia)
+    session.csrfToken = 'csrf-share'
+    session.principal = { id: 'user-1', email: 'user@example.test', displayName: 'User', role, workshop: { id: 'workshop-1', name: 'Taller' }, mustChangePassword: false }
+    render(OrderDetailView, { global: { plugins: [pinia, router] } })
+    await screen.findByText('Corte')
+  }
+
+  it('lets a manager generate a customer tracking link only after confirming', async () => {
+    vi.mocked(ordersApi.createTrackingLink).mockResolvedValue({ data: { token: 'T'.repeat(43) } } as never)
+    await renderAs('OWNER')
+
+    await fireEvent.click(screen.getByRole('button', { name: /compartir con el cliente/i }))
+    expect(ordersApi.createTrackingLink).not.toHaveBeenCalled()
+    await fireEvent.click(screen.getByRole('button', { name: /generar enlace/i }))
+
+    await waitFor(() => expect(ordersApi.createTrackingLink).toHaveBeenCalledWith('order-1', 'csrf-share'))
+    expect((await screen.findByLabelText('Enlace privado') as HTMLInputElement).value).toBe(`${window.location.origin}/seguimiento/${'T'.repeat(43)}`)
+  })
+
+  it('does not offer customer sharing to an operator', async () => {
+    await renderAs('OPERATOR')
+    expect(screen.queryByRole('button', { name: /compartir con el cliente/i })).toBeNull()
   })
 })

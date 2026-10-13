@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { Columns3, Factory, LayoutDashboard, LogOut, Plus, Users, UsersRound } from '@lucide/vue'
+import { Columns3, LayoutDashboard, LogOut, Plus, Users, UsersRound } from '@lucide/vue'
 import { useSessionStore } from './session.store'
 import { canManageOperations } from './role-policy'
 
 const session = useSessionStore()
 const router = useRouter()
 const canManage = computed(() => canManageOperations(session.principal?.role))
-const isOperator = computed(() => session.principal?.role === 'OPERATOR')
 
 async function signOut() {
   await session.logout()
@@ -19,11 +18,10 @@ async function signOut() {
 <template>
   <div class="app-shell">
     <aside class="app-shell__sidebar" aria-label="Navegación principal">
-      <RouterLink class="app-shell__brand" :to="isOperator ? '/app/production' : '/app'"><span class="app-shell__brand-mark" aria-hidden="true">TF</span><span>Taller<span>Flow</span></span></RouterLink>
+      <RouterLink class="app-shell__brand" :to="canManage ? '/app' : '/app/orders'"><span class="app-shell__brand-mark" aria-hidden="true">TF</span><span>Taller<span>Flow</span></span></RouterLink>
       <div class="app-shell__workshop"><Factory :size="16" aria-hidden="true" /><span>{{ session.principal?.workshop.name }}</span></div>
       <nav class="app-shell__nav" aria-label="Secciones internas">
         <RouterLink v-if="canManage" to="/app"><LayoutDashboard :size="18" aria-hidden="true" /> Panel</RouterLink>
-        <RouterLink v-if="isOperator" to="/app/production"><Factory :size="18" aria-hidden="true" /> Producción</RouterLink>
         <RouterLink to="/app/orders"><Columns3 :size="18" aria-hidden="true" /> Órdenes</RouterLink>
         <RouterLink v-if="canManage" to="/app/clients"><Users :size="18" aria-hidden="true" /> Clientes</RouterLink>
         <RouterLink v-if="canManage" to="/app/orders/new"><Plus :size="18" aria-hidden="true" /> Nueva orden</RouterLink>

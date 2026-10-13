@@ -5,7 +5,7 @@ import { createAppRouter } from './router'
 import { useSessionStore } from '../modules/session/session.store'
 
 describe('role navigation', () => {
-  it('redirects an operator away from client management to production', async () => {
+  it('redirects an operator away from client management to orders', async () => {
     const pinia = createPinia()
     const session = useSessionStore(pinia)
     session.csrfToken = 'csrf-token'
@@ -16,6 +16,6 @@ describe('role navigation', () => {
     await router.push('/app/clients')
     await router.isReady()
 
-    expect(router.currentRoute.value.path).toBe('/app/production')
+    expect(router.currentRoute.value.path).toBe('/app/orders')
   })
 })

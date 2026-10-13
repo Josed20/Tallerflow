@@ -115,15 +115,16 @@ test('administrator can manage orders without owner-only navigation', async ({ p
   await expect(page.getByRole('button', { name: /corregir avance/i })).toBeVisible()
 })
 
-test('operator opens the queue and advances a stage from the order detail', async ({ page }, testInfo) => {
+test('operator lands on orders and advances a stage from the order detail', async ({ page }, testInfo) => {
   await mockWorkshop(page, 'OPERATOR')
   await page.goto('/app')
-  await expect(page).toHaveURL(/\/app\/production$/)
-  await expect(page.getByRole('heading', { name: 'Cola del taller' })).toBeVisible()
+  await expect(page).toHaveURL(/\/app\/orders$/)
+  await expect(page.getByRole('heading', { name: 'Tablero de órdenes' })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'Secciones internas' }).getByRole('link')).toHaveText(['Órdenes'])
   await expect(page.getByRole('link', { name: 'Nueva orden' })).toHaveCount(0)
-  await expect(page.getByRole('link', { name: /abrir ot-000001/i })).toBeVisible()
-  await page.screenshot({ path: testInfo.outputPath('operator-queue-mobile.png'), fullPage: true })
-  await page.getByRole('link', { name: /abrir ot-000001/i }).click()
+  await expect(page.getByRole('button', { name: /escanear ficha viajera/i })).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('operator-orders-mobile.png'), fullPage: true })
+  await page.getByRole('link', { name: /ver orden/i }).first().click()
   await expect(page.getByRole('heading', { name: 'Polos de algodón' })).toBeVisible()
   await page.getByRole('button', { name: /completar etapa.*pasar a costura/i }).click()
   await page.getByRole('button', { name: /confirmar avance/i }).click()
