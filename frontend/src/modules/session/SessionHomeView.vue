@@ -171,9 +171,9 @@ onMounted(loadDashboardData)
 .mono { font-family: var(--tf-font-mono); font-variant-numeric: tabular-nums; }
 
 .overview-flow { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .5rem; margin: 0; padding: 0; list-style: none; }
-.overview-flow li { display: grid; gap: .2rem; min-width: 0; padding: .6rem .5rem; border-radius: var(--tf-radius-sm); background: var(--tf-surface-subtle); text-align: center; }
+.overview-flow li { display: grid; gap: .2rem; min-width: 0; padding: .6rem .25rem; border-radius: var(--tf-radius-sm); background: var(--tf-surface-subtle); text-align: center; }
 .overview-flow strong { font-family: var(--tf-font-display); font-variation-settings: "wdth" 112; font-weight: 800; font-size: 1.5rem; line-height: 1; }
-.overview-flow span { overflow: hidden; color: var(--tf-text-subtle); font-size: .72rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.overview-flow span { color: var(--tf-text-subtle); font-size: .72rem; font-weight: 700; overflow-wrap: anywhere; }
 .overview-flow li.is-busiest { background: var(--tf-primary-soft); }
 .overview-flow li.is-busiest strong { color: var(--tf-primary); }
 
