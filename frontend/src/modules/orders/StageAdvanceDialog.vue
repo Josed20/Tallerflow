@@ -23,8 +23,8 @@ onMounted(() => cancelButton.value?.focus())
 </template>
 
 <style scoped>
-.advance-overlay { position: fixed; inset: 0; z-index: 110; display: grid; place-items: center; padding: 1rem; background: rgb(11 28 48 / 55%); }
-.advance-dialog { width: min(100%, 30rem); padding: 1.5rem; border: 1px solid var(--tf-border-soft); border-radius: .5rem; background: #fff; box-shadow: var(--tf-shadow-md); }
+.advance-overlay { position: fixed; inset: 0; z-index: 110; display: grid; place-items: center; padding: 1rem; background: rgb(22 35 61 / 55%); }
+.advance-dialog { width: min(100%, 30rem); padding: 1.5rem; border: 1px solid var(--tf-border-soft); border-radius: .5rem; background: var(--tf-surface); box-shadow: var(--tf-shadow-md); }
 .advance-dialog__eyebrow { margin: 0 0 .5rem; color: var(--tf-primary); font-size: .76rem; font-weight: 800; text-transform: uppercase; }
 .advance-dialog h2 { margin: 0 0 .55rem; color: var(--tf-ink); font-size: 1.3rem; line-height: 1.3; }
 .advance-dialog p:not(.advance-dialog__eyebrow) { margin: 0; color: var(--tf-text-subtle); font-size: .9rem; line-height: 1.55; }
@@ -32,8 +32,8 @@ onMounted(() => cancelButton.value?.focus())
 .advance-dialog__steps strong { color: var(--tf-primary-strong); }
 .advance-dialog__actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: .6rem; }
 .advance-dialog__actions button { min-height: 44px; padding: .55rem .85rem; border-radius: .4rem; font: inherit; font-size: .85rem; font-weight: 750; cursor: pointer; }
-.advance-dialog__cancel { border: 1px solid var(--tf-border); color: var(--tf-ink); background: #fff; }
-.advance-dialog__confirm { border: 1px solid var(--tf-primary); color: #fff; background: var(--tf-primary); }
+.advance-dialog__cancel { border: 1px solid var(--tf-border); color: var(--tf-ink); background: var(--tf-surface); }
+.advance-dialog__confirm { border: 1px solid var(--tf-primary); color: var(--tf-on-primary); background: var(--tf-primary); }
 .advance-dialog__confirm:hover:not(:disabled) { background: var(--tf-primary-hover); }
 .advance-dialog__actions button:disabled { opacity: .65; cursor: wait; }
 .advance-dialog__actions button:focus-visible { outline: 3px solid var(--tf-focus); outline-offset: 2px; }

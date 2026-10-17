@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BrandLogo from '../../components/BrandLogo.vue'
 import { useRouter } from 'vue-router'
 import UiButton from '../../components/UiButton.vue'
 import { useSessionStore } from '../session/session.store'
@@ -18,7 +19,7 @@ function navigateHome() {
 <template>
   <main class="not-found-layout">
     <div class="not-found-card">
-      <div class="brand-mark" aria-hidden="true">TF</div>
+      <BrandLogo class="brand-mark" :size="40" />
       <p class="error-code" aria-hidden="true">404</p>
       <h1>Página no encontrada</h1>
       <p class="not-found-subtitle">
@@ -39,7 +40,7 @@ function navigateHome() {
   min-height: 100vh;
   place-items: center;
   padding: 1.5rem;
-  background: #f8f9ff;
+  background: var(--tf-page);
 }
 
 .not-found-card {
@@ -47,15 +48,15 @@ function navigateHome() {
   width: min(100%, 28rem);
   padding: 2.5rem 1.5rem;
   text-align: center;
-  background: var(--tf-surface, #ffffff);
-  border: 1px solid #dce9ff;
+  background: var(--tf-surface);
+  border: 1px solid var(--tf-border-soft);
   border-radius: 1rem;
-  box-shadow: 0 8px 30px rgb(11 28 48 / 8%);
+  box-shadow: 0 8px 30px rgb(22 35 61 / 8%);
 }
 
 .error-code {
   margin: 0.25rem 0;
-  color: var(--tf-primary, #00685f);
+  color: var(--tf-primary);
   font-size: 3.5rem;
   font-weight: 800;
   line-height: 1;
@@ -66,13 +67,13 @@ h1 {
   margin: 0.5rem 0;
   font-size: 1.5rem;
   font-weight: 700;
-  color: #0b1c30;
+  color: var(--tf-ink);
 }
 
 .not-found-subtitle {
   max-width: 22rem;
   margin: 0.5rem auto 1.75rem;
-  color: var(--tf-text-muted, #3d4947);
+  color: var(--tf-text-muted);
   font-size: 0.875rem;
   line-height: 1.5;
 }

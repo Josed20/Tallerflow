@@ -53,6 +53,12 @@ Full verification (what CI runs, from empty isolated Compose volumes): `./script
 
 **Frontend (`frontend/`)** — Vue 3 + TypeScript, Pinia, TanStack Vue Query, vue-router, Tailwind v4, reka-ui. Feature code lives in `src/modules/<feature>/` (view + `api.ts` + store + colocated `*.test.ts`). The shared fetch wrapper and `ApiError` are in `src/modules/session/api.ts`; role-based UI gating is in `src/modules/session/role-policy.ts` and `src/app/router.ts`. Customers have no accounts: they follow one order through a public read-only page (`modules/tracking`, route `/seguimiento/:token`) outside the internal role-aware shell (`modules/session/AppShell.vue`, used for `/app/*`). E2E tests run in Chromium at 360px width (mobile-first).
 
+## Design System
+
+Read DESIGN.md before visual or UI work: it defines the fonts, colors, spacing, and
+aesthetic direction. Ask the user before departing from it. When reviewing or QA-ing
+UI, flag code that doesn't match DESIGN.md.
+
 ## Skill routing
 
 When the user's request matches an available skill, invoke it via the Skill tool. When in doubt, invoke the skill.

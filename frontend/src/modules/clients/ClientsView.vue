@@ -251,7 +251,7 @@ onMounted(() => {
 .btn-back {
   background: none;
   border: none;
-  color: var(--color-primary, #0a5a70);
+  color: var(--color-primary, var(--tf-primary));
   font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
@@ -260,7 +260,7 @@ onMounted(() => {
 
 h1 {
   font-size: 1.4rem;
-  color: var(--color-text-dark, #10242d);
+  color: var(--color-text-dark, var(--tf-primary-strong));
   margin: 0;
 }
 
@@ -271,10 +271,10 @@ h1 {
 .input-search {
   width: 100%;
   padding: 0.65rem 0.85rem;
-  border: 1px solid var(--color-border, #cbd9df);
+  border: 1px solid var(--color-border, var(--tf-border-soft));
   border-radius: 8px;
   font-size: 0.95rem;
-  background: #fff;
+  background: var(--tf-surface);
 }
 
 .clients-list {
@@ -284,8 +284,8 @@ h1 {
 }
 
 .client-card {
-  background: #fff;
-  border: 1px solid var(--color-border, #cbd9df);
+  background: var(--tf-surface);
+  border: 1px solid var(--color-border, var(--tf-border-soft));
   border-radius: 8px;
   padding: 1rem;
   display: flex;
@@ -297,13 +297,13 @@ h1 {
 .client-info h3 {
   margin: 0 0 0.35rem 0;
   font-size: 1.05rem;
-  color: var(--color-text-dark, #10242d);
+  color: var(--color-text-dark, var(--tf-primary-strong));
 }
 
 .client-meta {
   margin: 0.15rem 0;
   font-size: 0.85rem;
-  color: #556973;
+  color: var(--tf-text-subtle);
 }
 
 .status-badge {
@@ -311,20 +311,20 @@ h1 {
   font-weight: 600;
   padding: 0.2rem 0.5rem;
   border-radius: 4px;
-  background: #e2e8f0;
-  color: #475569;
+  background: var(--tf-border-soft);
+  color: var(--tf-text-subtle);
 }
 
 .status-badge.active {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--tf-success-soft);
+  color: var(--tf-success);
 }
 
 .loading-state,
 .empty-state {
   text-align: center;
   padding: 2rem 1rem;
-  color: #64748b;
+  color: var(--tf-text-subtle);
 }
 
 /* Modal */
@@ -345,7 +345,7 @@ h1 {
 }
 
 .modal-card {
-  background: #fff;
+  background: var(--tf-surface);
   width: 100%;
   max-width: 480px;
   border-top-left-radius: 16px;
@@ -370,7 +370,7 @@ h1 {
 .modal-header h2 {
   font-size: 1.2rem;
   margin: 0;
-  color: var(--color-primary, #0a5a70);
+  color: var(--color-primary, var(--tf-primary));
 }
 
 .btn-close {
@@ -378,7 +378,7 @@ h1 {
   border: none;
   font-size: 1.2rem;
   cursor: pointer;
-  color: #64748b;
+  color: var(--tf-text-subtle);
 }
 
 .form-modal {
@@ -396,13 +396,13 @@ h1 {
 .field-group label {
   font-size: 0.85rem;
   font-weight: 600;
-  color: #334155;
+  color: var(--tf-ink-soft);
 }
 
 .input-text {
   width: 100%;
   padding: 0.65rem 0.85rem;
-  border: 1px solid var(--color-border, #cbd9df);
+  border: 1px solid var(--color-border, var(--tf-border-soft));
   border-radius: 8px;
   font-size: 0.95rem;
 }
@@ -416,11 +416,11 @@ h1 {
 
 .btn-secondary {
   background: none;
-  border: 1px solid #cbd9df;
+  border: 1px solid var(--tf-border-soft);
   padding: 0.6rem 1rem;
   border-radius: 8px;
   font-weight: 600;
-  color: #475569;
+  color: var(--tf-text-subtle);
   cursor: pointer;
 }
 
@@ -433,7 +433,7 @@ h1 {
 .clients-subtitle { margin: .3rem 0 0; color: var(--tf-text-subtle); font-size: .86rem; }
 .btn-back { color: var(--tf-primary); min-height: 44px; }
 .input-search { max-width: 25rem; min-height: 46px; border-color: var(--tf-border); border-radius: .4rem; }
-.search-bar { display: flex; align-items: center; gap: .55rem; width: min(100%, 26rem); min-height: 46px; padding: 0 .75rem; border: 1px solid var(--tf-border); border-radius: .4rem; background: #fff; color: var(--tf-text-subtle); }
+.search-bar { display: flex; align-items: center; gap: .55rem; width: min(100%, 26rem); min-height: 46px; padding: 0 .75rem; border: 1px solid var(--tf-border); border-radius: .4rem; background: var(--tf-surface); color: var(--tf-text-subtle); }
 .search-bar:focus-within { border-color: var(--tf-primary); outline: 2px solid var(--tf-focus); }
 .search-bar .input-search { width: 100%; min-height: 42px; padding: 0; border: 0; outline: 0; }
 .input-search:focus-visible, .input-text:focus-visible { outline: 2px solid var(--tf-focus); border-color: var(--tf-primary); }
@@ -448,7 +448,7 @@ h1 {
 .client-edit { min-width: 6rem; }
 .status-badge.active { color: var(--tf-primary-strong); background: var(--tf-success-soft); }
 .status-badge:not(.active) { color: var(--tf-warning); background: var(--tf-warning-soft); }
-.clients-notice { display: flex; align-items: center; gap: .5rem; padding: .75rem; border: 1px solid var(--tf-success-border); border-left: 4px solid var(--tf-success); border-radius: .4rem; color: var(--tf-primary-strong); background: var(--tf-success-soft); font-size: .85rem; font-weight: 700; }
+.clients-notice { display: flex; align-items: center; gap: .5rem; padding: .75rem; border: 1px solid var(--tf-success-border); border-radius: .4rem; color: var(--tf-primary-strong); background: var(--tf-success-soft); font-size: .85rem; font-weight: 700; }
 .clients-notice button { display: grid; margin-left: auto; place-items: center; border: 0; color: inherit; background: transparent; cursor: pointer; }
 .modal-card { border-radius: .5rem; }
 .modal-header h2 { color: var(--tf-ink); }

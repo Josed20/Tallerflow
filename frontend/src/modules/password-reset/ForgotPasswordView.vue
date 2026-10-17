@@ -104,7 +104,7 @@ async function submit() {
   min-height: 44px;
   align-items: center;
   justify-content: center;
-  color: var(--tf-primary, #00685f);
+  color: var(--tf-primary);
   font-size: 0.875rem;
   font-weight: 600;
   text-decoration: none;
@@ -117,14 +117,14 @@ async function submit() {
 }
 
 .secondary-link:focus-visible {
-  outline: 3px solid #89f5e7;
+  outline: 3px solid var(--tf-focus);
   outline-offset: 2px;
 }
 
 .secondary-link--button {
   width: 100%;
-  background: var(--tf-surface-soft, #eff4ff);
-  border: 1px solid var(--tf-border, #bcc9c6);
+  background: var(--tf-surface-soft);
+  border: 1px solid var(--tf-border);
   border-radius: 0.5rem;
 }
 
@@ -141,14 +141,14 @@ async function submit() {
   margin: 0 auto 0.5rem;
   place-items: center;
   border-radius: 50%;
-  background: var(--tf-surface-soft, #eff4ff);
-  color: var(--tf-primary, #00685f);
+  background: var(--tf-surface-soft);
+  color: var(--tf-primary);
   font-size: 1.5rem;
 }
 
 .recovery-sent__notice {
   font-size: 0.8125rem;
-  color: var(--tf-text-muted, #3d4947);
+  color: var(--tf-text-muted);
   margin: 0 0 1rem;
 }
 </style>

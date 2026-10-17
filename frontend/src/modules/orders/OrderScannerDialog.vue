@@ -200,7 +200,7 @@ onUnmounted(stopScanner)
 .scanner-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.75);
+  background: var(--tf-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -209,7 +209,7 @@ onUnmounted(stopScanner)
 }
 
 .scanner-modal {
-  background: #ffffff;
+  background: var(--tf-surface);
   border-radius: 1rem;
   max-width: 32rem;
   width: 100%;
@@ -223,25 +223,25 @@ onUnmounted(stopScanner)
   align-items: flex-start;
   padding: 1.25rem 1.5rem;
   background: var(--tf-ink);
-  color: #ffffff;
+  color: var(--tf-on-primary);
 }
 
 .scanner-modal__header h2 {
   margin: 0 0 .25rem;
   font-size: 1.2rem;
-  color: #ffffff;
+  color: var(--tf-on-primary);
 }
 
 .scanner-modal__subtitle {
   margin: 0;
   font-size: .85rem;
-  color: #94a3b8;
+  color: var(--tf-border);
 }
 
 .scanner-modal__close {
   background: transparent;
   border: none;
-  color: #cbd5e1;
+  color: var(--tf-border-soft);
   font-size: 1.3rem;
   cursor: pointer;
   padding: .25rem;
@@ -257,7 +257,7 @@ onUnmounted(stopScanner)
   position: relative;
   width: 100%;
   height: 220px;
-  background: #0f172a;
+  background: var(--tf-ink);
   border-radius: .75rem;
   overflow: hidden;
   display: flex;
@@ -311,7 +311,6 @@ onUnmounted(stopScanner)
   margin: 0;
   padding: .75rem;
   background: var(--tf-danger-soft);
-  border-left: 3px solid var(--tf-danger);
   border-radius: .375rem;
   color: var(--tf-danger);
   font-size: .85rem;
@@ -325,7 +324,7 @@ onUnmounted(stopScanner)
 .manual-input-form label {
   font-size: .85rem;
   font-weight: 700;
-  color: #334155;
+  color: var(--tf-ink-soft);
 }
 
 .manual-input-row {
@@ -336,7 +335,7 @@ onUnmounted(stopScanner)
 .manual-input-row input {
   flex: 1;
   min-height: 42px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--tf-border-soft);
   border-radius: .5rem;
   padding: .5rem .75rem;
   font: inherit;
@@ -344,7 +343,7 @@ onUnmounted(stopScanner)
 
 .manual-submit-btn {
   background: var(--tf-primary);
-  color: #ffffff;
+  color: var(--tf-on-primary);
   border: none;
   border-radius: .5rem;
   padding: .5rem 1rem;

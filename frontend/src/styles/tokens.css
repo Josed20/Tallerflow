@@ -1,43 +1,78 @@
+/* Sistema "Ficha viajera". Fuente de verdad: DESIGN.md en la raíz del repo.
+   La marca calla en azul mezclilla; el único relleno saturado es "Atrasada". */
 :root {
-  font-family: Manrope, system-ui, sans-serif;
-  color: #0b1c30;
-  background: #f8f9ff;
-  --tf-primary: #00685f;
-  --tf-primary-hover: #008378;
-  --tf-primary-strong: #004f48;
-  --tf-primary-soft: #e9f8f4;
-  --tf-primary-border: #9edbcf;
+  --tf-font-display: "Archivo", "Arial Black", system-ui, sans-serif;
+  --tf-font-body: "Atkinson Hyperlegible Next", "Segoe UI", system-ui, sans-serif;
+  --tf-font-mono: "Atkinson Hyperlegible Mono", ui-monospace, Consolas, monospace;
+  font-family: var(--tf-font-body);
+  color: #16233d;
+  background: #f3f5f9;
+
+  /* Marca: azul mezclilla */
+  --tf-primary: #1f3a68;
+  --tf-primary-hover: #2a4c85;
+  --tf-primary-strong: #16294a;
+  --tf-primary-soft: #e4ebf6;
+  --tf-primary-border: #afc0dc;
+  --tf-on-primary: #ffffff;
+
+  /* Barra lateral */
+  --tf-shell: #16294a;
+  --tf-shell-raised: #2a4c85;
+  --tf-shell-line: rgb(228 235 246 / 18%);
+  --tf-shell-hover: rgb(228 235 246 / 14%);
+  --tf-on-shell: #ffffff;
+  --tf-on-shell-muted: #c9d5ea;
+  --tf-shell-accent: #8fb0e8;
+
+  /* Superficies y texto */
   --tf-surface: #ffffff;
-  --tf-surface-soft: #eff4ff;
+  --tf-surface-soft: #eef2f8;
   --tf-surface-subtle: #f7f9fc;
-  --tf-page: #f3f6fa;
-  --tf-ink: #0b1c30;
-  --tf-ink-soft: #334155;
-  --tf-text-muted: #3d4947;
-  --tf-text-subtle: #52606d;
-  --tf-border: #bcc9c6;
-  --tf-border-soft: #d8e2e8;
-  --tf-neutral-soft: #f1f4f6;
-  --tf-focus: #6be7d6;
-  --tf-error: #ba1a1a;
-  --tf-error-bg: #ffdad6;
-  --tf-success: #087f5b;
-  --tf-success-hover: #066a4c;
-  --tf-success-soft: #e8f8f1;
-  --tf-success-border: #82d6b9;
-  --tf-info: #3157a4;
-  --tf-info-soft: #eff4ff;
-  --tf-info-border: #aec2ee;
-  --tf-warning: #965000;
-  --tf-warning-soft: #fff4df;
-  --tf-warning-border: #e9bd78;
-  --tf-danger: #b42318;
-  --tf-danger-hover: #8f1d14;
-  --tf-danger-soft: #fff0ee;
-  --tf-danger-border: #efa9a3;
-  --tf-radius: 0.75rem;
-  --tf-shadow-sm: 0 1px 2px rgb(11 28 48 / 6%);
-  --tf-shadow-md: 0 10px 28px rgb(11 28 48 / 9%);
+  --tf-page: #f3f5f9;
+  --tf-ink: #16233d;
+  --tf-ink-soft: #2d3a52;
+  --tf-text-muted: #46526a;
+  --tf-text-subtle: #556074;
+  --tf-border: #7f8ba2; /* bordes de campos y controles: 3:1 sobre blanco y fondos */
+  --tf-border-soft: #d5dce6;
+  --tf-neutral-soft: #eceff4;
+  --tf-focus: #1f3a68;
+  --tf-overlay: rgb(22 35 61 / 55%);
+
+  /* Semáforo de entrega: palabra + forma + color */
+  --tf-success: #0b6b3a;
+  --tf-success-hover: #08552e;
+  --tf-success-soft: #e2f3e9;
+  --tf-success-border: #9cd3b3;
+  --tf-risk-fill: #ffb020;
+  --tf-on-risk: #3d2600;
+  --tf-warning: #7a4a00;
+  --tf-warning-soft: #fff3d6;
+  --tf-warning-border: #f0c46a;
+  --tf-late: #c8102e;
+  --tf-on-late: #ffffff;
+  --tf-late-soft: #fce6e9;
+  --tf-done: #5a5c72;
+  --tf-done-soft: #ecedf2;
+
+  /* Un solo rojo: error y peligro comparten valores */
+  --tf-danger: #c8102e;
+  --tf-danger-hover: #a00d25;
+  --tf-danger-soft: #fce6e9;
+  --tf-danger-border: #efa3af;
+  --tf-error: #c8102e;
+  --tf-error-bg: #fce6e9;
+
+  --tf-info: #2a4c85;
+  --tf-info-soft: #e4ebf6;
+  --tf-info-border: #afc0dc;
+
+  --tf-radius-sm: 4px;
+  --tf-radius: 6px;
+  --tf-notch: 14px;
+  --tf-shadow-sm: 0 1px 2px rgb(22 35 61 / 6%);
+  --tf-shadow-md: 0 10px 28px rgb(22 35 61 / 10%);
   --tf-page-title-size: 1.625rem;
   --tf-section-title-size: 1.125rem;
 }

@@ -7,3 +7,12 @@ export function formatOrderQuantity(quantity: number, unit: string): string {
           : unit.toLocaleLowerCase('es-PE')
   return `${amount} ${label}`
 }
+
+export const productionStations = ['CORTE', 'COSTURA', 'ACABADO', 'CONTROL DE CALIDAD', 'PLANCHADO', 'EMPAQUE', 'ENTREGA']
+
+/** Stations already finished, for the 7-stitch seam. */
+export function completedStations(order: { status: string; current_stage?: string | null }): number {
+  if (order.status === 'COMPLETED') return productionStations.length
+  const index = productionStations.indexOf(order.current_stage?.toUpperCase() ?? '')
+  return index < 0 ? 0 : index
+}

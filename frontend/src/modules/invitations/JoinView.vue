@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BrandLogo from '../../components/BrandLogo.vue'
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ApiError } from '../session/api'
@@ -61,7 +62,7 @@ async function join() {
   <main class="auth-layout">
     <section class="auth-card">
       <div class="auth-card__content">
-        <div class="brand-mark">TF</div>
+        <BrandLogo class="brand-mark" :size="40" />
         <h1>Unirte al taller</h1>
         <p class="auth-subtitle">Crea tu acceso para entrar al equipo de TallerFlow.</p>
 

@@ -66,7 +66,7 @@ async function submit() {
   display: inline-flex;
   min-height: 44px;
   align-items: center;
-  color: var(--tf-primary, #00685f);
+  color: var(--tf-primary);
   font-size: 0.8125rem;
   font-weight: 600;
   text-decoration: none;
@@ -78,7 +78,7 @@ async function submit() {
 }
 
 .auth-link:focus-visible {
-  outline: 3px solid #89f5e7;
+  outline: 3px solid var(--tf-focus);
   outline-offset: 2px;
 }
 </style>
