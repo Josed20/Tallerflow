@@ -3,10 +3,10 @@ import { computed } from 'vue'
 
 // Cada estado lleva palabra, forma y color: rojo y verde tienen casi la misma
 // luminancia, así que la forma es lo que permite distinguirlos sin color.
-export type DeliveryState = 'ON_TIME' | 'AT_RISK' | 'LATE' | 'COMPLETED'
+export type DeliveryState = 'ON_TIME' | 'AT_RISK' | 'LATE' | 'COMPLETED' | 'CANCELLED'
 
 const props = defineProps<{ state: DeliveryState; label?: string }>()
-const text = computed(() => props.label ?? ({ ON_TIME: 'A tiempo', AT_RISK: 'En riesgo', LATE: 'Atrasada', COMPLETED: 'Completada' })[props.state])
+const text = computed(() => props.label ?? ({ ON_TIME: 'A tiempo', AT_RISK: 'En riesgo', LATE: 'Atrasada', COMPLETED: 'Completada', CANCELLED: 'Cancelada' })[props.state])
 </script>
 
 <template>
@@ -18,6 +18,7 @@ const text = computed(() => props.label ?? ({ ON_TIME: 'A tiempo', AT_RISK: 'En 
         <rect x="1" y="1" width="10" height="10" rx="1.5" fill="currentColor" />
         <rect x="5.2" y="2.8" width="1.6" height="4.4" class="status-chip__mark" /><rect x="5.2" y="8.2" width="1.6" height="1.6" class="status-chip__mark" />
       </template>
+      <path v-else-if="state === 'CANCELLED'" d="M3 3l6 6M9 3l-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" />
       <path v-else d="M2 6.3l2.6 2.6L10 3.4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
     </svg>
     {{ text }}
@@ -31,5 +32,5 @@ const text = computed(() => props.label ?? ({ ON_TIME: 'A tiempo', AT_RISK: 'En 
 .status-chip--at_risk { color: var(--tf-on-risk); background: var(--tf-risk-fill); }
 .status-chip--late { color: var(--tf-on-late); background: var(--tf-late); }
 .status-chip--late .status-chip__mark { fill: var(--tf-late); }
-.status-chip--completed { color: var(--tf-done); background: var(--tf-done-soft); }
+.status-chip--completed, .status-chip--cancelled { color: var(--tf-done); background: var(--tf-done-soft); }
 </style>

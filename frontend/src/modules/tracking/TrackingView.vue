@@ -116,7 +116,7 @@ onUnmounted(() => {
         </div>
         <dl class="tracking__facts">
           <div><dt>Entrega prometida</dt><dd>{{ formatDate(order.promised_at) }}</dd></div>
-          <div><dt>Estado</dt><dd><StatusChip :state="order.status === 'CANCELLED' ? 'LATE' : order.traffic_light" :label="statusLabel" /></dd></div>
+          <div><dt>Estado</dt><dd><StatusChip :state="order.status === 'CANCELLED' ? 'CANCELLED' : order.traffic_light" :label="statusLabel" /></dd></div>
         </dl>
         <StitchSeam :completed="completedCount" :total="order.stages.length" :tone="order.traffic_light === 'LATE' ? 'late' : 'default'" />
         <p class="tracking__progress-label">{{ completedCount }} de {{ order.stages.length }} etapas completadas</p>
