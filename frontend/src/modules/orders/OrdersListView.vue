@@ -215,7 +215,7 @@ onMounted(loadOrders)
 .board-view-switch button { display: inline-flex; min-height: 44px; align-items: center; gap: .4rem; padding: .35rem .7rem; border: 0; border-radius: .3rem; color: var(--tf-text-subtle); background: transparent; font: inherit; font-size: .82rem; font-weight: 800; cursor: pointer; }
 .board-view-switch button.active { color: var(--tf-primary-strong); background: var(--tf-primary-soft); }
 .board-search { display: flex; width: min(100%, 21rem); min-height: 44px; align-items: center; gap: .5rem; padding: 0 .75rem; border: 1px solid var(--tf-border-soft); border-radius: .5rem; color: var(--tf-text-subtle); background: var(--tf-surface); }
-.board-search:focus-within { border-color: var(--tf-primary); outline: 2px solid var(--tf-focus); }
+.board-search:focus-within { border-color: var(--tf-primary); outline: 3px solid var(--tf-focus); outline-offset: 2px; }
 .board-search input { min-width: 0; width: 100%; border: 0; outline: 0; background: transparent; font-size: .85rem; }
 .board-filters { display: flex; gap: .4rem; overflow-x: auto; padding-bottom: .3rem; }
 .board-filters button { display: inline-flex; min-height: 44px; flex: 0 0 auto; align-items: center; gap: .4rem; padding: .35rem .65rem; border: 1px solid var(--tf-border-soft); border-radius: .35rem; color: var(--tf-text-subtle); background: var(--tf-surface); font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer; }

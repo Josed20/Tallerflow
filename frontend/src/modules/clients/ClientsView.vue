@@ -434,7 +434,7 @@ h1 {
 .btn-back { color: var(--tf-primary); min-height: 44px; }
 .input-search { max-width: 25rem; min-height: 46px; border-color: var(--tf-border); border-radius: .4rem; }
 .search-bar { display: flex; align-items: center; gap: .55rem; width: min(100%, 26rem); min-height: 46px; padding: 0 .75rem; border: 1px solid var(--tf-border); border-radius: .4rem; background: var(--tf-surface); color: var(--tf-text-subtle); }
-.search-bar:focus-within { border-color: var(--tf-primary); outline: 2px solid var(--tf-focus); }
+.search-bar:focus-within { border-color: var(--tf-primary); outline: 3px solid var(--tf-focus); outline-offset: 2px; }
 .search-bar .input-search { width: 100%; min-height: 42px; padding: 0; border: 0; outline: 0; }
 .input-search:focus-visible, .input-text:focus-visible { outline: 2px solid var(--tf-focus); border-color: var(--tf-primary); }
 .clients-list { display: grid; grid-template-columns: 1fr; gap: .5rem; }
