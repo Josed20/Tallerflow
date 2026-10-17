@@ -996,8 +996,8 @@ h1 {
 .stage-top-row { gap: 1rem; }
 .stage-actions { flex-wrap: wrap; justify-content: flex-end; }
 .btn-ticket, .btn-print, .btn-photo-capture, .done-badge, .btn-correct-stage { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; }
-.btn-correct-stage { min-height: 44px; padding: .5rem .7rem; border: 1px solid var(--tf-warning-border); border-radius: .4rem; color: var(--tf-warning); background: var(--tf-warning-soft); font: inherit; font-size: .79rem; font-weight: 700; cursor: pointer; }
-.btn-correct-stage:hover { border-color: var(--tf-warning); }
+.btn-correct-stage { min-height: 44px; padding: .5rem .7rem; border: 1px solid var(--tf-primary); border-radius: var(--tf-radius); color: var(--tf-primary); background: var(--tf-surface); font: inherit; font-size: .79rem; font-weight: 700; cursor: pointer; }
+.btn-correct-stage:hover { background: var(--tf-primary-soft); }
 .correction-dialog { width: min(100%, 29rem); padding: 1.35rem; border: 1px solid var(--tf-border-soft); border-radius: .5rem; background: var(--tf-surface); box-shadow: var(--tf-shadow-md); }
 .correction-dialog h2 { margin: 0 0 .45rem; font-size: 1.15rem; color: var(--tf-ink); }
 .correction-dialog p { margin: 0 0 1rem; color: var(--tf-text-subtle); font-size: .87rem; }

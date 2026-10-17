@@ -447,7 +447,7 @@ h1 {
 .client-meta:hover { color: var(--tf-primary); }
 .client-edit { min-width: 6rem; }
 .status-badge.active { color: var(--tf-primary-strong); background: var(--tf-success-soft); }
-.status-badge:not(.active) { color: var(--tf-warning); background: var(--tf-warning-soft); }
+.status-badge:not(.active) { color: var(--tf-done); background: var(--tf-done-soft); }
 .clients-notice { display: flex; align-items: center; gap: .5rem; padding: .75rem; border: 1px solid var(--tf-success-border); border-radius: .4rem; color: var(--tf-primary-strong); background: var(--tf-success-soft); font-size: .85rem; font-weight: 700; }
 .clients-notice button { display: grid; margin-left: auto; place-items: center; border: 0; color: inherit; background: transparent; cursor: pointer; }
 .modal-card { border-radius: .5rem; }

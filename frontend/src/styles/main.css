@@ -116,7 +116,7 @@ h1 { margin: 0; font-size: 1.5rem; line-height: 1.2; }
 .team-card__owner-note { color: var(--tf-text-subtle); font-size: .8125rem; font-weight: 700; }
 .team-status { border: 1px solid transparent; border-radius: 999px; padding: .25rem .5rem; font-size: .75rem; font-weight: 800; }
 .team-status--active { border-color: var(--tf-primary-border); color: var(--tf-success); background: var(--tf-success-soft); }
-.team-status--inactive { border-color: var(--tf-warning-border); color: var(--tf-warning); background: var(--tf-warning-soft); }
+.team-status--inactive { border-color: var(--tf-border-soft); color: var(--tf-done); background: var(--tf-done-soft); }
 .team-member-action { box-shadow: none; }
 .team-member-action--activate { border-color: var(--tf-success); color: var(--tf-on-primary); background: var(--tf-success); }
 .team-member-action--activate:hover:not(:disabled) { border-color: var(--tf-success-hover); color: var(--tf-on-primary); background: var(--tf-success-hover); }
