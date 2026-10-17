@@ -51,7 +51,7 @@ async function signOut() {
 .app-shell__user { display: flex; align-items: center; gap: .6rem; min-width: 0; }
 .app-shell__user > span:last-child { display: grid; min-width: 0; }
 .app-shell__user strong { max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--tf-on-shell); font-size: .79rem; }
-.app-shell__user small { color: var(--tf-on-shell-muted); font-size: .7rem; }
+.app-shell__user small { color: var(--tf-on-shell-muted); font-size: .75rem; }
 .app-shell__avatar { display: grid; width: 2.1rem; height: 2.1rem; flex: 0 0 auto; place-items: center; border-radius: 50%; color: var(--tf-on-shell); background: var(--tf-shell-raised); font-size: .8rem; font-weight: 800; }
 .app-shell__main, .app-shell__content { min-width: 0; }
 .app-shell__header { border-bottom: 1px solid var(--tf-border-soft); background: var(--tf-surface); }

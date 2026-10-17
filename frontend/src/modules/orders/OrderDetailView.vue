@@ -819,7 +819,7 @@ h1 {
   right: 0;
   background: rgba(0, 0, 0, 0.65);
   color: var(--tf-on-primary);
-  font-size: 0.65rem;
+  font-size: .75rem;
   text-align: center;
   padding: 0.1rem 0;
 }
