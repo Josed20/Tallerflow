@@ -241,7 +241,6 @@ onBeforeUnmount(() => {
   <main class="team-page">
     <header class="team-header">
       <div>
-        <p class="eyebrow">Equipo</p>
         <h1>Miembros del taller</h1>
         <p class="team-header__subtitle">Administra quién puede entrar y comparte accesos seguros con tu equipo.</p>
       </div>
@@ -383,7 +382,6 @@ onBeforeUnmount(() => {
     <Teleport to="body">
       <div v-if="pendingInvitationAction" class="team-modal-backdrop" @click.self="closeInvitationAction">
         <section class="team-modal" role="dialog" aria-modal="true" aria-labelledby="invitation-action-title" @keydown.esc="closeInvitationAction">
-          <p class="eyebrow">Confirmar acción</p>
           <h2 id="invitation-action-title">{{ pendingInvitationAction.kind === 'regenerate' ? 'Generar enlace nuevo' : 'Cancelar invitación' }}</h2>
           <p>{{ pendingInvitationAction.kind === 'regenerate'
             ? `El enlace anterior para ${pendingInvitationAction.invitation.email} dejará de funcionar.`

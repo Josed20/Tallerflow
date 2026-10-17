@@ -109,7 +109,6 @@ onMounted(() => {
   <main class="clients-page">
     <header class="page-header">
       <div class="header-nav">
-        <p class="clients-kicker">Directorio</p>
         <h1>Clientes</h1>
         <p class="clients-subtitle">Contactos para registrar y consultar órdenes.</p>
       </div>
@@ -429,7 +428,6 @@ h1 {
 .page-header { margin-bottom: 1.5rem; }
 .page-header h1 { font-size: var(--tf-page-title-size); color: var(--tf-ink); }
 .header-nav { display: block; }
-.clients-kicker { margin: 0; color: var(--tf-primary); font-size: .75rem; font-weight: 800; text-transform: uppercase; }
 .clients-subtitle { margin: .3rem 0 0; color: var(--tf-text-subtle); font-size: .86rem; }
 .btn-back { color: var(--tf-primary); min-height: 44px; }
 .input-search { max-width: 25rem; min-height: 46px; border-color: var(--tf-border); border-radius: .4rem; }
