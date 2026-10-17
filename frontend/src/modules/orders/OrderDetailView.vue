@@ -386,7 +386,7 @@ onMounted(() => {
                   :disabled="updatingStage === stage.position"
                   @click="pendingAdvanceStage = stage"
                 >
-                  {{ updatingStage === stage.position ? 'Guardando...' : nextStageName(stage.position) ? `Completar etapa · pasar a ${nextStageName(stage.position)}` : 'Completar etapa y pedido' }}
+                  {{ updatingStage === stage.position ? 'Guardando...' : nextStageName(stage.position) ? `Completar etapa · pasar a ${nextStageName(stage.position)?.toLocaleLowerCase('es-PE')}` : 'Completar etapa y pedido' }}
                 </button>
 
                 <span v-else-if="stage.status === 'COMPLETED'" class="done-badge"><Check :size="15" aria-hidden="true" /> Listo</span>
