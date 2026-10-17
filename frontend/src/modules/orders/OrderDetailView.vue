@@ -602,8 +602,8 @@ h1 {
 }
 
 .status-completed {
-  background: var(--tf-success-soft);
-  color: var(--tf-success);
+  background: var(--tf-done-soft);
+  color: var(--tf-done);
 }
 
 .specification-box {
