@@ -11,8 +11,10 @@ export function formatOrderQuantity(quantity: number, unit: string): string {
 export const productionStations = ['CORTE', 'COSTURA', 'ACABADO', 'CONTROL DE CALIDAD', 'PLANCHADO', 'EMPAQUE', 'ENTREGA']
 
 /** Stations already finished, for the 7-stitch seam. */
-export function completedStations(order: { status: string; current_stage?: string | null }): number {
+export function completedStations(order: { status: string; current_stage?: string | null; stages?: { status: string }[] | null }): number {
   if (order.status === 'COMPLETED') return productionStations.length
+  // The order detail endpoint returns stages but no current_stage.
+  if (order.stages?.length) return order.stages.filter((stage) => stage.status === 'COMPLETED').length
   const index = productionStations.indexOf(order.current_stage?.toUpperCase() ?? '')
   return index < 0 ? 0 : index
 }

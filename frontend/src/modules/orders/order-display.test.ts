@@ -20,6 +20,11 @@ describe('completed stations', () => {
     expect(completedStations({ status: 'COMPLETED', current_stage: 'ENTREGA' })).toBe(7)
   })
 
+  it('counts finished stages when the order detail has no current station', () => {
+    const stages = [{ status: 'COMPLETED' }, { status: 'COMPLETED' }, { status: 'IN_PROGRESS' }, { status: 'PENDING' }]
+    expect(completedStations({ status: 'ACTIVE', current_stage: undefined, stages })).toBe(2)
+  })
+
   it('treats an unknown station as not started', () => {
     expect(completedStations({ status: 'ACTIVE', current_stage: null })).toBe(0)
   })
