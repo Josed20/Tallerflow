@@ -212,18 +212,18 @@ onMounted(loadOrders)
 .board-header__actions { display: flex; align-items: center; gap: .5rem; }
 .board-toolbar { padding-top: .3rem; }
 .board-view-switch { display: inline-flex; gap: .2rem; padding: .2rem; border: 1px solid var(--tf-border-soft); border-radius: .5rem; background: var(--tf-surface); }
-.board-view-switch button { display: inline-flex; min-height: 38px; align-items: center; gap: .4rem; padding: .35rem .7rem; border: 0; border-radius: .3rem; color: var(--tf-text-subtle); background: transparent; font: inherit; font-size: .82rem; font-weight: 800; cursor: pointer; }
+.board-view-switch button { display: inline-flex; min-height: 44px; align-items: center; gap: .4rem; padding: .35rem .7rem; border: 0; border-radius: .3rem; color: var(--tf-text-subtle); background: transparent; font: inherit; font-size: .82rem; font-weight: 800; cursor: pointer; }
 .board-view-switch button.active { color: var(--tf-primary-strong); background: var(--tf-primary-soft); }
 .board-search { display: flex; width: min(100%, 21rem); min-height: 44px; align-items: center; gap: .5rem; padding: 0 .75rem; border: 1px solid var(--tf-border-soft); border-radius: .5rem; color: var(--tf-text-subtle); background: var(--tf-surface); }
 .board-search:focus-within { border-color: var(--tf-primary); outline: 2px solid var(--tf-focus); }
 .board-search input { min-width: 0; width: 100%; border: 0; outline: 0; background: transparent; font-size: .85rem; }
 .board-filters { display: flex; gap: .4rem; overflow-x: auto; padding-bottom: .3rem; }
-.board-filters button { display: inline-flex; min-height: 38px; flex: 0 0 auto; align-items: center; gap: .4rem; padding: .35rem .65rem; border: 1px solid var(--tf-border-soft); border-radius: .35rem; color: var(--tf-text-subtle); background: var(--tf-surface); font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer; }
+.board-filters button { display: inline-flex; min-height: 44px; flex: 0 0 auto; align-items: center; gap: .4rem; padding: .35rem .65rem; border: 1px solid var(--tf-border-soft); border-radius: .35rem; color: var(--tf-text-subtle); background: var(--tf-surface); font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer; }
 .board-filters button.active { border-color: var(--tf-primary); color: var(--tf-primary-strong); background: var(--tf-primary-soft); }
 .board-filters strong { color: var(--tf-ink); }
 .board-results { margin: -.6rem 0 0; color: var(--tf-text-subtle); font-size: .78rem; }
 .board-notice { display: flex; align-items: center; gap: .5rem; padding: .7rem .8rem; border: 1px solid var(--tf-success-border); border-radius: var(--tf-radius-sm); color: var(--tf-success); background: var(--tf-success-soft); font-size: .86rem; font-weight: 700; }
-.board-notice button { margin-left: auto; border: 0; background: transparent; color: inherit; font-size: 1.25rem; cursor: pointer; }
+.board-notice button { display: grid; width: 44px; height: 44px; place-items: center; margin-left: auto; border: 0; background: transparent; color: inherit; font-size: 1.25rem; cursor: pointer; }
 .board-empty { padding: 3rem 1rem; border: 1px dashed var(--tf-border); border-radius: .5rem; background: var(--tf-surface); }
 .kanban-scroll { max-width: 100%; overflow-x: auto; padding-bottom: .75rem; scrollbar-color: var(--tf-border) transparent; }
 .kanban-grid { display: grid; width: max-content; grid-template-columns: repeat(8, minmax(15.5rem, 15.5rem)); gap: .7rem; }
@@ -238,7 +238,7 @@ onMounted(loadOrders)
 .kanban-grid :deep(.ticket), .board-list :deep(.ticket) { width: 100%; }
 .ticket-qty { color: var(--tf-text-subtle); font-size: .78rem; }
 .ticket-actions { display: grid; gap: .4rem; padding-top: .45rem; border-top: 1px solid var(--tf-border-soft); }
-.ticket-actions a { display: inline-flex; align-items: center; gap: .2rem; width: fit-content; min-height: 32px; color: var(--tf-primary); font-size: .82rem; font-weight: 700; text-decoration: none; }
+.ticket-actions a { display: inline-flex; align-items: center; gap: .2rem; width: fit-content; min-height: 44px; color: var(--tf-primary); font-size: .82rem; font-weight: 700; text-decoration: none; }
 .ticket-actions a:hover { text-decoration: underline; }
 .ticket-advance { min-height: 44px; border: 1px solid var(--tf-primary); border-radius: var(--tf-radius); color: var(--tf-primary); background: var(--tf-surface); font: inherit; font-size: .82rem; font-weight: 700; cursor: pointer; }
 .ticket-advance::first-letter { text-transform: uppercase; }

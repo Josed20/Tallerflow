@@ -156,7 +156,7 @@ onMounted(loadDashboardData)
 .overview-section { padding: 1.1rem; border: 1px solid var(--tf-border-soft); border-radius: var(--tf-radius-sm); background: var(--tf-surface); }
 .overview-section__head { margin-bottom: .9rem; }
 .overview-section__head h2 { font-size: var(--tf-section-title-size); color: var(--tf-ink); }
-.overview-section__head a { display: inline-flex; align-items: center; gap: .25rem; color: var(--tf-primary); font-size: .85rem; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.overview-section__head a { display: inline-flex; min-height: 44px; align-items: center; gap: .25rem; color: var(--tf-primary); font-size: .85rem; font-weight: 700; text-decoration: none; white-space: nowrap; }
 .overview-section__head a:hover { text-decoration: underline; }
 .overview-tickets { display: grid; gap: .6rem; }
 
