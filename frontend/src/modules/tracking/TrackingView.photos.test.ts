@@ -18,7 +18,7 @@ describe('TrackingView evidence photos', () => {
     const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/seguimiento/:token', component: TrackingView }] })
     await router.push('/seguimiento/' + 'A'.repeat(43))
     await router.isReady()
-    render(TrackingView, { global: { plugins: [router] }, attachTo: document.body })
+    render(TrackingView, { global: { plugins: [router] } })
 
     const thumbnail = await screen.findByRole('button', { name: /ver foto de corte/i })
     thumbnail.focus()
