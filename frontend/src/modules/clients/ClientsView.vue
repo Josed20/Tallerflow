@@ -441,7 +441,8 @@ h1 {
 .client-info { min-width: 0; }
 .client-info h3 { color: var(--tf-ink); overflow-wrap: anywhere; }
 .client-meta { color: var(--tf-text-subtle); overflow-wrap: anywhere; }
-.client-meta { display: flex; align-items: center; gap: .4rem; text-decoration: none; }
+.client-meta { display: flex; min-height: 44px; align-items: center; gap: .4rem; text-decoration: none; }
+.client-meta:focus-visible { outline: 3px solid var(--tf-focus); outline-offset: 2px; }
 .client-meta:hover { color: var(--tf-primary); }
 .client-edit { min-width: 6rem; }
 .status-badge.active { color: var(--tf-primary-strong); background: var(--tf-success-soft); }

@@ -40,7 +40,7 @@ async function signOut() {
 <style scoped>
 .app-shell { min-height: 100vh; background: var(--tf-page); color: var(--tf-ink); }
 .app-shell__sidebar { display: flex; flex-direction: column; gap: 1rem; padding: 1.2rem; color: var(--tf-on-shell-muted); background: var(--tf-shell); }
-.app-shell__brand { display: inline-flex; width: fit-content; align-items: center; color: var(--tf-on-shell); font-size: 1.05rem; text-decoration: none; }
+.app-shell__brand { display: inline-flex; width: fit-content; min-height: 44px; align-items: center; color: var(--tf-on-shell); font-size: 1.05rem; text-decoration: none; }
 .app-shell__workshop { display: flex; align-items: center; gap: .5rem; padding: .8rem; border: 1px solid var(--tf-shell-line); border-radius: var(--tf-radius); color: var(--tf-on-shell); font-size: .8rem; font-weight: 700; overflow-wrap: anywhere; }
 .app-shell__nav { display: flex; flex-wrap: wrap; gap: .3rem; }
 .app-shell__nav a, .app-shell__logout { min-height: 44px; display: inline-flex; align-items: center; gap: .7rem; border: 0; border-radius: var(--tf-radius); padding: .6rem .75rem; color: var(--tf-on-shell-muted); background: transparent; font: inherit; font-size: .85rem; font-weight: 700; text-decoration: none; cursor: pointer; }
