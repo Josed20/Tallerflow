@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed, nextTick, ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ordersApi, type Order, type OrderStage, type StageStatus, type StagePhoto } from './api'
 import UiAlert from '../../components/UiAlert.vue'
@@ -236,9 +236,34 @@ function printTicket() {
   window.print()
 }
 
+// The photo viewer is a dialog: focus moves to Cerrar, Escape closes it and
+// focus returns to the thumbnail that opened it.
+const photoCloseButton = ref<HTMLButtonElement | null>(null)
+let photoOpener: HTMLElement | null = null
+
+async function openPhoto(photo: StagePhoto, event: Event) {
+  photoOpener = event.currentTarget as HTMLElement
+  previewPhoto.value = photo
+  await nextTick()
+  photoCloseButton.value?.focus()
+}
+
+function closePhoto() {
+  previewPhoto.value = null
+  photoOpener?.focus()
+  photoOpener = null
+}
+
+function onKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && previewPhoto.value) closePhoto()
+}
+
 onMounted(() => {
   loadOrder()
+  window.addEventListener('keydown', onKeydown)
 })
+
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
@@ -398,15 +423,17 @@ onMounted(() => {
             <div v-if="getStagePhotos(stage.position).length > 0" class="stage-photos-gallery">
               <span class="photos-label">Evidencias en planta:</span>
               <div class="photos-grid">
-                <div
+                <button
                   v-for="photo in getStagePhotos(stage.position)"
                   :key="photo.id"
+                  type="button"
                   class="photo-thumb-wrapper"
-                  @click="previewPhoto = photo"
+                  :aria-label="`Ver foto de ${stage.name.toLocaleLowerCase('es-PE')}, ${formatShortTime(photo.created_at)}`"
+                  @click="openPhoto(photo, $event)"
                 >
-                  <img :src="photo.photo_data" alt="Evidencia de estación" class="photo-thumb" />
-                  <span class="photo-time">{{ formatShortTime(photo.created_at) }}</span>
-                </div>
+                  <img :src="photo.photo_data" alt="" class="photo-thumb" />
+                  <span class="photo-time" aria-hidden="true">{{ formatShortTime(photo.created_at) }}</span>
+                </button>
               </div>
             </div>
           </div>
@@ -468,8 +495,9 @@ onMounted(() => {
     </div>
 
     <!-- Modal Previsualizar Foto Ampliada -->
-    <div v-if="previewPhoto" class="modal-backdrop" @click="previewPhoto = null">
-      <div class="photo-lightbox-card">
+    <div v-if="previewPhoto" class="modal-backdrop" @click.self="closePhoto">
+      <div class="photo-lightbox-card" role="dialog" aria-modal="true" aria-label="Foto de evidencia">
+        <button ref="photoCloseButton" type="button" class="photo-lightbox-close" @click="closePhoto"><X :size="18" aria-hidden="true" /> Cerrar</button>
         <img :src="previewPhoto.photo_data" alt="Evidencia ampliada" class="photo-large" />
         <p class="photo-caption">Subido el {{ formatDate(previewPhoto.created_at) }}</p>
       </div>
@@ -800,9 +828,33 @@ h1 {
   position: relative;
   width: 64px;
   height: 64px;
+  padding: 0;
   border-radius: 6px;
   overflow: hidden;
   border: 1px solid var(--tf-border-soft);
+  background: var(--tf-neutral-soft);
+  font: inherit;
+  cursor: zoom-in;
+}
+
+.photo-thumb-wrapper:focus-visible, .photo-lightbox-close:focus-visible {
+  outline: 3px solid var(--tf-focus);
+  outline-offset: 2px;
+}
+
+.photo-lightbox-close {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  min-height: 44px;
+  margin-left: auto;
+  padding: .5rem .8rem;
+  border: 1px solid var(--tf-border);
+  border-radius: var(--tf-radius);
+  color: var(--tf-ink);
+  background: var(--tf-surface);
+  font: inherit;
+  font-weight: 700;
   cursor: pointer;
 }
 

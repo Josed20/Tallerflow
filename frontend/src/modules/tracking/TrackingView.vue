@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { Check, Clock, RefreshCw } from '@lucide/vue'
+import { Check, Clock, RefreshCw, X } from '@lucide/vue'
 import { fetchTrackingOrder, TrackingNotFoundError, type TrackingOrder } from './api'
 import { formatOrderQuantity } from '../orders/order-display'
 import UiAlert from '../../components/UiAlert.vue'
@@ -78,15 +78,39 @@ function formatShort(value: string | null) {
   return value ? new Intl.DateTimeFormat('es-PE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value)) : ''
 }
 
+// Photo viewer dialog: focus moves to Cerrar, Escape closes it and focus
+// returns to the thumbnail that opened it.
+const photoCloseButton = ref<HTMLButtonElement | null>(null)
+let photoOpener: HTMLElement | null = null
+
+async function openPhoto(photo: TrackingOrder['photos'][number], event: Event) {
+  photoOpener = event.currentTarget as HTMLElement
+  previewPhoto.value = photo
+  await nextTick()
+  photoCloseButton.value?.focus()
+}
+
+function closePhoto() {
+  previewPhoto.value = null
+  photoOpener?.focus()
+  photoOpener = null
+}
+
+function onKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && previewPhoto.value) closePhoto()
+}
+
 onMounted(() => {
   load(true)
   timer = setInterval(() => { if (document.visibilityState === 'visible') load() }, REFRESH_MS)
   document.addEventListener('visibilitychange', onVisibility)
+  window.addEventListener('keydown', onKeydown)
 })
 
 onUnmounted(() => {
   stopRefresh()
   document.removeEventListener('visibilitychange', onVisibility)
+  window.removeEventListener('keydown', onKeydown)
 })
 </script>
 
@@ -138,7 +162,7 @@ onUnmounted(() => {
               <span v-else-if="stage.status === 'IN_PROGRESS'">En proceso ahora</span>
               <span v-else>Pendiente</span>
               <div v-if="photosFor(stage.position).length" class="tracking__photos">
-                <button v-for="photo in photosFor(stage.position)" :key="photo.created_at" type="button" class="tracking__photo" :aria-label="`Ver foto de ${stageLabel(stage.name)}`" @click="previewPhoto = photo">
+                <button v-for="photo in photosFor(stage.position)" :key="photo.created_at" type="button" class="tracking__photo" :aria-label="`Ver foto de ${stageLabel(stage.name)}`" @click="openPhoto(photo, $event)">
                   <img :src="photo.photo_data" :alt="`Evidencia de ${stage.name}`" loading="lazy" />
                 </button>
               </div>
@@ -156,7 +180,8 @@ onUnmounted(() => {
 
     <p v-else-if="error" class="tracking__state">{{ error }}</p>
 
-    <div v-if="previewPhoto" class="tracking__lightbox" role="dialog" aria-modal="true" aria-label="Foto de evidencia" @click="previewPhoto = null" @keydown.esc="previewPhoto = null">
+    <div v-if="previewPhoto" class="tracking__lightbox" role="dialog" aria-modal="true" aria-label="Foto de evidencia" @click.self="closePhoto">
+      <button ref="photoCloseButton" type="button" class="tracking__lightbox-close" @click="closePhoto"><X :size="18" aria-hidden="true" /> Cerrar</button>
       <img :src="previewPhoto.photo_data" alt="Evidencia ampliada" />
       <p>{{ previewPhoto.caption || 'Evidencia registrada' }} · {{ formatShort(previewPhoto.created_at) }}</p>
     </div>
@@ -208,6 +233,8 @@ onUnmounted(() => {
 .tracking__brand { display: flex; align-items: center; justify-content: center; gap: .4rem; margin: 0; color: var(--tf-text-subtle); font-size: .78rem; }
 .tracking__brand :deep(.brand-logo) { color: var(--tf-primary); font-size: .85rem; }
 .tracking__lightbox { position: fixed; inset: 0; z-index: 100; display: grid; place-content: center; gap: .6rem; padding: 1rem; background: rgb(22 35 61 / 82%); cursor: zoom-out; }
+.tracking__lightbox-close { display: inline-flex; align-items: center; gap: .35rem; justify-self: end; min-height: 44px; padding: .5rem .8rem; border: 1px solid var(--tf-on-primary); border-radius: var(--tf-radius); color: var(--tf-on-primary); background: transparent; font: inherit; font-weight: 700; cursor: pointer; }
+.tracking__lightbox-close:focus-visible { outline: 3px solid var(--tf-shell-accent); outline-offset: 2px; }
 .tracking__lightbox img { max-width: min(100%, 48rem); max-height: 80vh; border-radius: .5rem; }
 .tracking__lightbox p { margin: 0; color: var(--tf-on-primary); font-size: .85rem; text-align: center; }
 .tracking button:focus-visible { outline: 3px solid var(--tf-focus); outline-offset: 2px; }
