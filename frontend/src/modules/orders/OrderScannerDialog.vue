@@ -282,7 +282,7 @@ onUnmounted(stopScanner)
   position: absolute;
   width: 20px;
   height: 20px;
-  border-color: var(--tf-focus);
+  border-color: var(--tf-shell-accent);
 }
 
 .reticle-corner--tl { top: 0; left: 0; border-top: 3px solid; border-left: 3px solid; }
@@ -296,8 +296,7 @@ onUnmounted(stopScanner)
   left: 0;
   right: 0;
   height: 2px;
-  background: var(--tf-danger);
-  box-shadow: 0 0 8px var(--tf-danger);
+  background: var(--tf-shell-accent);
   animation: laser-sweep 2s infinite ease-in-out;
 }
 
