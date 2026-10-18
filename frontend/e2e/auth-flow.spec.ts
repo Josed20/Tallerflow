@@ -22,7 +22,6 @@ test('owner completes the secure Sprint 1 authentication journey', async ({ page
   await expect(page).toHaveURL(/\/app$/)
   await expect(page.getByRole('heading', { name: 'Taller E2E' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Panel' })).toBeVisible()
-  await expect(page.getByText('Propietario', { exact: true })).toBeVisible()
 
   const protectedResponses = await page.evaluate(async () => {
     const me = await fetch('/api/v1/me')
@@ -33,6 +32,7 @@ test('owner completes the secure Sprint 1 authentication journey', async ({ page
   expect(protectedResponses.me.body.data.email).toBe(ownerEmail)
   expect(protectedResponses.workshop.status).toBe(200)
   expect(protectedResponses.workshop.body.data.workshop.name).toBe('Taller E2E')
+  expect(protectedResponses.workshop.body.data.role).toBe('OWNER')
 
   const csrfStatus = await page.evaluate(async () => (await fetch('/api/v1/auth/logout', { method: 'POST' })).status)
   expect(csrfStatus).toBe(403)
