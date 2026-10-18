@@ -6,6 +6,7 @@ services:
       DB_MIGRATION_PASSWORD: ${DB_MIGRATION_PASSWORD:?set a production Flyway password}
       DB_APP_PASSWORD: ${DB_APP_PASSWORD:?set a production application password}
       DB_BOOTSTRAP_PASSWORD: ${DB_BOOTSTRAP_PASSWORD:?set a production bootstrap password}
+      DB_CONSOLE_PASSWORD: ${DB_CONSOLE_PASSWORD:?set a production console database password}
     ports: !reset []
     restart: always
 
@@ -14,6 +15,12 @@ services:
       TF_DATABASE_URL: ${TF_DATABASE_URL:?set the application database URL}
       TF_SESSION_PEPPER: ${TF_SESSION_PEPPER:?set a random session pepper}
       TF_ALLOWED_ORIGIN: ${TF_ALLOWED_ORIGIN:?set the public HTTPS origin}
+      TF_MOBILE_ORIGINS: ${TF_MOBILE_ORIGINS:-https://localhost,capacitor://localhost}
+      TF_PUBLIC_BASE_URL: ${TF_PUBLIC_BASE_URL:?set the public HTTPS base URL}
+      TF_SIGNUP_ENABLED: ${TF_SIGNUP_ENABLED:-true}
+      TF_CONSOLE_ORIGIN: ${TF_CONSOLE_ORIGIN:?set the console HTTPS origin}
+      TF_CONSOLE_DATABASE_URL: ${TF_CONSOLE_DATABASE_URL:?set the console database URL}
+      TF_CONSOLE_TOTP_KEY: ${TF_CONSOLE_TOTP_KEY:?set a random console TOTP key}
       TF_TRUSTED_PROXIES: ${TF_TRUSTED_PROXIES:-172.16.0.0/12}
       TF_PASSWORD_RESET_BASE_URL: ${TF_PASSWORD_RESET_BASE_URL:?set the public HTTPS password reset URL}
       TF_SMTP_HOST: ${TF_SMTP_HOST:?set the production SMTP host}

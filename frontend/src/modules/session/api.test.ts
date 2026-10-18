@@ -1,5 +1,11 @@
-import { describe, expect, it, vi } from 'vitest'
-import { ApiError, api } from './api'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ApiError, api, configureApiTransport } from './api'
+
+afterEach(() => {
+  configureApiTransport({ kind: 'web' })
+  vi.unstubAllEnvs()
+  vi.unstubAllGlobals()
+})
 
 describe('same-origin API client', () => {
   it('sends session requests with browser cookies and no bearer token', async () => {
@@ -40,5 +46,67 @@ describe('same-origin API client', () => {
       headers: { Accept: 'application/json', 'X-CSRF-Token': 'csrf-1' },
       method: 'DELETE',
     })
+  })
+
+  it('prefixes API paths when an external base URL is configured', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'https://tallerflow.pe/')
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await api.get('/api/v1/me')
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://tallerflow.pe/api/v1/me')
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ credentials: 'include' })
+  })
+
+  it('uses bearer without cookies or CSRF in mobile mode', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'https://tallerflow.pe')
+    configureApiTransport({ kind: 'mobile', getToken: async () => 'mobile-session' })
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await api.post('/api/v1/orders', { product: 'Polo' }, 'web-csrf', { 'Idempotency-Key': 'order-1' })
+
+    expect(fetchMock).toHaveBeenCalledWith('https://tallerflow.pe/api/v1/orders', {
+      method: 'POST',
+      credentials: 'omit',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'order-1',
+        Authorization: 'Bearer mobile-session',
+      },
+      body: JSON.stringify({ product: 'Polo' }),
+    })
+  })
+
+  it('allows mobile login without a token and handles a revoked token', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'https://tallerflow.pe')
+    let token: string | null = 'stale-session'
+    const onUnauthorized = vi.fn(() => { token = null })
+    configureApiTransport({ kind: 'mobile', getToken: () => token, onUnauthorized })
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { session_token: 'new-session' } }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'SESSION_EXPIRED', request_id: 'expired-1' } }), { status: 401 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await api.post('/api/v1/auth/login', { client: 'mobile', email: 'test@example.com' })
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ credentials: 'omit' })
+    expect(fetchMock.mock.calls[0]?.[1].headers).not.toHaveProperty('Authorization')
+
+    token = 'expired-session'
+    await expect(api.get('/api/v1/me')).rejects.toMatchObject({ status: 401, code: 'SESSION_EXPIRED' })
+    expect(onUnauthorized).toHaveBeenCalledOnce()
+    expect(token).toBeNull()
+  })
+
+  it('rejects mobile requests without a configured API origin', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', '')
+    configureApiTransport({ kind: 'mobile', getToken: () => null })
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(api.get('/api/v1/me')).rejects.toThrow('VITE_API_BASE_URL is required')
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

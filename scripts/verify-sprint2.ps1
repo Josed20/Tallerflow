@@ -56,6 +56,8 @@ try {
     Assert-NativeSuccess 'Database migration startup'
     docker compose run --rm flyway validate
     Assert-NativeSuccess 'Flyway validation'
+    Get-Content database/tests/console_role.sql -Raw | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d tallerflow
+    Assert-NativeSuccess 'Console role privilege contract'
     Get-Content database/tests/constraints.sql -Raw | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_bootstrap -d tallerflow
     Assert-NativeSuccess 'Database constraint tests'
     Get-Content database/tests/identity_contract.sql -Raw | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_bootstrap -d tallerflow
