@@ -3,12 +3,17 @@ package mail
 import (
 	"bytes"
 	"context"
+	"embed"
 	"errors"
 	"fmt"
+	htmltmpl "html/template"
 	"strings"
 	"sync"
-	"text/template"
+	texttmpl "text/template"
 )
+
+//go:embed templates/*
+var templateFS embed.FS
 
 // Message defines the email message payload.
 type Message struct {
@@ -83,7 +88,6 @@ func (f *Fake) Reset() {
 type templateDefinition struct {
 	subject string
 	text    string
-	html    string
 }
 
 var registeredTemplates = map[string]templateDefinition{
@@ -151,14 +155,15 @@ Pasado ese plazo, todos los datos del taller serán borrados de manera irreversi
 	},
 }
 
-// Render builds Subject, Text and optional HTML from a named template and provided data.
+// Render builds Subject, Text and rich branded HTML from a named template and provided data.
 func Render(templateName string, data any) (Message, error) {
-	tmplDef, ok := registeredTemplates[strings.TrimSpace(templateName)]
+	cleanName := strings.TrimSpace(templateName)
+	tmplDef, ok := registeredTemplates[cleanName]
 	if !ok {
 		return Message{}, fmt.Errorf("unknown email template: %q", templateName)
 	}
 
-	subjTmpl, err := template.New("subject").Parse(tmplDef.subject)
+	subjTmpl, err := texttmpl.New("subject").Parse(tmplDef.subject)
 	if err != nil {
 		return Message{}, fmt.Errorf("parse subject template: %w", err)
 	}
@@ -167,7 +172,7 @@ func Render(templateName string, data any) (Message, error) {
 		return Message{}, fmt.Errorf("render subject: %w", err)
 	}
 
-	textTmpl, err := template.New("text").Parse(tmplDef.text)
+	textTmpl, err := texttmpl.New("text").Parse(tmplDef.text)
 	if err != nil {
 		return Message{}, fmt.Errorf("parse text template: %w", err)
 	}
@@ -177,16 +182,12 @@ func Render(templateName string, data any) (Message, error) {
 	}
 
 	var htmlContent string
-	if tmplDef.html != "" {
-		htmlTmpl, err := template.New("html").Parse(tmplDef.html)
-		if err != nil {
-			return Message{}, fmt.Errorf("parse html template: %w", err)
-		}
+	htmlFileName := fmt.Sprintf("templates/%s.html", cleanName)
+	if parsedHTML, err := htmltmpl.ParseFS(templateFS, htmlFileName); err == nil {
 		var htmlBuf bytes.Buffer
-		if err := htmlTmpl.Execute(&htmlBuf, data); err != nil {
-			return Message{}, fmt.Errorf("render html: %w", err)
+		if err := parsedHTML.ExecuteTemplate(&htmlBuf, cleanName, data); err == nil {
+			htmlContent = htmlBuf.String()
 		}
-		htmlContent = htmlBuf.String()
 	}
 
 	subject := strings.TrimSpace(subjectBuf.String())
