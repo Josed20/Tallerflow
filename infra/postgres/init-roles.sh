@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-required_vars="DB_OWNER_PASSWORD DB_MIGRATION_PASSWORD DB_APP_PASSWORD DB_BOOTSTRAP_PASSWORD POSTGRES_DB"
+required_vars="DB_OWNER_PASSWORD DB_MIGRATION_PASSWORD DB_APP_PASSWORD DB_BOOTSTRAP_PASSWORD DB_CONSOLE_PASSWORD POSTGRES_DB"
 for variable_name in $required_vars; do
   eval "variable_value=\${$variable_name:-}"
   if [ -z "$variable_value" ]; then
@@ -15,6 +15,7 @@ psql --username "$POSTGRES_USER" --dbname postgres \
   --set=migration_password="$DB_MIGRATION_PASSWORD" \
   --set=app_password="$DB_APP_PASSWORD" \
   --set=bootstrap_password="$DB_BOOTSTRAP_PASSWORD" \
+  --set=console_password="$DB_CONSOLE_PASSWORD" \
   --set=app_database="$POSTGRES_DB" <<'SQL'
 SELECT format('CREATE ROLE tallerflow_owner LOGIN PASSWORD %L NOINHERIT', :'owner_password')
 WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'tallerflow_owner') \gexec
@@ -24,9 +25,12 @@ SELECT format('CREATE ROLE tallerflow_app LOGIN PASSWORD %L NOINHERIT', :'app_pa
 WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'tallerflow_app') \gexec
 SELECT format('CREATE ROLE tallerflow_bootstrap LOGIN PASSWORD %L NOINHERIT NOBYPASSRLS', :'bootstrap_password')
 WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'tallerflow_bootstrap') \gexec
+SELECT format('CREATE ROLE tallerflow_console LOGIN PASSWORD %L NOINHERIT NOBYPASSRLS', :'console_password')
+WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'tallerflow_console') \gexec
+ALTER ROLE tallerflow_console NOINHERIT NOBYPASSRLS;
 SELECT format('ALTER DATABASE %I OWNER TO tallerflow_owner', :'app_database') \gexec
 SELECT format('REVOKE ALL ON DATABASE %I FROM PUBLIC', :'app_database') \gexec
-SELECT format('GRANT CONNECT ON DATABASE %I TO tallerflow_migrator, tallerflow_app, tallerflow_bootstrap', :'app_database') \gexec
+SELECT format('GRANT CONNECT ON DATABASE %I TO tallerflow_migrator, tallerflow_app, tallerflow_bootstrap, tallerflow_console', :'app_database') \gexec
 SQL
 
 psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<'SQL'

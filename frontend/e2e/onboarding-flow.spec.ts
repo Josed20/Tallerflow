@@ -23,10 +23,11 @@ test('an empty installation creates its permanent OWNER through the browser', as
 
   await expect(page).toHaveURL(/\/app$/)
   await expect(page.getByRole('heading', { name: 'Taller Onboarding E2E' })).toBeVisible()
-  await expect(page.getByText(`${ownerEmail} · OWNER`)).toBeVisible()
 
   const state = await page.evaluate(async ({ email, password }) => {
     const status = await fetch('/api/v1/onboarding/status')
+    const me = await fetch('/api/v1/me')
+    const workshop = await fetch('/api/v1/workshops/current')
     const duplicate = await fetch('/api/v1/onboarding/workshop', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -38,12 +39,18 @@ test('an empty installation creates its permanent OWNER through the browser', as
     const duplicateBody = await duplicate.text()
     return {
       status: await status.json(), duplicateStatus: duplicate.status, duplicateBody,
+      meStatus: me.status, me: await me.json(),
+      workshopStatus: workshop.status, workshop: await workshop.json(),
       local: Object.keys(localStorage), session: Object.keys(sessionStorage), cookie: document.cookie,
       viewportWidth: window.innerWidth, documentWidth: document.documentElement.scrollWidth,
     }
   }, { email: ownerEmail, password: ownerPassword })
 
   expect(state.status.data.available).toBe(false)
+  expect(state.meStatus).toBe(200)
+  expect(state.me.data.email).toBe(ownerEmail)
+  expect(state.workshopStatus).toBe(200)
+  expect(state.workshop.data.role).toBe('OWNER')
   expect(state.duplicateStatus).toBe(409)
   expect(state.duplicateBody).not.toContain(ownerPassword)
   expect(state.local).toEqual([])

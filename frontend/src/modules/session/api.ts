@@ -1,5 +1,27 @@
 import type { APIErrorEnvelope } from './types'
 
+type ApiTransport =
+  | { kind: 'web' }
+  | {
+      kind: 'mobile'
+      getToken: () => string | null | Promise<string | null>
+      onUnauthorized?: () => void | Promise<void>
+    }
+
+let transport: ApiTransport = { kind: 'web' }
+
+export function configureApiTransport(next: ApiTransport): void {
+  transport = next
+}
+
+function apiUrl(path: string, kind: ApiTransport['kind']): string {
+  const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '')
+  if (kind === 'mobile' && !baseUrl) {
+    throw new Error('VITE_API_BASE_URL is required for mobile requests')
+  }
+  return `${baseUrl}${path}`
+}
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -11,14 +33,28 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init: RequestInit): Promise<T> {
-  const response = await fetch(path, {
+  const activeTransport = transport
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    ...(init.headers as Record<string, string> | undefined),
+  }
+  if (activeTransport.kind === 'mobile') {
+    delete headers['X-CSRF-Token']
+    const token = path === '/api/v1/auth/login' ? null : await activeTransport.getToken()
+    if (token) headers.Authorization = `Bearer ${token}`
+  }
+
+  const response = await fetch(apiUrl(path, activeTransport.kind), {
     ...init,
-    credentials: 'include',
-    headers: { Accept: 'application/json', ...(init.headers ?? {}) },
+    credentials: activeTransport.kind === 'mobile' ? 'omit' : 'include',
+    headers,
   })
 
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as APIErrorEnvelope | null
+    if (response.status === 401 && activeTransport.kind === 'mobile') {
+      await activeTransport.onUnauthorized?.()
+    }
     throw new ApiError(response.status, payload?.error?.code, payload?.error?.request_id)
   }
   if (response.status === 204) return undefined as T

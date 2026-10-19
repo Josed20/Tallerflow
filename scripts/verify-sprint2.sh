@@ -42,6 +42,7 @@ npx --yes '@redocly/cli@2.11.1' lint docs/contracts/openapi.yaml docs/contracts/
 
 docker compose up -d --wait postgres flyway
 docker compose run --rm flyway validate
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d tallerflow < database/tests/console_role.sql
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_bootstrap -d tallerflow < database/tests/constraints.sql
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_bootstrap -d tallerflow < database/tests/identity_contract.sql
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_bootstrap -d tallerflow < database/tests/rls_setup.sql

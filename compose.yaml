@@ -11,6 +11,7 @@ services:
       DB_MIGRATION_PASSWORD: ${DB_MIGRATION_PASSWORD:-local-migrator-change-me}
       DB_APP_PASSWORD: ${DB_APP_PASSWORD:-local-app-change-me}
       DB_BOOTSTRAP_PASSWORD: ${DB_BOOTSTRAP_PASSWORD:-local-bootstrap-change-me}
+      DB_CONSOLE_PASSWORD: ${DB_CONSOLE_PASSWORD:-local-console-change-me}
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -50,6 +51,12 @@ services:
       TF_ENVIRONMENT: ${TF_ENVIRONMENT:-development}
       TF_SESSION_PEPPER: ${TF_SESSION_PEPPER:-local-session-pepper-change-me}
       TF_ALLOWED_ORIGIN: ${TF_ALLOWED_ORIGIN:-http://localhost:8080}
+      TF_MOBILE_ORIGINS: ${TF_MOBILE_ORIGINS:-http://localhost,https://localhost,capacitor://localhost}
+      TF_PUBLIC_BASE_URL: ${TF_PUBLIC_BASE_URL:-http://localhost:8080}
+      TF_SIGNUP_ENABLED: ${TF_SIGNUP_ENABLED:-true}
+      TF_CONSOLE_ORIGIN: ${TF_CONSOLE_ORIGIN:-http://admin.localhost:8080}
+      TF_CONSOLE_DATABASE_URL: ${TF_CONSOLE_DATABASE_URL:-postgres://tallerflow_console:${DB_CONSOLE_PASSWORD:-local-console-change-me}@postgres:5432/tallerflow?sslmode=disable}
+      TF_CONSOLE_TOTP_KEY: ${TF_CONSOLE_TOTP_KEY:-local-console-totp-key-change-me}
       TF_TRUSTED_PROXIES: ${TF_TRUSTED_PROXIES:-172.16.0.0/12}
       TF_PASSWORD_RESET_BASE_URL: ${TF_PASSWORD_RESET_BASE_URL:-http://localhost:8080}
       TF_SMTP_HOST: ${TF_SMTP_HOST:-localhost}
