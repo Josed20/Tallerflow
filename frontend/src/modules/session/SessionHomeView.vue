@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { ArrowRight, ClipboardList, Plus, RefreshCw } from '@lucide/vue'
+import { ArrowRight, Check, ClipboardList, Plus, RefreshCw, Smartphone, Users } from '@lucide/vue'
 import { useSessionStore } from './session.store'
 import { ordersApi, type DashboardMetrics, type Order } from '../orders/api'
+import { clientsApi } from '../clients/api'
+import { teamApi } from '../team/api'
 import { completedStations, productionStations } from '../orders/order-display'
 import UiAlert from '../../components/UiAlert.vue'
 import OrderTicket from '../../components/OrderTicket.vue'
@@ -12,6 +14,37 @@ const metrics = ref<DashboardMetrics>({ active: 0, on_time: 0, at_risk: 0, late:
 const orders = ref<Order[]>([])
 const loading = ref(true)
 const error = ref('')
+
+// Sprint 3 - Lucero: Primeros pasos
+const clientsCount = ref(0)
+const teamCount = ref(0)
+const firstStepsDismissed = ref(false)
+const appDownloaded = ref(false)
+
+const workshopId = computed(() => session.principal?.workshop.id ?? 'default')
+const hasClients = computed(() => clientsCount.value > 0)
+const hasOrders = computed(() => orders.value.length > 0)
+const hasTeam = computed(() => teamCount.value > 1)
+const hasDownloadedApp = computed(() => appDownloaded.value)
+const allStepsCompleted = computed(() => hasClients.value && hasOrders.value && hasTeam.value && hasDownloadedApp.value)
+const showFirstSteps = computed(() => {
+  if (firstStepsDismissed.value || allStepsCompleted.value) return false
+  return session.principal?.role === 'OWNER' || session.principal?.role === 'ADMIN'
+})
+
+function dismissFirstSteps() {
+  firstStepsDismissed.value = true
+  try {
+    localStorage.setItem(`tallerflow_first_steps_dismissed_${workshopId.value}`, 'true')
+  } catch {}
+}
+
+function markAppDownloaded() {
+  appDownloaded.value = true
+  try {
+    localStorage.setItem(`tallerflow_app_downloaded_${workshopId.value}`, 'true')
+  } catch {}
+}
 
 const activeOrders = computed(() => orders.value.filter((order) => order.status === 'ACTIVE'))
 const todayKey = () => new Date().toLocaleDateString('en-CA')
@@ -61,7 +94,18 @@ function stationLabel(order: Order) {
   return name ? name.charAt(0) + name.slice(1).toLocaleLowerCase('es-PE') : 'En producción'
 }
 
-onMounted(loadDashboardData)
+onMounted(() => {
+  loadDashboardData()
+  try {
+    firstStepsDismissed.value = localStorage.getItem(`tallerflow_first_steps_dismissed_${workshopId.value}`) === 'true'
+    appDownloaded.value = localStorage.getItem(`tallerflow_app_downloaded_${workshopId.value}`) === 'true'
+  } catch {}
+
+  if (session.principal?.role === 'OWNER' || session.principal?.role === 'ADMIN') {
+    clientsApi.list().then(res => { clientsCount.value = res.data?.length ?? 0 }).catch(() => {})
+    teamApi.list().then(res => { teamCount.value = (res.data?.members?.length ?? 0) + (res.data?.invitations?.length ?? 0) }).catch(() => {})
+  }
+})
 </script>
 
 <template>
@@ -90,6 +134,70 @@ onMounted(loadDashboardData)
       <span>{{ alarmDetail }}</span>
       <small>Ver tablero <ArrowRight :size="15" aria-hidden="true" /></small>
     </RouterLink>
+
+    <!-- Primeros pasos (Sprint 3 - Lucero) -->
+    <section v-if="showFirstSteps" class="first-steps" aria-labelledby="first-steps-title">
+      <div class="first-steps__header">
+        <div>
+          <h2 id="first-steps-title" class="first-steps__title">Primeros pasos en tu taller</h2>
+          <p class="first-steps__subtitle">Completa esta guía para empezar a operar tu producción con TallerFlow.</p>
+        </div>
+        <button type="button" class="first-steps__dismiss" @click="dismissFirstSteps">
+          Ocultar
+        </button>
+      </div>
+
+      <div class="first-steps__items">
+        <RouterLink to="/app/clients" class="first-step" :class="{ 'first-step--done': hasClients }">
+          <div class="first-step__check">
+            <Check v-if="hasClients" :size="16" />
+            <span v-else>1</span>
+          </div>
+          <div class="first-step__text">
+            <strong>Crea tu primer cliente</strong>
+            <span>Registra la marca de prendas.</span>
+          </div>
+          <ArrowRight :size="16" class="first-step__arrow" />
+        </RouterLink>
+
+        <RouterLink to="/app/orders/new" class="first-step" :class="{ 'first-step--done': hasOrders }">
+          <div class="first-step__check">
+            <Check v-if="hasOrders" :size="16" />
+            <span v-else>2</span>
+          </div>
+          <div class="first-step__text">
+            <strong>Crea tu primera orden</strong>
+            <span>Genera la ficha viajera del lote.</span>
+          </div>
+          <ArrowRight :size="16" class="first-step__arrow" />
+        </RouterLink>
+
+        <RouterLink to="/app/team" class="first-step" :class="{ 'first-step--done': hasTeam }">
+          <div class="first-step__check">
+            <Check v-if="hasTeam" :size="16" />
+            <span v-else>3</span>
+          </div>
+          <div class="first-step__text">
+            <strong>Invita a tu equipo</strong>
+            <span>Suma a tus operarios por correo.</span>
+          </div>
+          <ArrowRight :size="16" class="first-step__arrow" />
+        </RouterLink>
+
+        <div class="first-step first-step--clickable" :class="{ 'first-step--done': hasDownloadedApp }" @click="markAppDownloaded">
+          <div class="first-step__check">
+            <Check v-if="hasDownloadedApp" :size="16" />
+            <span v-else>4</span>
+          </div>
+          <div class="first-step__text">
+            <strong>Descarga la app</strong>
+            <span>Para escanear y tomar fotos en planta.</span>
+          </div>
+          <Check v-if="hasDownloadedApp" :size="16" class="first-step__arrow" />
+          <ArrowRight v-else :size="16" class="first-step__arrow" />
+        </div>
+      </div>
+    </section>
 
     <div class="overview-grid">
       <section class="overview-section" aria-labelledby="priority-title">
@@ -179,4 +287,117 @@ onMounted(loadDashboardData)
 
 @media (max-width: 760px) { .overview-grid { grid-template-columns: 1fr; } }
 @media (max-width: 520px) { .overview-header { flex-direction: column; align-items: stretch; } .overview-header__actions .ops-button { flex: 1; } .overview-flow { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+/* Primeros pasos */
+.first-steps {
+  background: var(--tf-surface);
+  border: 1px solid var(--tf-border-soft);
+  border-left: 4px solid var(--tf-accent, #1F3A68);
+  border-radius: var(--tf-radius-sm);
+  padding: 1.25rem;
+  display: grid;
+  gap: 1rem;
+}
+.first-steps__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+.first-steps__title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--tf-ink);
+}
+.first-steps__subtitle {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  color: var(--tf-text-subtle);
+}
+.first-steps__dismiss {
+  background: transparent;
+  border: none;
+  color: var(--tf-text-subtle);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+.first-steps__dismiss:hover {
+  color: var(--tf-ink);
+  background: var(--tf-surface-subtle);
+}
+.first-steps__items {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+.first-step {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  background: var(--tf-surface-subtle);
+  border: 1px solid var(--tf-border-soft);
+  border-radius: var(--tf-radius-sm);
+  text-decoration: none;
+  color: var(--tf-ink);
+  min-height: 48px;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.first-step:hover {
+  border-color: var(--tf-accent, #1F3A68);
+  background: var(--tf-surface);
+}
+.first-step--clickable {
+  cursor: pointer;
+}
+.first-step__check {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  background: var(--tf-surface);
+  border: 2px solid var(--tf-border-soft);
+  color: var(--tf-text-subtle);
+  flex-shrink: 0;
+}
+.first-step--done {
+  background: var(--tf-surface);
+  opacity: 0.85;
+}
+.first-step--done .first-step__check {
+  background: var(--tf-success, #16A34A);
+  border-color: var(--tf-success, #16A34A);
+  color: #fff;
+}
+.first-step__text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 0.1rem;
+}
+.first-step__text strong {
+  font-size: 0.875rem;
+  color: var(--tf-ink);
+  line-height: 1.2;
+}
+.first-step__text span {
+  font-size: 0.75rem;
+  color: var(--tf-text-subtle);
+  line-height: 1.2;
+}
+.first-step__arrow {
+  color: var(--tf-text-subtle);
+  flex-shrink: 0;
+}
+.first-step:hover .first-step__arrow {
+  color: var(--tf-accent, #1F3A68);
+}
 </style>

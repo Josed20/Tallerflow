@@ -15,6 +15,10 @@ import OrdersListView from '../modules/orders/OrdersListView.vue'
 import OrderCreateView from '../modules/orders/OrderCreateView.vue'
 import OrderDetailView from '../modules/orders/OrderDetailView.vue'
 import TrackingView from '../modules/tracking/TrackingView.vue'
+// Sprint 3 - Lucero
+import LandingView from '../modules/landing/LandingView.vue'
+import TermsView from '../modules/legal/TermsView.vue'
+import PrivacyView from '../modules/legal/PrivacyView.vue'
 import { useOnboardingStore } from '../modules/onboarding/onboarding.store'
 import { useSessionStore } from '../modules/session/session.store'
 
@@ -24,7 +28,10 @@ interface AppRouterOptions {
 }
 
 export const routes = [
-  { path: '/', redirect: '/app' },
+  // Sprint 3 - Lucero
+  { path: '/', name: 'landing', component: LandingView, meta: { public: true } },
+  { path: '/terminos', name: 'terms', component: TermsView, meta: { public: true, allowAuthenticated: true } },
+  { path: '/privacidad', name: 'privacy', component: PrivacyView, meta: { public: true, allowAuthenticated: true } },
   { path: '/login', name: 'login', component: LoginView, meta: { public: true } },
   { path: '/join', name: 'join', component: JoinView, meta: { public: true } },
   { path: '/onboarding', name: 'onboarding', component: OnboardingView, meta: { public: true } },
