@@ -44,7 +44,7 @@ h1 { margin: 0; font-size: 1.5rem; line-height: 1.2; }
 .join-success strong { display: block; overflow-wrap: anywhere; color: var(--tf-primary-strong); }
 .join-recovery { display: grid; gap: .75rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--tf-border); text-align: left; }
 .join-recovery p { margin: 0; color: var(--tf-text-muted); font-size: .8125rem; line-height: 1.5; }
-.ui-button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: .5rem; border: 0; border-radius: .5rem; padding: .625rem 1rem; color: var(--tf-on-primary); background: var(--tf-primary); box-shadow: 0 1px 2px rgb(22 35 61 / 12%); font-weight: 700; cursor: pointer; }
+.ui-button { display: inline-flex; min-height: 48px; align-items: center; justify-content: center; gap: .5rem; border: 0; border-radius: .5rem; padding: .625rem 1.25rem; color: var(--tf-on-primary); background: var(--tf-primary); box-shadow: 0 1px 2px rgb(22 35 61 / 12%); font-weight: 700; cursor: pointer; text-decoration: none; transition: background-color .15s, border-color .15s; }
 .ui-button:hover:not(:disabled) { background: var(--tf-primary-hover); }
 .ui-button:focus-visible { outline: 3px solid var(--tf-focus); outline-offset: 2px; }
 .ui-button:disabled { opacity: .65; cursor: wait; }
@@ -52,8 +52,72 @@ h1 { margin: 0; font-size: 1.5rem; line-height: 1.2; }
 .ui-button--secondary:hover:not(:disabled) { background: var(--tf-primary-soft); }
 .ui-button--danger { color: var(--tf-on-primary); background: var(--tf-danger); }
 .ui-button--danger:hover:not(:disabled) { background: var(--tf-danger-hover); }
+.ui-button--ghost { border: 1px solid transparent; color: var(--tf-primary); background: transparent; box-shadow: none; }
+.ui-button--ghost:hover:not(:disabled) { background: var(--tf-primary-soft); }
+.ui-button--ghost .ui-button__spinner,
 .ui-button--secondary .ui-button__spinner { border-color: rgb(31 58 104 / 35%); border-top-color: var(--tf-primary); }
 .ui-button__spinner { width: 1rem; height: 1rem; border: 2px solid rgb(255 255 255 / 50%); border-top-color: white; border-radius: 50%; animation: spin .8s linear infinite; }
+
+/* Botones unificados (Entregable 11 - Lucero) para uso global en auth, clients, team, orders y consola */
+.btn-primary, .btn-secondary, .btn-danger, .btn-ghost {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  font-family: var(--tf-font-body);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+.btn-primary:focus-visible, .btn-secondary:focus-visible, .btn-danger:focus-visible, .btn-ghost:focus-visible {
+  outline: 3px solid var(--tf-focus);
+  outline-offset: 2px;
+}
+.btn-primary:disabled, .btn-secondary:disabled, .btn-danger:disabled, .btn-ghost:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+.btn-primary {
+  border: 1px solid var(--tf-primary);
+  background: var(--tf-primary);
+  color: var(--tf-on-primary);
+  box-shadow: 0 1px 2px rgb(22 35 61 / 12%);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--tf-primary-hover);
+  border-color: var(--tf-primary-hover);
+}
+.btn-secondary {
+  border: 1px solid var(--tf-primary-border);
+  background: var(--tf-surface);
+  color: var(--tf-primary-strong);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--tf-primary-soft);
+  border-color: var(--tf-primary);
+}
+.btn-danger {
+  border: 1px solid var(--tf-danger);
+  background: var(--tf-danger);
+  color: var(--tf-on-primary);
+}
+.btn-danger:hover:not(:disabled) {
+  background: var(--tf-danger-hover);
+  border-color: var(--tf-danger-hover);
+}
+.btn-ghost {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--tf-primary);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--tf-primary-soft);
+}
 .auth-footer { display: flex; align-items: center; justify-content: center; gap: .5rem; margin-top: 1.5rem; color: var(--tf-text-subtle); font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .session-home { display: grid; min-height: 100vh; place-items: center; padding: 1rem; }
 .session-home__card { width: min(100%, 36rem); padding: 2rem; border: 1px solid var(--tf-border-soft); border-radius: 1rem; background: var(--tf-surface); box-shadow: 0 8px 30px rgb(22 35 61 / 8%); }

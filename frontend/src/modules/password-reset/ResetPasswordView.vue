@@ -234,7 +234,7 @@ function goToLogin() {
 
 .secondary-button {
   display: inline-flex;
-  min-height: 44px;
+  min-height: 48px;
   width: 100%;
   align-items: center;
   justify-content: center;
@@ -246,6 +246,7 @@ function goToLogin() {
   border-radius: 0.5rem;
   padding: 0.625rem 1rem;
   box-shadow: 0 1px 2px rgb(22 35 61 / 12%);
+  transition: background-color 0.15s;
 }
 
 .secondary-button:hover {

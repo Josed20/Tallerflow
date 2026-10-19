@@ -2,7 +2,7 @@
 withDefaults(defineProps<{
   type?: 'button' | 'submit'
   loading?: boolean
-  variant?: 'primary' | 'secondary' | 'danger'
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost'
 }>(), {
   type: 'button',
   loading: false,
