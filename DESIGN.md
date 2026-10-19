@@ -198,7 +198,24 @@ Casi plano. La separación viene del borde (`border`) y del fondo (`background` 
 
 ## Logo
 
-Una etiqueta colgante con ojal y la esquina recortada de la ficha, cruzada por una costura de 7 puntadas: 6 trazos y un punto lleno final (la Entrega). El logotipo "TallerFlow" va en Archivo expandida 800. Funciona en un solo color (tinta sobre claro, blanco sobre azul mezclilla) y se imprime en la ficha viajera. Se reconoce hasta en 16 px como favicon. El trazo de referencia está en la vista previa aprobada; antes de usarlo en impresión, conviene que un diseñador lo vectorice y lo ajuste a mano.
+Una etiqueta colgante con ojal y la esquina recortada de la ficha, cruzada por una costura de 7 puntadas: 6 trazos y un punto lleno final (la Entrega). El logotipo "TallerFlow" va en Archivo expandida 800. Funciona en un solo color (tinta sobre claro, blanco sobre azul mezclilla) y se imprime en la ficha viajera. Se reconoce hasta en 16 px como favicon.
+
+### Paquete de activos entregado (Sprint 3 — Lucero)
+- **Vectores en `frontend/public/`:**
+  - `logo-symbol.svg`: Isotipo de la etiqueta colgante con las 7 puntadas.
+  - `logo-horizontal.svg`: Versión horizontal completa con wordmark para fondos claros.
+  - `logo-on-denim.svg`: Versión completa en blanco sobre fondo azul mezclilla `#1F3A68`.
+  - `logo-monochrome.svg`: Versión monocromática con `currentColor`.
+- **Favicons y Web Manifest:**
+  - `favicon.svg`, `favicon-16x16.png`, `favicon-32x32.png`, `apple-touch-icon.png` (180×180).
+  - `android-chrome-192x192.png`, `android-chrome-512x512.png` (íconos maskable).
+  - `manifest.webmanifest`.
+- **Redes sociales y mensajería:**
+  - `og-image.png` (1200×630): Vista previa para compartir enlaces en WhatsApp, Facebook y Twitter con etiquetas Open Graph en `index.html`.
+- **App móvil Android (`frontend/resources/` para Capacitor Assets):**
+  - `icon.png` (1024×1024): Ícono maestro de la aplicación.
+  - `icon-foreground.png` e `icon-background.png`: Ícono adaptativo de Android.
+  - `splash.png` (2732×2732): Pantalla de inicio con logo centrado sobre denim oscuro `#16294A`.
 
 ## Decisions Log
 | Date | Decision | Rationale |
