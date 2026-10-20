@@ -1,0 +1,9 @@
+# Túnel "tallerflow" de la cuenta Cloudflare del proyecto. El id no es secreto;
+# el JSON de credenciales sí, y vive solo en el servidor (TF_TUNNEL_CREDENTIALS_FILE).
+tunnel: fe78febd-fd73-45e1-bd16-c37c68745285
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  - hostname: tallerflowpe.com
+    service: http://gateway:80
+  - service: http_status:404
