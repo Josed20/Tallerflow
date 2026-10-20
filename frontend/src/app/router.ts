@@ -58,8 +58,39 @@ export const routes = [
   { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundView, meta: { public: true } },
 ]
 
+const defaultTitle = 'TallerFlow — Trazabilidad para talleres de confección'
+
+// Keyed by route name, so adding a route never touches this map's lines.
+const pageTitles: Record<string, string> = {
+  terms: 'Términos de servicio',
+  privacy: 'Política de privacidad',
+  login: 'Iniciar sesión',
+  join: 'Unirte al taller',
+  onboarding: 'Crear mi taller',
+  'forgot-password': 'Recuperar contraseña',
+  'reset-password': 'Nueva contraseña',
+  'change-password': 'Cambiar contraseña',
+  tracking: 'Seguimiento de tu pedido',
+  app: 'Panel',
+  clients: 'Clientes',
+  orders: 'Órdenes',
+  'orders-new': 'Nueva orden',
+  'orders-detail': 'Detalle de la orden',
+  team: 'Equipo',
+  'not-found': 'Página no encontrada',
+}
+
+export function pageTitle(routeName: unknown): string {
+  const title = typeof routeName === 'string' ? pageTitles[routeName] : undefined
+  return title ? `${title} · TallerFlow` : defaultTitle
+}
+
 export function createAppRouter({ pinia, history }: AppRouterOptions) {
   const router = createRouter({ history, routes })
+
+  router.afterEach((to) => {
+    document.title = pageTitle(to.name)
+  })
 
   router.beforeEach(async (to) => {
     const session = useSessionStore(pinia)
