@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-TallerFlow is a multi-tenant traceability platform for garment workshops (talleres de confección). Go API + Vue 3 SPA + PostgreSQL with row-level security, all run through Docker Compose. README, docs and UI copy are in Spanish; product context lives in `docs/contexto-proyecto.md`, API contracts in `docs/contracts/` (OpenAPI), team sprint plans in `docs/sprints/` (current: `sprint-03-team-plan.md`), and earlier design specs/implementation plans in `docs/superpowers/specs/` and `docs/superpowers/plans/`.
+TallerFlow is a multi-tenant traceability platform for garment workshops (talleres de confección). Go API + Vue 3 SPA + PostgreSQL with row-level security, all run through Docker Compose. README, docs and UI copy are in Spanish; product context lives in `docs/contexto-proyecto.md`, API contracts in `docs/contracts/` (OpenAPI), team sprint plans in `docs/sprints/` (current: `sprint-04-team-plan.md`; it reserves migration numbers V14+ and V12 stays permanently empty), and earlier design specs/implementation plans in `docs/superpowers/specs/` and `docs/superpowers/plans/`.
 
 ## Commands
 
