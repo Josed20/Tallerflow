@@ -17,8 +17,9 @@ Production data lives on the Contabo VPS. The backup destination is a **private 
    AWS_DEFAULT_REGION=auto
    ```
 
-4. Install `infra/systemd/tallerflow-backup.service` and `.timer` into `/etc/systemd/system/`; then run `sudo systemctl daemon-reload` and `sudo systemctl enable --now tallerflow-backup.timer`. Check `systemctl list-timers tallerflow-backup.timer` and `journalctl -u tallerflow-backup.service -n 50`.
-5. Run one controlled backup with `sudo systemctl start tallerflow-backup.service`. Check the corresponding daily object in R2. `backup-vps.sh` verifies that the upload can be read with `head-object` before reporting success.
+4. Install `infra/systemd/tallerflow-backup.service` and `.timer` into `/etc/systemd/system/`; then run `sudo systemctl daemon-reload`. Leave the timer disabled until the first backup succeeds.
+5. Run one controlled backup with `sudo systemctl start tallerflow-backup.service`. Check `journalctl -u tallerflow-backup.service -n 50` and the corresponding daily object in R2. `backup-vps.sh` verifies that the upload can be read with `head-object` before reporting success.
+6. Run the isolated restore drill below. Once it passes, enable the timer with `sudo systemctl enable --now tallerflow-backup.timer` and check `systemctl list-timers tallerflow-backup.timer`.
 
 The script streams `pg_dump` through age encryption; it never writes an unencrypted dump to disk. Daily objects use `daily/YYYY-MM-DD.dump.age`; Sundays also use `weekly/YYYY-Www.dump.age`. Set lifecycle expiration on `daily/` after 7 days and `weekly/` after 28 days in the R2 bucket, then verify the rules in Cloudflare. This retains about seven daily and four weekly recovery points; record the oldest available objects periodically. Keep another independent copy of the age identity.
 
@@ -32,4 +33,4 @@ For the real drill, use a separate workstation or test host with Docker, `age`, 
 bash scripts/restore-drill-r2.sh daily/YYYY-MM-DD.dump.age
 ```
 
-It downloads the encrypted object, decrypts it into a PostgreSQL 18 container with no network, restores it, verifies the public tables and key row counts, reports elapsed seconds, and destroys the temporary container and encrypted download. It does not connect to the production database. Log the drill date, object key, duration and result outside the repo. Compare the reported counts with the source database through an authorized read-only check if exact data reconciliation is required. A backup is operational only after this external drill passes.
+It downloads the encrypted object, decrypts it into a PostgreSQL 18 container with no network, creates the non-login roles referenced by row-level security policies, restores it, verifies the public tables and key row counts, reports elapsed seconds, and destroys the temporary container and encrypted download. It does not connect to the production database. Log the drill date, object key, duration and result outside the repo. Compare the reported counts with the source database through an authorized read-only check if exact data reconciliation is required. A backup is operational only after this external drill passes.

@@ -38,6 +38,11 @@ for _ in {1..30}; do
   sleep 1
 done
 docker exec "$container" pg_isready -U postgres -d postgres >/dev/null
+# The dump contains RLS policies that reference these application roles.
+# Recreate them without login privileges only inside the isolated drill container.
+docker exec "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c \
+  'CREATE ROLE tallerflow_owner NOLOGIN; CREATE ROLE tallerflow_migrator NOLOGIN; CREATE ROLE tallerflow_app NOLOGIN; CREATE ROLE tallerflow_bootstrap NOLOGIN; CREATE ROLE tallerflow_console NOLOGIN;' >/dev/null
+
 age -d -i "$BACKUP_AGE_IDENTITY" "$archive" |
   docker exec -i "$container" pg_restore -U postgres -d postgres \
     --no-owner --no-acl --exit-on-error
