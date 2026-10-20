@@ -100,6 +100,18 @@ describe('same-origin API client', () => {
     expect(token).toBeNull()
   })
 
+  it('revokes a mobile token when the workshop is suspended', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'https://tallerflow.pe')
+    const onUnauthorized = vi.fn()
+    configureApiTransport({ kind: 'mobile', getToken: () => 'active-token', onUnauthorized })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: { code: 'WORKSHOP_SUSPENDED', request_id: 'suspended-1' },
+    }), { status: 403 })))
+
+    await expect(api.get('/api/v1/me')).rejects.toMatchObject({ status: 403, code: 'WORKSHOP_SUSPENDED' })
+    expect(onUnauthorized).toHaveBeenCalledWith('suspended')
+  })
+
   it('rejects mobile requests without a configured API origin', async () => {
     vi.stubEnv('VITE_API_BASE_URL', '')
     configureApiTransport({ kind: 'mobile', getToken: () => null })

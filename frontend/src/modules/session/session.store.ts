@@ -2,7 +2,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { api } from './api'
 import type { ApiPrincipal, AuthSessionPayload, SessionPrincipal, SessionStatus, WorkshopAccess } from './types'
-import { isNativeApp } from '../../native/platform'
+import { usesNativeToken } from '../../native/platform'
 import { clearMobileToken, readMobileToken, writeMobileToken } from '../../native/session-token'
 
 export const useSessionStore = defineStore('session', () => {
@@ -13,14 +13,14 @@ export const useSessionStore = defineStore('session', () => {
   const mobileToken = ref<string | null>(null)
   const mustChangePassword = ref(false)
 
-  const isAuthenticated = computed(() => isNativeApp() ? mobileToken.value !== null : csrfToken.value !== null)
+  const isAuthenticated = computed(() => usesNativeToken() ? mobileToken.value !== null : csrfToken.value !== null)
   const requiresPasswordChange = computed(() => mustChangePassword.value)
 
   async function restore() {
     if (restored.value) return
     status.value = 'restoring'
     try {
-      if (isNativeApp()) {
+      if (usesNativeToken()) {
         mobileToken.value = await readMobileToken()
         if (!mobileToken.value) {
           clearSession()
@@ -43,7 +43,7 @@ export const useSessionStore = defineStore('session', () => {
 
   async function login(email: string, password: string) {
     const result = await api.post<AuthSessionPayload>('/api/v1/auth/login', {
-      email, password, ...(isNativeApp() ? { client: 'mobile' } : {}),
+      email, password, ...(usesNativeToken() ? { client: 'mobile' } : {}),
     })
     await acceptToken(result)
     applySession(result)
@@ -81,14 +81,14 @@ export const useSessionStore = defineStore('session', () => {
     try {
       await api.post('/api/v1/auth/logout', undefined, csrfToken.value ?? undefined)
     } finally {
-      if (isNativeApp()) await clearMobileToken()
+      if (usesNativeToken()) await clearMobileToken()
       clearSession()
       restored.value = true
     }
   }
 
   async function acceptToken(session: AuthSessionPayload) {
-    if (!isNativeApp()) return
+    if (!usesNativeToken()) return
     const token = session.data.session_token
     if (!token) throw new Error('La sesión móvil no devolvió un token.')
     await writeMobileToken(token)
@@ -97,7 +97,7 @@ export const useSessionStore = defineStore('session', () => {
 
   function applySession(session: AuthSessionPayload) {
     // Existing form guards require a truthy value; mobile requests strip this marker.
-    csrfToken.value = isNativeApp() ? 'native' : session.data.csrf_token
+    csrfToken.value = usesNativeToken() ? 'native' : session.data.csrf_token
     mustChangePassword.value = session.data.must_change_password
     status.value = mustChangePassword.value ? 'password-change-required' : 'authenticated'
   }

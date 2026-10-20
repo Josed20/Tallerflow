@@ -6,6 +6,8 @@ Schedule `bash scripts/backup-vps.sh /path/to/Tallerflow` daily on the VPS with 
 
 ## Restore drill
 
+Before production is available, run `bash scripts/restore-drill-local.sh` from the repository root after starting Docker Compose (on Windows, use Git Bash). It dumps the local database, restores it into a uniquely named temporary database in the same PostgreSQL container, compares the public tables and the counts of users, workshops, orders and stage photos, and removes the temporary database and dump on exit. This checks the dump/restore format locally; it does not prove that an encrypted object can be downloaded from the external bucket or restored on a different host.
+
 1. Download one encrypted backup to a separate test host. Do not run a drill against production.
 2. Start an isolated PostgreSQL 18 instance with the same role initialization and an empty database.
 3. Decrypt with `age -d -i /secure/path/identity.txt backup.dump.age` and pipe into `pg_restore --no-owner --no-acl -U postgres -d tallerflow` on that isolated instance.

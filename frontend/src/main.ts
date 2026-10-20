@@ -9,9 +9,9 @@ import { useSessionStore } from './modules/session/session.store'
 import { App as NativeApp } from '@capacitor/app'
 import { isNativeApp } from './native/platform'
 
-configureMobileTransport(() => {
+configureMobileTransport((reason) => {
   useSessionStore(pinia).clearSession()
-  void router.replace('/login?session=expired')
+  void router.replace(`/login?session=${reason}`)
 })
 
 if (isNativeApp()) {

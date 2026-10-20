@@ -1,15 +1,15 @@
 import { configureApiTransport } from '../modules/session/api'
 import { clearMobileToken, readMobileToken } from './session-token'
-import { isNativeApp } from './platform'
+import { usesNativeToken } from './platform'
 
-export function configureMobileTransport(onUnauthorized: () => void): void {
-  if (!isNativeApp()) return
+export function configureMobileTransport(onUnauthorized: (reason: 'expired' | 'suspended') => void): void {
+  if (!usesNativeToken()) return
   configureApiTransport({
     kind: 'mobile',
     getToken: readMobileToken,
-    onUnauthorized: async () => {
+    onUnauthorized: async (reason) => {
       await clearMobileToken()
-      onUnauthorized()
+      onUnauthorized(reason)
     },
   })
 }

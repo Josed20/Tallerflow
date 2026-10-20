@@ -1,4 +1,11 @@
 const base = process.env.VITE_API_BASE_URL
+if (process.env.TF_ANDROID_LOCAL_PREVIEW === '1') {
+  if (base) {
+    console.error('La vista previa local usa el mismo origen de Docker; deja VITE_API_BASE_URL vacío.')
+    process.exit(1)
+  }
+  process.exit(0)
+}
 if (!base) {
   console.error('Configura VITE_API_BASE_URL con el origen HTTPS de la API antes de sincronizar Android.')
   process.exit(1)

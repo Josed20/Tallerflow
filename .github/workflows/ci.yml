@@ -9,6 +9,33 @@ permissions:
   contents: read
 
 jobs:
+  android-debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VITE_API_BASE_URL: https://tallerflow.example
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Install frontend dependencies
+        run: npm --prefix frontend ci --no-audit
+      - name: Build web assets and sync Android
+        run: npm --prefix frontend run android:sync
+      - name: Compile debug APK
+        working-directory: frontend/android
+        run: bash ./gradlew assembleDebug --no-daemon
+
   sprint-2:
     runs-on: ubuntu-latest
     timeout-minutes: 30

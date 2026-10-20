@@ -3,8 +3,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useSessionStore } from './session.store'
 import { configureApiTransport } from './api'
 
-const mobile = vi.hoisted(() => ({ enabled: false, token: null as string | null }))
-vi.mock('../../native/platform', () => ({ isNativeApp: () => mobile.enabled }))
+const mobile = vi.hoisted(() => ({ enabled: false, localPreview: false, token: null as string | null }))
+vi.mock('../../native/platform', () => ({ usesNativeToken: () => mobile.enabled && !mobile.localPreview }))
 vi.mock('../../native/session-token', () => ({
   readMobileToken: async () => mobile.token,
   writeMobileToken: async (value: string) => { mobile.token = value },
@@ -19,6 +19,7 @@ describe('session store', () => {
     localStorage.clear()
     sessionStorage.clear()
     mobile.enabled = false
+    mobile.localPreview = false
     mobile.token = null
     configureApiTransport({ kind: 'web' })
   })
@@ -239,6 +240,30 @@ describe('session store', () => {
     expect(restored.principal?.role).toBe('OPERATOR')
     expect(fetchMock.mock.calls[3]?.[1].headers.Authorization).toBe('Bearer secure-token')
     expect(localStorage.length).toBe(0)
+  })
+
+  it('uses the local web session in the Android USB preview', async () => {
+    mobile.enabled = true
+    mobile.localPreview = true
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ data: {
+        expires_at: '2026-11-01T00:00:00Z', csrf_token: 'local-csrf', must_change_password: false,
+      } }))
+      .mockResolvedValueOnce(jsonResponse({ data: {
+        userId: 'operator-1', email: 'operator@test.pe', displayName: 'Operador', workshopId: 'workshop-1',
+      } }))
+      .mockResolvedValueOnce(jsonResponse({ data: {
+        workshop: { id: 'workshop-1', name: 'Taller Lima', timezone: 'America/Lima' }, role: 'OPERATOR',
+      } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const session = useSessionStore()
+    await session.login('operator@test.pe', 'correct-password')
+
+    expect(session.isAuthenticated).toBe(true)
+    expect(mobile.token).toBeNull()
+    expect(fetchMock.mock.calls[0]?.[1].body).not.toContain('"client":"mobile"')
+    expect(fetchMock.mock.calls[0]?.[1].credentials).toBe('include')
   })
 })
 
