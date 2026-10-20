@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily TallerFlow PostgreSQL backup
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 UTC
+Persistent=true
+Unit=tallerflow-backup.service
+
+[Install]
+WantedBy=timers.target

@@ -3,6 +3,7 @@ set -euo pipefail
 
 : "${BACKUP_AGE_RECIPIENT:?Set the age public recipient}"
 : "${BACKUP_S3_BUCKET:?Set the external backup bucket}"
+: "${AWS_ENDPOINT_URL:?Set the Cloudflare R2 S3 endpoint}"
 
 project_dir=${1:?Pass the VPS checkout path}
 cd "$project_dir"
@@ -15,7 +16,9 @@ docker compose -f compose.yaml -f compose.production.yaml -f compose.tunnel.yaml
 
 date_utc=$(date -u +%F)
 aws s3 cp "$backup_file" "s3://$BACKUP_S3_BUCKET/daily/$date_utc.dump.age" --no-progress
+aws s3api head-object --bucket "$BACKUP_S3_BUCKET" --key "daily/$date_utc.dump.age" >/dev/null
 if [[ $(date -u +%u) == 7 ]]; then
   aws s3 cp "$backup_file" "s3://$BACKUP_S3_BUCKET/weekly/$(date -u +%G-W%V).dump.age" --no-progress
+  aws s3api head-object --bucket "$BACKUP_S3_BUCKET" --key "weekly/$(date -u +%G-W%V).dump.age" >/dev/null
 fi
 echo "Encrypted backup uploaded for $date_utc"
