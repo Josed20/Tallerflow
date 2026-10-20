@@ -175,10 +175,12 @@ onUnmounted(() => {
         <span><Clock :size="14" aria-hidden="true" /> Actualizado {{ formatShort(order.updated_at) }}</span>
         <button type="button" @click="load()"><RefreshCw :size="14" aria-hidden="true" /> Actualizar</button>
       </footer>
-      <p class="tracking__brand"><span>Seguimiento con</span> <BrandLogo :size="18" /></p>
     </template>
 
     <p v-else-if="error" class="tracking__state">{{ error }}</p>
+
+    <!-- Shown on dead links too, so a customer always knows which service sent them. -->
+    <p v-if="!loading" class="tracking__brand"><span>Seguimiento con</span> <BrandLogo :size="18" /></p>
 
     <div v-if="previewPhoto" class="tracking__lightbox" role="dialog" aria-modal="true" aria-label="Foto de evidencia" @click.self="closePhoto">
       <button ref="photoCloseButton" type="button" class="tracking__lightbox-close" @click="closePhoto"><X :size="18" aria-hidden="true" /> Cerrar</button>
