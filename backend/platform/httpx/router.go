@@ -28,10 +28,13 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	router.Use(RequestID(), Recovery())
 	router.Use(deps.Middleware...)
 
-	router.GET("/health/live", func(c *gin.Context) {
+	// Uptime monitors probe with HEAD by default, and Gin answers 404 to a HEAD
+	// on a GET-only route.
+	healthMethods := []string{http.MethodGet, http.MethodHead}
+	router.Match(healthMethods, "/health/live", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"status": "alive"}})
 	})
-	router.GET("/health/ready", func(c *gin.Context) {
+	router.Match(healthMethods, "/health/ready", func(c *gin.Context) {
 		if deps.Ping == nil {
 			RespondError(c, http.StatusServiceUnavailable, "DEPENDENCY_UNAVAILABLE", "A required dependency is unavailable.")
 			return

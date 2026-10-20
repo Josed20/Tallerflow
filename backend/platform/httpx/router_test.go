@@ -27,6 +27,19 @@ func TestHealthLiveReturnsAliveStatusAndRequestID(t *testing.T) {
 	require.JSONEq(t, `{"data":{"status":"alive"}}`, res.Body.String())
 }
 
+func TestHealthEndpointsAnswerHeadForUptimeMonitors(t *testing.T) {
+	router := NewRouter(Dependencies{Ping: func(context.Context) error { return nil }})
+
+	for _, path := range []string{"/health/live", "/health/ready"} {
+		req := httptest.NewRequest(http.MethodHead, path, nil)
+		res := httptest.NewRecorder()
+
+		router.ServeHTTP(res, req)
+
+		require.Equal(t, http.StatusOK, res.Code, path)
+	}
+}
+
 func TestHealthReadyFailsClosedWithoutPingDependency(t *testing.T) {
 	router := NewRouter(Dependencies{})
 	req := httptest.NewRequest(http.MethodGet, "/health/ready", nil)
