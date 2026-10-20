@@ -51,6 +51,16 @@ func TestRuntimeLoggerSuppressesSensitiveQueryParameters(t *testing.T) {
 	require.Empty(t, params, "password hashes and reset-token digests must never be interpolated into logs")
 }
 
+func TestConfigurePoolLimitsOpenConnections(t *testing.T) {
+	sqlDB, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer sqlDB.Close()
+
+	configurePool(sqlDB)
+
+	require.Equal(t, maxOpenConnections, sqlDB.Stats().MaxOpenConnections)
+}
+
 func lifecycleDatabase(t *testing.T) (*gorm.DB, sqlmock.Sqlmock, func()) {
 	t.Helper()
 	sqlDB, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))

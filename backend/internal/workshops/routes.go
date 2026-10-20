@@ -47,7 +47,9 @@ func (h *Handler) Current(c *gin.Context) {
 	}
 	access, err := h.service.Resolve(c.Request.Context(), principal.UserID, principal.WorkshopID)
 	if err != nil {
-		if errors.Is(err, ErrMembershipNotFound) || errors.Is(err, ErrMembershipInvalid) {
+		if errors.Is(err, ErrWorkshopSuspended) {
+			httpx.RespondError(c, http.StatusForbidden, "WORKSHOP_SUSPENDED", "The workshop is suspended. Contact soporte@tallerflow.pe.")
+		} else if errors.Is(err, ErrMembershipNotFound) || errors.Is(err, ErrMembershipInvalid) {
 			httpx.RespondError(c, http.StatusForbidden, "WORKSHOP_FORBIDDEN", "The current workshop is not available.")
 		} else {
 			httpx.RespondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "An unexpected error occurred.")

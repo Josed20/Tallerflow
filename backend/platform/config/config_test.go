@@ -129,8 +129,8 @@ func TestLoadDefaultsTrustedProxyOnlyForProduction(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, development.TrustedProxies)
 
-	t.Setenv("TF_ENVIRONMENT", "production")
-	t.Setenv("TF_ALLOWED_ORIGIN", "https://app.tallerflow.test")
+	setValidProductionEnvironment(t)
+	t.Setenv("TF_TRUSTED_PROXIES", "")
 	production, err := Load()
 	require.NoError(t, err)
 	require.Equal(t, []string{"172.16.0.0/12"}, production.TrustedProxies)
@@ -167,13 +167,46 @@ func TestLoadRejectsInvalidSMTPTLSFlagWithoutLeakingValue(t *testing.T) {
 func TestLoadRejectsDisabledSMTPTLSInProduction(t *testing.T) {
 	setValidEnvironment(t)
 	t.Setenv("TF_ENVIRONMENT", "production")
-	t.Setenv("TF_ALLOWED_ORIGIN", "https://app.tallerflow.test")
-	t.Setenv("TF_PASSWORD_RESET_BASE_URL", "https://app.tallerflow.test")
+	setValidProductionEnvironment(t)
 	t.Setenv("TF_SMTP_REQUIRE_TLS", "false")
 
 	_, err := Load()
 
 	require.ErrorContains(t, err, "TF_SMTP_REQUIRE_TLS")
+}
+
+func TestLoadRejectsInsecureProductionSecrets(t *testing.T) {
+	tests := []struct {
+		name     string
+		variable string
+		value    string
+	}{
+		{name: "short session pepper", variable: "TF_SESSION_PEPPER", value: "too-short"},
+		{name: "runtime role", variable: "TF_DATABASE_URL", value: "postgres://postgres:long-enough-database-secret@db:5432/tallerflow?sslmode=require"},
+		{name: "runtime TLS disabled", variable: "TF_DATABASE_URL", value: "postgres://tallerflow_app:long-enough-database-secret@db:5432/tallerflow?sslmode=disable"},
+		{name: "bootstrap default password", variable: "TF_BOOTSTRAP_DATABASE_URL", value: "postgres://tallerflow_bootstrap:local-bootstrap-change-me@db:5432/tallerflow?sslmode=require"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setValidProductionEnvironment(t)
+			t.Setenv(tt.variable, tt.value)
+
+			_, err := Load()
+
+			require.Error(t, err)
+			require.NotContains(t, err.Error(), tt.value)
+		})
+	}
+}
+
+func TestLoadAcceptsHardenedProductionConfiguration(t *testing.T) {
+	setValidProductionEnvironment(t)
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	require.Equal(t, "production", cfg.Environment)
 }
 
 func TestLoadRejectsInvalidTrustedProxyWithoutLeakingValue(t *testing.T) {
@@ -193,9 +226,7 @@ func TestLoadDefaultsMobileOriginsPerEnvironment(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"http://localhost", "https://localhost", "capacitor://localhost"}, development.MobileOrigins)
 
-	t.Setenv("TF_ENVIRONMENT", "production")
-	t.Setenv("TF_ALLOWED_ORIGIN", "https://app.tallerflow.test")
-	t.Setenv("TF_PASSWORD_RESET_BASE_URL", "https://app.tallerflow.test")
+	setValidProductionEnvironment(t)
 	production, err := Load()
 	require.NoError(t, err)
 	require.Equal(t, []string{"https://localhost", "capacitor://localhost"}, production.MobileOrigins)
@@ -231,10 +262,7 @@ func TestLoadRejectsInvalidMobileOriginsWithoutLeakingValue(t *testing.T) {
 }
 
 func TestLoadRejectsInsecureMobileOriginInProduction(t *testing.T) {
-	setValidEnvironment(t)
-	t.Setenv("TF_ENVIRONMENT", "production")
-	t.Setenv("TF_ALLOWED_ORIGIN", "https://app.tallerflow.test")
-	t.Setenv("TF_PASSWORD_RESET_BASE_URL", "https://app.tallerflow.test")
+	setValidProductionEnvironment(t)
 	t.Setenv("TF_MOBILE_ORIGINS", "http://localhost")
 
 	_, err := Load()
@@ -257,4 +285,18 @@ func setValidEnvironment(t *testing.T) {
 	t.Setenv("TF_SMTP_PASSWORD", "")
 	t.Setenv("TF_SMTP_FROM", "")
 	t.Setenv("TF_SMTP_REQUIRE_TLS", "")
+}
+
+func setValidProductionEnvironment(t *testing.T) {
+	t.Helper()
+	t.Setenv("TF_DATABASE_URL", "postgres://tallerflow_app:runtime-database-secret-123@db:5432/tallerflow?sslmode=require")
+	t.Setenv("TF_BOOTSTRAP_DATABASE_URL", "postgres://tallerflow_bootstrap:bootstrap-database-secret-123@db:5432/tallerflow?sslmode=require")
+	t.Setenv("TF_SESSION_PEPPER", "production-session-pepper-at-least-32-bytes")
+	t.Setenv("TF_ALLOWED_ORIGIN", "https://app.tallerflow.test")
+	t.Setenv("TF_ENVIRONMENT", "production")
+	t.Setenv("TF_PASSWORD_RESET_BASE_URL", "https://app.tallerflow.test")
+	t.Setenv("TF_SMTP_REQUIRE_TLS", "true")
+	t.Setenv("TF_CONSOLE_DATABASE_URL", "postgres://tallerflow_console:console-database-secret-123@db:5432/tallerflow?sslmode=require")
+	t.Setenv("TF_CONSOLE_ORIGIN", "https://admin.tallerflow.test")
+	t.Setenv("TF_CONSOLE_TOTP_KEY", "production-console-totp-key-at-least-32-bytes")
 }
