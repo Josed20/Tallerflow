@@ -13,3 +13,4 @@ sprint1-compose.log
 sprint2-compose.log
 frontend/playwright-report/
 frontend/test-results/
+.gstack/
