@@ -1,0 +1,13 @@
+[Unit]
+Description=Encrypted TallerFlow PostgreSQL backup to R2
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/tallerflow
+EnvironmentFile=/etc/tallerflow/backup.env
+ExecStart=/usr/bin/bash /opt/tallerflow/scripts/backup-vps.sh /opt/tallerflow
+TimeoutStartSec=30min
