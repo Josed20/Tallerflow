@@ -2,8 +2,9 @@
 import { onMounted, ref } from 'vue'
 import { api } from '../session/api'
 
-type Workshop = { id: string; name: string; owner_email: string; created_at: string; last_activity: string | null; members: number; active_orders: number; photo_bytes: number; status: 'ACTIVE' | 'SUSPENDED' | 'PENDING_DELETION'; deletion_scheduled_for: string | null }
-type AuditEvent = { id: string; workshop_id: string | null; event_type: string; reason: string; source_ip: string; created_at: string }
+type Workshop = { id: string; name: string; owner_email: string; created_at: string; last_activity: string | null; members: number; active_orders: number; photo_bytes: number; status: 'ACTIVE' | 'SUSPENDED' | 'PENDING_DELETION'; deletion_scheduled_for: string | null; status_reason?: string; status_changed_at?: string | null }
+type AuditEvent = { id: string; workshop_id: string | null; event_type: string; actor_email: string; workshop_name: string; reason: string; source_ip: string; created_at: string }
+type Summary = { active_workshops: number; suspended_workshops: number; pending_deletion_workshops: number; created_last_7_days: number; created_last_30_days: number; active_last_7_days: number; unverified_owners_over_48h: number; orders_last_30_days: number }
 
 const authenticated = ref(false)
 const loading = ref(true)
@@ -15,6 +16,8 @@ const code = ref('')
 const search = ref('')
 const workshops = ref<Workshop[]>([])
 const audit = ref<AuditEvent[]>([])
+const summary = ref<Summary | null>(null)
+const selected = ref<Workshop | null>(null)
 const csrf = ref(sessionStorage.getItem('tallerflow_console_csrf') || '')
 
 async function restore() {
@@ -34,11 +37,17 @@ async function login() {
 }
 
 async function refresh() {
-  const [workshopResponse, auditResponse] = await Promise.all([
+  const [workshopResponse, auditResponse, summaryResponse] = await Promise.all([
     api.get<{ data: Workshop[] }>(`/api/v1/console/workshops?q=${encodeURIComponent(search.value)}`),
     api.get<{ data: AuditEvent[] }>('/api/v1/console/audit'),
+    api.get<{ data: Summary }>('/api/v1/console/summary'),
   ])
-  workshops.value = workshopResponse.data; audit.value = auditResponse.data
+  workshops.value = workshopResponse.data; audit.value = auditResponse.data; summary.value = summaryResponse.data
+}
+
+async function showWorkshop(workshop: Workshop) {
+  try { const response = await api.get<{ data: Workshop }>(`/api/v1/console/workshops/${workshop.id}`); selected.value = response.data }
+  catch (err: any) { error.value = err?.message || 'No se pudo cargar el taller.' }
 }
 
 async function changeStatus(workshop: Workshop, status: Workshop['status']) {
@@ -80,10 +89,12 @@ onMounted(restore)
       <form @submit.prevent="login"><label>Correo<input v-model="email" type="email" autocomplete="username" required /></label><label>Contraseña<input v-model="password" type="password" autocomplete="current-password" required /></label><label>Código de 6 dígitos<input v-model="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required /></label><p v-if="error" class="error">{{ error }}</p><button :disabled="busy" type="submit">{{ busy ? 'Ingresando…' : 'Ingresar' }}</button></form>
     </section>
     <template v-else>
+      <section class="content"><h2>Resumen de plataforma</h2><div v-if="summary" class="summary-grid"><article><strong>{{ summary.active_workshops }}</strong><span>Talleres activos</span></article><article><strong>{{ summary.suspended_workshops }}</strong><span>Suspendidos</span></article><article><strong>{{ summary.pending_deletion_workshops }}</strong><span>Eliminación programada</span></article><article><strong>{{ summary.created_last_7_days }} / {{ summary.created_last_30_days }}</strong><span>Talleres creados (7 / 30 días)</span></article><article><strong>{{ summary.active_last_7_days }}</strong><span>Activos en los últimos 7 días</span></article><article><strong>{{ summary.unverified_owners_over_48h }}</strong><span>Dueños sin verificar &gt; 48 h</span></article><article><strong>{{ summary.orders_last_30_days }}</strong><span>Órdenes en 30 días</span></article></div></section>
+      <section v-if="selected" class="content"><div class="heading"><h2>{{ selected.name }}</h2><button @click="selected = null">Cerrar</button></div><p>Dueño: {{ selected.owner_email }} · Alta: {{ date(selected.created_at) }} · Estado: {{ selected.status }}</p><p>Motivo: {{ selected.status_reason || 'Sin cambios registrados' }}</p><p v-if="selected.deletion_scheduled_for">Eliminación programada: {{ date(selected.deletion_scheduled_for) }}</p></section>
       <section class="content"><div class="heading"><div><h1>Talleres</h1><p>Metadatos operativos; la consola no puede leer órdenes, clientes ni fotografías.</p></div><form @submit.prevent="refresh"><input v-model="search" placeholder="Nombre o correo del dueño" /><button>Buscar</button></form></div><p v-if="error" class="error">{{ error }}</p>
-        <div class="table-wrap"><table><thead><tr><th>Taller</th><th>Estado</th><th>Actividad</th><th>Miembros</th><th>Órdenes activas</th><th>Fotos</th><th>Acciones</th></tr></thead><tbody><tr v-for="workshop in workshops" :key="workshop.id"><td><strong>{{ workshop.name }}</strong><small>{{ workshop.owner_email }}</small></td><td><span :class="`status status--${workshop.status.toLowerCase()}`">{{ workshop.status }}</span></td><td>{{ date(workshop.last_activity) }}</td><td>{{ workshop.members }}</td><td>{{ workshop.active_orders }}</td><td>{{ bytes(workshop.photo_bytes) }}</td><td class="actions"><button v-if="workshop.status !== 'SUSPENDED'" :disabled="busy" @click="changeStatus(workshop, 'SUSPENDED')">Suspender</button><button v-if="workshop.status !== 'ACTIVE'" :disabled="busy" @click="changeStatus(workshop, 'ACTIVE')">Reactivar</button><button v-if="workshop.status !== 'PENDING_DELETION'" :disabled="busy" @click="changeStatus(workshop, 'PENDING_DELETION')">Programar eliminación</button><button v-else class="danger" :disabled="busy" @click="purge(workshop)">Eliminar definitivamente</button></td></tr></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>Taller</th><th>Estado</th><th>Actividad</th><th>Miembros</th><th>Órdenes activas</th><th>Fotos</th><th>Acciones</th></tr></thead><tbody><tr v-for="workshop in workshops" :key="workshop.id"><td><button class="link" @click="showWorkshop(workshop)">{{ workshop.name }}</button><small>{{ workshop.owner_email }}</small></td><td><span :class="`status status--${workshop.status.toLowerCase()}`">{{ workshop.status }}</span></td><td>{{ date(workshop.last_activity) }}</td><td>{{ workshop.members }}</td><td>{{ workshop.active_orders }}</td><td>{{ bytes(workshop.photo_bytes) }}</td><td class="actions"><button v-if="workshop.status !== 'SUSPENDED'" :disabled="busy" @click="changeStatus(workshop, 'SUSPENDED')">Suspender</button><button v-if="workshop.status !== 'ACTIVE'" :disabled="busy" @click="changeStatus(workshop, 'ACTIVE')">{{ workshop.status === 'PENDING_DELETION' ? 'Cancelar eliminación' : 'Reactivar' }}</button><button v-if="workshop.status !== 'PENDING_DELETION'" :disabled="busy" @click="changeStatus(workshop, 'PENDING_DELETION')">Programar eliminación</button><button v-else class="danger" :disabled="busy" @click="purge(workshop)">Eliminar definitivamente</button></td></tr></tbody></table></div>
       </section>
-      <section class="content"><h2>Auditoría reciente</h2><ul class="audit"><li v-for="event in audit" :key="event.id"><strong>{{ event.event_type }}</strong><span>{{ event.reason }}</span><time>{{ date(event.created_at) }}</time></li></ul></section>
+      <section class="content"><h2>Auditoría reciente</h2><ul class="audit"><li v-for="event in audit" :key="event.id"><strong>{{ event.actor_email || 'Administrador' }} · {{ event.event_type }}<small>{{ event.workshop_name }} · {{ event.source_ip }}</small></strong><span>{{ event.reason }}</span><time>{{ date(event.created_at) }}</time></li></ul></section>
     </template>
   </main>
 </template>

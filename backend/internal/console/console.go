@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/Josed20/Tallerflow/backend/internal/auth"
 	"github.com/Josed20/Tallerflow/backend/platform/httpx"
+	"github.com/Josed20/Tallerflow/backend/platform/mail"
 	"github.com/Josed20/Tallerflow/backend/platform/security"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -54,14 +56,34 @@ type Workshop struct {
 	PhotoBytes           int64      `json:"photo_bytes"`
 	Status               string     `json:"status"`
 	DeletionScheduledFor *time.Time `json:"deletion_scheduled_for"`
+	StatusReason         string     `json:"status_reason,omitempty"`
+	StatusChangedAt      *time.Time `json:"status_changed_at,omitempty"`
 }
 type AuditEvent struct {
-	ID         uuid.UUID  `json:"id"`
-	WorkshopID *uuid.UUID `json:"workshop_id"`
-	EventType  string     `json:"event_type"`
-	Reason     string     `json:"reason"`
-	SourceIP   string     `json:"source_ip"`
-	CreatedAt  time.Time  `json:"created_at"`
+	ID           uuid.UUID  `json:"id"`
+	WorkshopID   *uuid.UUID `json:"workshop_id"`
+	EventType    string     `json:"event_type"`
+	ActorEmail   string     `json:"actor_email"`
+	WorkshopName string     `json:"workshop_name"`
+	Reason       string     `json:"reason"`
+	Details      any        `json:"details"`
+	SourceIP     string     `json:"source_ip"`
+	CreatedAt    time.Time  `json:"created_at"`
+}
+type Summary struct {
+	ActiveWorkshops          int64 `json:"active_workshops"`
+	SuspendedWorkshops       int64 `json:"suspended_workshops"`
+	PendingDeletionWorkshops int64 `json:"pending_deletion_workshops"`
+	CreatedLast7Days         int64 `json:"created_last_7_days"`
+	CreatedLast30Days        int64 `json:"created_last_30_days"`
+	ActiveLast7Days          int64 `json:"active_last_7_days"`
+	UnverifiedOwnersOver48h  int64 `json:"unverified_owners_over_48h"`
+	OrdersLast30Days         int64 `json:"orders_last_30_days"`
+}
+type StatusChange struct {
+	OwnerEmail           string     `gorm:"column:owner_email"`
+	WorkshopName         string     `gorm:"column:workshop_name"`
+	DeletionScheduledFor *time.Time `gorm:"column:deletion_scheduled_for"`
 }
 
 type Service struct {
@@ -70,7 +92,10 @@ type Service struct {
 	key    []byte
 	now    func() time.Time
 	random io.Reader
+	mailer mail.Sender
 }
+
+func (s *Service) SetMailer(sender mail.Sender) { s.mailer = sender }
 
 func NewService(db *gorm.DB, encryptionKey string) (*Service, error) {
 	if db == nil {
@@ -212,8 +237,46 @@ func (s *Service) ListWorkshops(ctx context.Context, search string, limit, offse
 	err := s.db.WithContext(ctx).Raw("SELECT * FROM console_list_workshops(?, ?, ?)", strings.TrimSpace(search), limit, offset).Scan(&rows).Error
 	return rows, err
 }
-func (s *Service) SetStatus(ctx context.Context, adminID, workshopID uuid.UUID, status, reason string) error {
-	return s.db.WithContext(ctx).Exec("SELECT console_set_workshop_status(?, ?, ?, ?)", workshopID, strings.ToUpper(status), strings.TrimSpace(reason), adminID).Error
+func (s *Service) Summary(ctx context.Context) (Summary, error) {
+	var result Summary
+	err := s.db.WithContext(ctx).Raw("SELECT * FROM console_summary()").Scan(&result).Error
+	return result, err
+}
+func (s *Service) Workshop(ctx context.Context, id uuid.UUID) (Workshop, error) {
+	var result Workshop
+	err := s.db.WithContext(ctx).Raw("SELECT * FROM console_workshop_detail(?)", id).Scan(&result).Error
+	return result, err
+}
+func (s *Service) SetStatus(ctx context.Context, adminID, workshopID uuid.UUID, status, reason, sourceIP string) (StatusChange, error) {
+	var result StatusChange
+	err := s.db.WithContext(ctx).Raw("SELECT * FROM console_set_workshop_status(?, ?, ?, ?, ?)", workshopID, strings.ToUpper(status), strings.TrimSpace(reason), adminID, sourceIP).Scan(&result).Error
+	if err != nil {
+		return result, err
+	}
+	if s.mailer != nil && result.OwnerEmail != "" {
+		templateName := ""
+		data := map[string]string{"WorkshopName": result.WorkshopName, "Reason": strings.TrimSpace(reason)}
+		if strings.EqualFold(status, "SUSPENDED") {
+			templateName = "workshop-suspended"
+		}
+		if strings.EqualFold(status, "PENDING_DELETION") {
+			templateName = "workshop-deletion-scheduled"
+			if result.DeletionScheduledFor != nil {
+				data["DeletionDate"] = result.DeletionScheduledFor.Format("02/01/2006")
+			}
+		}
+		if templateName != "" {
+			msg, renderErr := mail.Render(templateName, data)
+			msg.To = result.OwnerEmail
+			if renderErr == nil {
+				renderErr = s.mailer.Send(ctx, msg)
+			}
+			if renderErr != nil {
+				log.Printf("console notification email failed: %v", renderErr)
+			}
+		}
+	}
+	return result, nil
 }
 func (s *Service) VerifyTOTP(ctx context.Context, adminID uuid.UUID, code string) bool {
 	var ciphertext []byte
@@ -223,12 +286,12 @@ func (s *Service) VerifyTOTP(ctx context.Context, adminID uuid.UUID, code string
 	secret, err := s.decrypt(ciphertext)
 	return err == nil && validTOTP(secret, code, s.now())
 }
-func (s *Service) Purge(ctx context.Context, adminID, workshopID uuid.UUID, name string) error {
-	return s.db.WithContext(ctx).Exec("SELECT console_purge_workshop(?, ?, ?)", workshopID, name, adminID).Error
+func (s *Service) Purge(ctx context.Context, adminID, workshopID uuid.UUID, name, sourceIP string) error {
+	return s.db.WithContext(ctx).Exec("SELECT console_purge_workshop(?, ?, ?, ?)", workshopID, name, adminID, sourceIP).Error
 }
 func (s *Service) Audit(ctx context.Context, limit int) ([]AuditEvent, error) {
 	var rows []AuditEvent
-	err := s.db.WithContext(ctx).Raw("SELECT id, workshop_id, event_type, reason, source_ip, created_at FROM console_audit_events ORDER BY created_at DESC LIMIT ?", limit).Scan(&rows).Error
+	err := s.db.WithContext(ctx).Raw("SELECT e.id, e.workshop_id, e.event_type, e.reason, e.source_ip, e.details, e.workshop_name, a.email AS actor_email, e.created_at FROM console_audit_events e LEFT JOIN console_admins a ON a.id=e.actor_admin_id ORDER BY e.created_at DESC LIMIT ?", limit).Scan(&rows).Error
 	return rows, err
 }
 
@@ -349,6 +412,31 @@ func (h *Handler) Workshops(c *gin.Context) {
 	}
 	c.JSON(200, gin.H{"data": rows})
 }
+func (h *Handler) Summary(c *gin.Context) {
+	result, err := h.service.Summary(c)
+	if err != nil {
+		httpx.RespondError(c, 500, "INTERNAL_ERROR", "An unexpected error occurred.")
+		return
+	}
+	c.JSON(200, gin.H{"data": result})
+}
+func (h *Handler) Workshop(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.RespondError(c, 404, "WORKSHOP_NOT_FOUND", "The workshop does not exist.")
+		return
+	}
+	result, err := h.service.Workshop(c, id)
+	if err != nil {
+		httpx.RespondError(c, 500, "INTERNAL_ERROR", "An unexpected error occurred.")
+		return
+	}
+	if result.ID == uuid.Nil {
+		httpx.RespondError(c, 404, "WORKSHOP_NOT_FOUND", "The workshop does not exist.")
+		return
+	}
+	c.JSON(200, gin.H{"data": result})
+}
 func (h *Handler) SetStatus(c *gin.Context) {
 	if !h.requireMutation(c) {
 		return
@@ -366,7 +454,7 @@ func (h *Handler) SetStatus(c *gin.Context) {
 		httpx.RespondError(c, 422, "REASON_INVALID", "A reason of at least 5 characters is required.")
 		return
 	}
-	if err := h.service.SetStatus(c, consoleSession(c).AdminID, workshopID, in.Status, in.Reason); err != nil {
+	if _, err := h.service.SetStatus(c, consoleSession(c).AdminID, workshopID, in.Status, in.Reason, c.ClientIP()); err != nil {
 		httpx.RespondError(c, 409, "WORKSHOP_STATUS_INVALID", "The workshop status could not be changed.")
 		return
 	}
@@ -393,7 +481,7 @@ func (h *Handler) Purge(c *gin.Context) {
 		httpx.RespondError(c, http.StatusForbidden, "TOTP_INVALID", "A new verification code is required.")
 		return
 	}
-	if err := h.service.Purge(c, consoleSession(c).AdminID, workshopID, in.Name); err != nil {
+	if err := h.service.Purge(c, consoleSession(c).AdminID, workshopID, in.Name, c.ClientIP()); err != nil {
 		httpx.RespondError(c, 409, "WORKSHOP_PURGE_BLOCKED", "The workshop cannot be deleted yet or its name does not match.")
 		return
 	}
@@ -415,6 +503,8 @@ func RegisterRoutes(routes gin.IRouter, h *Handler) {
 	routes.GET("/api/v1/console/session", authn, h.Session)
 	routes.POST("/api/v1/console/logout", authn, h.Logout)
 	routes.GET("/api/v1/console/workshops", authn, h.Workshops)
+	routes.GET("/api/v1/console/summary", authn, h.Summary)
+	routes.GET("/api/v1/console/workshops/:id", authn, h.Workshop)
 	routes.POST("/api/v1/console/workshops/:id/status", authn, h.SetStatus)
 	routes.POST("/api/v1/console/workshops/:id/purge", authn, h.Purge)
 	routes.GET("/api/v1/console/audit", authn, h.Audit)
