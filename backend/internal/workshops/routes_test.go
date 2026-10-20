@@ -49,7 +49,7 @@ func TestMeRejectsMissingPrincipalWithAPIEnvelope(t *testing.T) {
 
 func TestCurrentReturnsActiveOwnerWorkshop(t *testing.T) {
 	principal := testPrincipal()
-	access := Access{Workshop: Workshop{ID: principal.WorkshopID, Name: "Taller Central", Timezone: "America/Lima"}, Role: RoleOwner}
+	access := Access{Workshop: Workshop{ID: principal.WorkshopID, Name: "Taller Central", Timezone: "America/Lima", Status: "ACTIVE"}, Role: RoleOwner}
 	resolver := &workshopResolverFake{access: access}
 	router := workshopRouter(t, resolver, &principal)
 	response := httptest.NewRecorder()
@@ -57,7 +57,7 @@ func TestCurrentReturnsActiveOwnerWorkshop(t *testing.T) {
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/workshops/current", nil))
 
 	require.Equal(t, http.StatusOK, response.Code)
-	require.JSONEq(t, `{"data":{"workshop":{"id":"`+principal.WorkshopID.String()+`","name":"Taller Central","timezone":"America/Lima"},"role":"OWNER"}}`, response.Body.String())
+	require.JSONEq(t, `{"data":{"workshop":{"id":"`+principal.WorkshopID.String()+`","name":"Taller Central","timezone":"America/Lima","status":"ACTIVE"},"role":"OWNER"}}`, response.Body.String())
 	require.Equal(t, principal.UserID, resolver.userID)
 	require.Equal(t, principal.WorkshopID, resolver.workshopID)
 }

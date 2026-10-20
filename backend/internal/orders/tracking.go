@@ -130,7 +130,7 @@ func (r *PostgresTrackingRepository) FindByToken(ctx context.Context, tokenHash 
 				END AS traffic_light
 			FROM orders o
 			JOIN workshops w ON w.id = o.workshop_id
-			WHERE o.id = ?`, now, now.Add(48*time.Hour), link.OrderID).Scan(&order)
+			WHERE o.id = ? AND w.status = 'ACTIVE'`, now, now.Add(48*time.Hour), link.OrderID).Scan(&order)
 		if row.Error != nil {
 			return row.Error
 		}
