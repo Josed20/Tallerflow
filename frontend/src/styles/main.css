@@ -26,6 +26,8 @@ select { font: inherit; }
 .auth-card { position: relative; width: min(100%, 30rem); overflow: hidden; border: 1px solid var(--tf-border-soft); border-radius: var(--tf-radius); background: var(--tf-surface); box-shadow: 0 8px 30px rgb(22 35 61 / 8%); }
 .auth-card__content { position: relative; z-index: 1; padding: 2rem 1.5rem; text-align: center; }
 .auth-brand, .brand-mark { display: flex; width: fit-content; margin: 0 auto 1.25rem; color: var(--tf-primary); }
+a.auth-brand { min-height: 44px; align-items: center; border-radius: var(--tf-radius); text-decoration: none; }
+a.auth-brand:focus-visible { outline: 3px solid var(--tf-focus); outline-offset: 2px; }
 h1, h2 { font-family: var(--tf-font-display); font-variation-settings: "wdth" 125; font-weight: 800; letter-spacing: -.005em; text-wrap: balance; }
 h1 { margin: 0; font-size: 1.5rem; line-height: 1.2; }
 .auth-subtitle { max-width: 20rem; margin: .5rem auto 1.5rem; color: var(--tf-text-muted); font-size: .875rem; line-height: 1.45; }
