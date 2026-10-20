@@ -27,6 +27,7 @@ npm --prefix frontend test                               # vitest (src/**/*.test
 npm --prefix frontend exec vitest run src/modules/orders/OrdersListView.test.ts   # single file
 npm --prefix frontend run build                          # vue-tsc type check + vite build
 npm --prefix frontend run test:e2e -- onboarding-flow.spec.ts   # Playwright, needs running app; E2E_BASE_URL overrides http://127.0.0.1:8080
+npm --prefix frontend run android:sync                   # web build + Capacitor sync; needs VITE_API_BASE_URL=https://... (see docs/runbooks/mobile-android.md)
 ```
 
 Postgres integration tests (`*_integration_test.go`, `TestPostgresIntegration*`) skip unless `TF_TEST_DATABASE_URL` (and for some, `TF_TEST_BOOTSTRAP_DATABASE_URL` / `TF_TEST_ADMIN_DATABASE_URL`) point at a migrated DB; see `scripts/verify-sprint2.sh` for the exact values.
@@ -42,7 +43,7 @@ Full verification (what CI runs, from empty isolated Compose volumes): `./script
 - `cmd/api/app.go` is the composition root: it builds every repository/service/handler by hand and registers modules through `httpx.RouteRegistrar` funcs. New modules must be wired here.
 - `cmd/bootstrap` is a CLI that creates the single initial OWNER via the bootstrap DB role (password from stdin).
 - `internal/<module>/` (auth, onboarding, passwordreset, team, workshops, clients, orders) each follow handler → service → repository, with `routes.go`/`RegisterRoutes(routes, handler, requireSession)`. Private routes take `authHandler.RequireSession()`, and handlers read the caller via `httpx.PrincipalFromGin(c)` (user, workshop, role).
-- `platform/` holds shared infra: `config` (all `TF_*` env vars), `database`, `httpx` (router, error envelope via `RespondError`, request IDs, principal), `security` (CSRF, rate limiting).
+- `platform/` holds shared infra: `config` (all `TF_*` env vars), `database`, `httpx` (router, error envelope via `RespondError`, request IDs, principal, global `Middleware`), `security` (CSRF, rate limiting, `MobileCORS`), `mail` (shared SMTP `Sender` and branded templates used by password reset and team invitations).
 
 **Multi-tenancy is enforced in PostgreSQL via RLS.** All tenant-owned data must go through `database.TenantRunner.WithinTenant(ctx, workshopID, fn)` (`platform/database/tenant.go`), which opens a transaction and sets `app.workshop_id` transaction-locally. Without that context, protected tables return no rows. Never query tenant tables on the raw `*gorm.DB`. The exception is public-token flows (team invitation consume, customer order tracking in `internal/orders/tracking.go`): they set a transaction-local `app.<x>_token_hash` that an RLS policy matches against the stored SHA/HMAC of the token to discover the workshop, then set `app.workshop_id` in the same transaction.
 
@@ -50,9 +51,11 @@ Full verification (what CI runs, from empty isolated Compose volumes): `./script
 
 **Migrations:** Flyway, `database/migrations/V<n>__description.sql`. Never edit an applied migration; add a new version above the highest existing one (V3/V4 are intentionally absent on `main`, so don't backfill them). The backend does not use `AutoMigrate`. SQL contract/RLS tests live in `database/tests/` and are run with `psql` as the appropriate role (see README).
 
-**Auth/session:** cookie sessions (peppered with `TF_SESSION_PEPPER`), CSRF token required on mutating requests (`X-CSRF-Token`), origin check against `TF_ALLOWED_ORIGIN`, in-memory rate limiters. Roles: OWNER, ADMIN, SUPERVISOR, OPERATOR (`internal/workshops/role.go`); a first login after CLI bootstrap forces a password change. Error responses use a `{ "error": { "code", "request_id", ... } }` envelope with stable codes.
+**Auth/session:** two transports over the same opaque, revocable DB sessions (peppered with `TF_SESSION_PEPPER`), told apart by `user_sessions.kind`. WEB: cookie, CSRF token required on mutating requests (`X-CSRF-Token`), origin check against `TF_ALLOWED_ORIGIN`, eight hours. MOBILE (Android app): login with `"client": "mobile"` returns `session_token`, sent as `Authorization: Bearer` without CSRF, 30 days renewed with use, allowed only from `TF_MOBILE_ORIGINS` (or no Origin). A token only works through its own transport; cookie plus bearer is a 400. A login replaces only the previous session of the same kind; a password change revokes all. In-memory rate limiters. Roles: OWNER, ADMIN, SUPERVISOR, OPERATOR (`internal/workshops/role.go`); a first login after CLI bootstrap forces a password change. Error responses use a `{ "error": { "code", "request_id", ... } }` envelope with stable codes.
 
 **Frontend (`frontend/`)** — Vue 3 + TypeScript, Pinia, TanStack Vue Query, vue-router, Tailwind v4, reka-ui. Feature code lives in `src/modules/<feature>/` (view + `api.ts` + store + colocated `*.test.ts`). The shared fetch wrapper and `ApiError` are in `src/modules/session/api.ts`; role-based UI gating is in `src/modules/session/role-policy.ts` and `src/app/router.ts`. Customers have no accounts: they follow one order through a public read-only page (`modules/tracking`, route `/seguimiento/:token`) outside the internal role-aware shell (`modules/session/AppShell.vue`, used for `/app/*`). E2E tests run in Chromium at 360px width (mobile-first).
+
+**Android app** — the same Vue build packaged with Capacitor (`frontend/capacitor.config.ts`, generated project in `frontend/android/`). `VITE_API_BASE_URL` is a build-time prefix: empty for the web (relative, same origin), the public HTTPS URL for Android. Native code goes through `src/native/` (camera, scanner, platform detection, Keystore-backed session token) with web fallbacks; `session/api.ts` switches to the bearer transport when running natively.
 
 ## Design System
 
