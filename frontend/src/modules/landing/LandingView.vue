@@ -21,7 +21,7 @@ const isAuthenticated = computed(() => session.isAuthenticated)
             <RouterLink to="/login" class="landing-btn landing-btn--ghost">
               Iniciar sesión
             </RouterLink>
-            <RouterLink to="/onboarding" class="landing-btn landing-btn--primary">
+            <RouterLink to="/onboarding" class="landing-btn landing-btn--primary landing-nav__signup">
               Crear mi taller
             </RouterLink>
           </template>
@@ -172,6 +172,21 @@ const isAuthenticated = computed(() => session.isAuthenticated)
   display: flex;
   align-items: center;
   gap: 0.75rem;
+}
+
+.landing-nav .landing-btn {
+  white-space: nowrap;
+}
+
+/* Below ~560px the logo and two buttons do not fit; the hero repeats this CTA right below. */
+@media (max-width: 559px) {
+  .landing-nav .landing-nav__signup {
+    display: none;
+  }
+
+  .landing-nav .landing-btn {
+    padding: 0.75rem 1rem;
+  }
 }
 
 .landing-hero {
