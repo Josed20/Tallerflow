@@ -79,25 +79,25 @@ func TestPostgresRepositoryFindsOnlyActiveSession(t *testing.T) {
 	sessionID, userID := uuid.New(), uuid.New()
 	digest := [32]byte{1, 2, 3}
 	expiresAt := testNow.Add(time.Hour)
-	query := `SELECT id, user_id, expires_at, revoked_at FROM user_sessions WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > $2 LIMIT 1`
+	query := `SELECT id, user_id, kind, expires_at, revoked_at FROM user_sessions WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > $2 LIMIT 1`
 	mock.ExpectQuery(regexp.QuoteMeta(query)).
 		WithArgs(digest[:], testNow).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "expires_at", "revoked_at"}).AddRow(sessionID, userID, expiresAt, nil))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "kind", "expires_at", "revoked_at"}).AddRow(sessionID, userID, "MOBILE", expiresAt, nil))
 
 	session, err := repository.FindActiveByTokenHash(context.Background(), digest, testNow)
 
 	require.NoError(t, err)
-	require.Equal(t, Session{ID: sessionID, UserID: userID, ExpiresAt: expiresAt}, session)
+	require.Equal(t, Session{ID: sessionID, UserID: userID, Kind: SessionKindMobile, ExpiresAt: expiresAt}, session)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestPostgresRepositoryMapsExpiredOrRevokedSession(t *testing.T) {
 	repository, mock := newPostgresRepositoryFixture(t)
 	digest := [32]byte{9}
-	query := `SELECT id, user_id, expires_at, revoked_at FROM user_sessions WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > $2 LIMIT 1`
+	query := `SELECT id, user_id, kind, expires_at, revoked_at FROM user_sessions WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > $2 LIMIT 1`
 	mock.ExpectQuery(regexp.QuoteMeta(query)).
 		WithArgs(digest[:], testNow).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "expires_at", "revoked_at"}))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "kind", "expires_at", "revoked_at"}))
 
 	_, err := repository.FindActiveByTokenHash(context.Background(), digest, testNow)
 
@@ -161,8 +161,8 @@ func TestLoginSessionRollbackPreservesPreviousSessions(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT password_hash FROM user_credentials WHERE user_id = $1 FOR UPDATE`)).
 		WithArgs(prepared.UserID).
 		WillReturnRows(sqlmock.NewRows([]string{"password_hash"}).AddRow("verified-hash"))
-	mock.ExpectExec(regexp.QuoteMeta(`UPDATE user_sessions SET revoked_at = $1 WHERE user_id = $2 AND revoked_at IS NULL`)).
-		WithArgs(prepared.CreatedAt, prepared.UserID).
+	mock.ExpectExec(regexp.QuoteMeta(`UPDATE user_sessions SET revoked_at = $1 WHERE user_id = $2 AND kind = $3 AND revoked_at IS NULL`)).
+		WithArgs(prepared.CreatedAt, prepared.UserID, "WEB").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectQuery("INSERT INTO user_sessions").WillReturnError(insertFailure)
 	mock.ExpectRollback()
@@ -170,6 +170,42 @@ func TestLoginSessionRollbackPreservesPreviousSessions(t *testing.T) {
 	_, err := repository.InsertForCredential(context.Background(), "verified-hash", prepared)
 
 	require.ErrorIs(t, err, insertFailure)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestMobileLoginReplacesOnlyPreviousMobileSession(t *testing.T) {
+	repository, mock := newPostgresRepositoryFixture(t)
+	prepared := preparedSessionFixture()
+	prepared.Metadata.Kind = SessionKindMobile
+	sessionID := uuid.New()
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT password_hash FROM user_credentials WHERE user_id = $1 FOR UPDATE`)).
+		WithArgs(prepared.UserID).
+		WillReturnRows(sqlmock.NewRows([]string{"password_hash"}).AddRow("verified-hash"))
+	mock.ExpectExec(regexp.QuoteMeta(`UPDATE user_sessions SET revoked_at = $1 WHERE user_id = $2 AND kind = $3 AND revoked_at IS NULL`)).
+		WithArgs(prepared.CreatedAt, prepared.UserID, "MOBILE").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery("INSERT INTO user_sessions .* kind\\) VALUES").
+		WithArgs(prepared.UserID, prepared.TokenHash[:], prepared.CSRFTokenHash[:], prepared.ExpiresAt, prepared.CreatedAt, prepared.CreatedAt, sqlmock.AnyArg(), sqlmock.AnyArg(), "MOBILE").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "kind", "expires_at", "revoked_at"}).AddRow(sessionID, prepared.UserID, "MOBILE", prepared.ExpiresAt, nil))
+	mock.ExpectCommit()
+
+	session, err := repository.InsertForCredential(context.Background(), "verified-hash", prepared)
+
+	require.NoError(t, err)
+	require.Equal(t, SessionKindMobile, session.Kind)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPostgresRepositoryRenewsActiveSession(t *testing.T) {
+	repository, mock := newPostgresRepositoryFixture(t)
+	sessionID := uuid.New()
+	expiresAt := testNow.Add(30 * 24 * time.Hour)
+	mock.ExpectExec(regexp.QuoteMeta(`UPDATE user_sessions SET expires_at = $1, last_seen_at = $2 WHERE id = $3 AND revoked_at IS NULL`)).
+		WithArgs(expiresAt, testNow, sessionID).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	require.NoError(t, repository.Renew(context.Background(), sessionID, expiresAt, testNow))
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 

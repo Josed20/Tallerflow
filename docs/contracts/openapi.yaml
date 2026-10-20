@@ -1,8 +1,10 @@
 openapi: 3.1.0
 info:
   title: TallerFlow API
-  version: 0.1.0
-  description: API contract for TallerFlow Phase 1 secure foundations.
+  version: 0.2.0
+  description: >-
+    API contract for TallerFlow. Sprint 3 adds open workshop registration with
+    email verification and bearer sessions for the Android app.
 servers:
   - url: /
     description: Same-origin deployment
@@ -13,6 +15,8 @@ tags:
     description: Browser session, password rotation and logout operations.
   - name: Onboarding
     description: Public claim flow for the first workshop OWNER.
+  - name: Signup
+    description: Open registration of new workshops, verified by email.
   - name: Identity
     description: Tenant-aware authenticated identity.
   - name: Workshops
@@ -65,6 +69,171 @@ paths:
           $ref: '#/components/responses/OnboardingValidationFailed'
         '429':
           $ref: '#/components/responses/OnboardingRateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/signup:
+    post:
+      tags: [Signup]
+      operationId: signupCreateWorkshop
+      summary: Register a new workshop and its OWNER, pending email verification
+      description: >-
+        Creates the user, the ACTIVE workshop and the OWNER membership in one
+        transaction, records the terms acceptance time and emails a single-use
+        verification link that expires after 24 hours. No session is created
+        until the email is verified. The response is identical whether or not
+        the email already belongs to an account, so it cannot be used to
+        discover registered users. The request Origin must match the allowed
+        web origin.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupInput'
+      responses:
+        '202':
+          description: Registration accepted; a verification email may have been sent.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '403':
+          description: Request origin is not allowed, or registration is closed (TF_SIGNUP_ENABLED=false).
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidOrigin:
+                  value:
+                    error:
+                      code: ORIGIN_INVALID
+                      message: Request origin is not allowed.
+                      details: {}
+                      request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
+                signupClosed:
+                  value:
+                    error:
+                      code: SIGNUP_CLOSED
+                      message: Registration is temporarily closed.
+                      details: {}
+                      request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
+        '422':
+          description: One or more registration fields are invalid, or the terms were not accepted.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                validationFailed:
+                  value:
+                    error:
+                      code: SIGNUP_VALIDATION_FAILED
+                      message: One or more fields are invalid.
+                      details:
+                        fields: [password]
+                      request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
+        '429':
+          $ref: '#/components/responses/SignupRateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/auth/email-verifications/consume:
+    post:
+      tags: [Signup]
+      operationId: consumeEmailVerification
+      summary: Verify the email with the emailed token and start a browser session
+      description: >-
+        Marks the token as used, sets the user's email as verified and creates
+        a browser session, so the OWNER lands on the dashboard. Expired, used,
+        unknown and tampered tokens all return the same error.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailVerificationConsumeInput'
+      responses:
+        '200':
+          description: Email verified and browser session created.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+            Set-Cookie:
+              $ref: '#/components/headers/SessionCookieSet'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '403':
+          $ref: '#/components/responses/CSRFInvalid'
+        '422':
+          description: The token is expired, already used, unknown or malformed.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidToken:
+                  value:
+                    error:
+                      code: VERIFICATION_TOKEN_INVALID
+                      message: The verification link is invalid or has expired.
+                      details: {}
+                      request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
+        '429':
+          $ref: '#/components/responses/SignupRateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/auth/email-verifications/resend:
+    post:
+      tags: [Signup]
+      operationId: resendEmailVerification
+      summary: Send a new verification link
+      description: >-
+        Replaces any pending verification token of an unverified account and
+        emails a new link. Always returns 202, whether the email is unknown,
+        already verified or pending, so it cannot be used to discover accounts.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailVerificationResendInput'
+      responses:
+        '202':
+          description: Request accepted; an email is sent only to unverified accounts.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '403':
+          $ref: '#/components/responses/CSRFInvalid'
+        '429':
+          $ref: '#/components/responses/SignupRateLimited'
         '500':
           $ref: '#/components/responses/InternalError'
   /health/live:
@@ -124,13 +293,18 @@ paths:
     post:
       tags: [Authentication]
       operationId: login
-      summary: Start an opaque browser session
+      summary: Start an opaque browser or mobile session
       description: >-
-        Authenticates the user without revealing whether the account exists. On
-        success, the server writes the opaque session cookie and returns the
-        session's expiry and raw CSRF token for in-memory use by the client. The
-        server validates the request's Origin or Referer against its configured
-        allowed origin before evaluating credentials.
+        Authenticates the user without revealing whether the account exists.
+        With `client: web` (the default) the server validates Origin or Referer
+        against the allowed web origin, writes the opaque session cookie and
+        returns the expiry and raw CSRF token for in-memory use. With
+        `client: mobile` the Origin must be one of TF_MOBILE_ORIGINS; no cookie
+        is set and the same kind of opaque token is returned as
+        `session_token`, to be stored in the Android Keystore and sent as
+        `Authorization: Bearer`. Mobile sessions last 30 days, renew with use,
+        and need no CSRF token. A correct password on an unverified account
+        returns 403 EMAIL_NOT_VERIFIED.
       security: []
       requestBody:
         required: true
@@ -149,9 +323,26 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SessionResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/SessionResponse'
+                  - $ref: '#/components/schemas/MobileSessionResponse'
         '400':
-          $ref: '#/components/responses/InvalidRequest'
+          description: Request body is invalid, or it carries both a session cookie and a bearer token.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                ambiguousCredentials:
+                  value:
+                    error:
+                      code: AUTH_AMBIGUOUS_CREDENTIALS
+                      message: Send either a session cookie or a bearer token, not both.
+                      details: {}
+                      request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
         '401':
           description: Email, account state, or password is invalid.
           headers:
@@ -170,7 +361,9 @@ paths:
                       details: {}
                       request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
         '403':
-          description: Request origin is not allowed.
+          description: >-
+            Request origin is not allowed for the requested client, or the
+            password is correct but the email has not been verified yet.
           headers:
             X-Request-ID:
               $ref: '#/components/headers/RequestID'
@@ -184,6 +377,13 @@ paths:
                     error:
                       code: ORIGIN_INVALID
                       message: Request origin is not allowed.
+                      details: {}
+                      request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
+                emailNotVerified:
+                  value:
+                    error:
+                      code: EMAIL_NOT_VERIFIED
+                      message: Verify your email before signing in.
                       details: {}
                       request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
         '429':
@@ -217,6 +417,7 @@ paths:
       summary: Revoke the current session
       security:
         - sessionCookie: []
+        - bearerSession: []
       parameters:
         - $ref: '#/components/parameters/CSRFToken'
       responses:
@@ -247,6 +448,7 @@ paths:
         password must be replaced. It never returns session IDs or token hashes.
       security:
         - sessionCookie: []
+        - bearerSession: []
       responses:
         '200':
           description: Current session is valid.
@@ -256,7 +458,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SessionResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/SessionResponse'
+                  - $ref: '#/components/schemas/MobileSessionResponse'
         '401':
           $ref: '#/components/responses/SessionInvalid'
         '500':
@@ -269,9 +473,12 @@ paths:
       description: >-
         Revokes the user's other sessions, clears the mandatory-change flag,
         rotates the current opaque session, and returns the replacement CSRF
-        token. Password confirmation is a client-side concern and is not sent.
+        token. With a bearer session it returns the replacement
+        `session_token` instead, and the old token stops working. Password
+        confirmation is a client-side concern and is not sent.
       security:
         - sessionCookie: []
+        - bearerSession: []
       parameters:
         - $ref: '#/components/parameters/CSRFToken'
       requestBody:
@@ -291,7 +498,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SessionResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/SessionResponse'
+                  - $ref: '#/components/schemas/MobileSessionResponse'
         '400':
           $ref: '#/components/responses/InvalidRequest'
         '401':
@@ -316,6 +525,7 @@ paths:
       summary: Get the current user's tenant-aware profile
       security:
         - sessionCookie: []
+        - bearerSession: []
       responses:
         '200':
           description: Current user, workshop, role, and password state.
@@ -354,6 +564,7 @@ paths:
       summary: Get the authenticated user's current workshop
       security:
         - sessionCookie: []
+        - bearerSession: []
       responses:
         '200':
           description: Current workshop resolved from the authenticated principal.
@@ -403,14 +614,23 @@ components:
       description: >-
         Opaque session token. The server sets this cookie with Secure, HttpOnly,
         SameSite=Lax, and Path=/; browser code must not read or persist it.
+    bearerSession:
+      type: http
+      scheme: bearer
+      description: >-
+        Android app only. The opaque `session_token` returned by a
+        `client: mobile` login, sent as `Authorization: Bearer <token>`. It is
+        a revocable database session, not a JWT. A request that carries both
+        a session cookie and a bearer token is rejected with 400.
   parameters:
     CSRFToken:
       name: X-CSRF-Token
       in: header
-      required: true
+      required: false
       description: >-
-        Raw token bound to the current session. Required on every authenticated
-        mutation and validated together with Origin or Referer.
+        Raw token bound to the current cookie session. Required on every
+        cookie-authenticated mutation and validated together with Origin or
+        Referer. Not used with bearer sessions.
       schema:
         type: string
         minLength: 43
@@ -457,6 +677,28 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    SignupRateLimited:
+      description: Too many registration or verification requests from this IP address.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+        Retry-After:
+          description: Seconds until another attempt should be made.
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            rateLimited:
+              value:
+                error:
+                  code: SIGNUP_RATE_LIMITED
+                  message: Too many requests. Try again later.
+                  details: {}
+                  request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
     InvalidRequest:
       description: Request body or parameters are invalid.
       headers:
@@ -539,6 +781,52 @@ components:
           minLength: 12
           maxLength: 1048576
           writeOnly: true
+    SignupInput:
+      type: object
+      additionalProperties: false
+      required: [workshop_name, owner_name, email, password, accept_terms]
+      properties:
+        workshop_name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        owner_name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          minLength: 12
+          maxLength: 1048576
+          writeOnly: true
+        accept_terms:
+          type: boolean
+          const: true
+          description: The user accepted the terms of service and the privacy policy.
+    EmailVerificationConsumeInput:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token:
+          type: string
+          minLength: 43
+          maxLength: 43
+          writeOnly: true
+          description: Raw token from the emailed link (`/verificar-correo?token=...`).
+    EmailVerificationResendInput:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
     OnboardingStatusData:
       type: object
       additionalProperties: false
@@ -568,6 +856,13 @@ components:
           minLength: 1
           maxLength: 1048576
           writeOnly: true
+        client:
+          type: string
+          enum: [web, mobile]
+          default: web
+          description: >-
+            `mobile` returns a bearer `session_token` instead of setting the
+            session cookie.
     ChangePasswordInput:
       type: object
       additionalProperties: false
@@ -612,7 +907,7 @@ components:
         expires_at:
           type: string
           format: date-time
-          description: UTC expiry of the current session, at most eight hours after creation.
+          description: UTC expiry of the current browser session, at most eight hours after creation.
         csrf_token:
           type: string
           minLength: 43
@@ -625,6 +920,36 @@ components:
           description: >-
             When true, only session restoration, password change, and logout
             flows are available until the password is replaced.
+    MobileSessionData:
+      type: object
+      additionalProperties: false
+      required: [expires_at, must_change_password]
+      properties:
+        expires_at:
+          type: string
+          format: date-time
+          description: >-
+            UTC expiry of the bearer session: 30 days, pushed forward as the
+            session is used.
+        session_token:
+          type: string
+          minLength: 43
+          maxLength: 43
+          description: >-
+            Opaque bearer token, present only in login and change-password
+            responses. Store it encrypted (Android Keystore), never in
+            localStorage or Preferences.
+        must_change_password:
+          type: boolean
+    MobileSessionResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/MobileSessionData'
+        meta:
+          $ref: '#/components/schemas/Meta'
     WorkshopSummary:
       type: object
       additionalProperties: false

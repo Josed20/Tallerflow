@@ -148,6 +148,7 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 	)
 	authHandler, err := auth.NewHandler(authService, auth.HandlerConfig{
 		AllowedOrigin: cfg.AllowedOrigin,
+		MobileOrigins: cfg.MobileOrigins,
 		Environment:   cfg.Environment,
 		Secure:        cfg.Environment != "development",
 	})
@@ -197,7 +198,8 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 		return onboardingModule.ping(ctx)
 	}
 	router := httpx.NewRouter(httpx.Dependencies{
-		Ping: ping,
+		Ping:       ping,
+		Middleware: []gin.HandlerFunc{security.MobileCORS(cfg.MobileOrigins)},
 		Routes: []httpx.RouteRegistrar{
 			func(routes gin.IRouter) { onboarding.RegisterRoutes(routes, onboardingHandler) },
 			func(routes gin.IRouter) { auth.RegisterRoutes(routes, authHandler) },

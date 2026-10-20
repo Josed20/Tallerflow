@@ -62,7 +62,9 @@ func (r *PostgresRepository) InsertForCredential(ctx context.Context, verifiedHa
 		if storedHash != verifiedHash {
 			return ErrCredentialChanged
 		}
-		if err := revokeActiveSessions(tx, created.UserID, created.CreatedAt); err != nil {
+		// A login replaces the previous session of the same kind only, so
+		// signing in on the phone keeps the browser signed in and vice versa.
+		if err := revokeActiveSessionsOfKind(tx, created.UserID, created.Metadata.Kind.normalized(), created.CreatedAt); err != nil {
 			return err
 		}
 		session, err = insertSession(tx, created)
@@ -75,11 +77,12 @@ func (r *PostgresRepository) InsertForCredential(ctx context.Context, verifiedHa
 }
 
 func insertSession(db *gorm.DB, created NewSession) (Session, error) {
-	const query = `INSERT INTO user_sessions (user_id, token_hash, csrf_token_hash, expires_at, created_at, last_seen_at, ip_prefix, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, user_id, expires_at, revoked_at`
+	const query = `INSERT INTO user_sessions (user_id, token_hash, csrf_token_hash, expires_at, created_at, last_seen_at, ip_prefix, user_agent, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, user_id, kind, expires_at, revoked_at`
 	var session Session
 	result := db.Raw(query,
 		created.UserID, created.TokenHash[:], created.CSRFTokenHash[:], created.ExpiresAt,
 		created.CreatedAt, created.CreatedAt, nullableString(created.Metadata.IPPrefix), nullableString(created.Metadata.UserAgent),
+		string(created.Metadata.Kind.normalized()),
 	).Scan(&session)
 	if result.Error != nil {
 		return Session{}, fmt.Errorf("insert session: %w", result.Error)
@@ -91,7 +94,7 @@ func insertSession(db *gorm.DB, created NewSession) (Session, error) {
 }
 
 func (r *PostgresRepository) FindActiveByTokenHash(ctx context.Context, digest [32]byte, now time.Time) (Session, error) {
-	const query = `SELECT id, user_id, expires_at, revoked_at FROM user_sessions WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > ? LIMIT 1`
+	const query = `SELECT id, user_id, kind, expires_at, revoked_at FROM user_sessions WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > ? LIMIT 1`
 	var session Session
 	result := r.db.WithContext(ctx).Raw(query, digest[:], now).Scan(&session)
 	if result.Error != nil {
@@ -101,6 +104,14 @@ func (r *PostgresRepository) FindActiveByTokenHash(ctx context.Context, digest [
 		return Session{}, ErrSessionInvalid
 	}
 	return session, nil
+}
+
+func (r *PostgresRepository) Renew(ctx context.Context, sessionID uuid.UUID, expiresAt, seenAt time.Time) error {
+	const query = `UPDATE user_sessions SET expires_at = ?, last_seen_at = ? WHERE id = ? AND revoked_at IS NULL`
+	if err := r.db.WithContext(ctx).Exec(query, expiresAt, seenAt, sessionID).Error; err != nil {
+		return fmt.Errorf("renew session: %w", err)
+	}
+	return nil
 }
 
 func (r *PostgresRepository) Revoke(ctx context.Context, sessionID uuid.UUID, revokedAt time.Time) error {
@@ -162,6 +173,13 @@ func lockCredentialHash(tx *gorm.DB, userID uuid.UUID) (string, error) {
 
 func revokeActiveSessions(tx *gorm.DB, userID uuid.UUID, revokedAt time.Time) error {
 	if err := tx.Exec(`UPDATE user_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`, revokedAt, userID).Error; err != nil {
+		return fmt.Errorf("revoke user sessions: %w", err)
+	}
+	return nil
+}
+
+func revokeActiveSessionsOfKind(tx *gorm.DB, userID uuid.UUID, kind SessionKind, revokedAt time.Time) error {
+	if err := tx.Exec(`UPDATE user_sessions SET revoked_at = ? WHERE user_id = ? AND kind = ? AND revoked_at IS NULL`, revokedAt, userID, string(kind)).Error; err != nil {
 		return fmt.Errorf("revoke user sessions: %w", err)
 	}
 	return nil

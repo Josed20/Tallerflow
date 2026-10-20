@@ -21,14 +21,18 @@ import (
 const SessionCookieName = "__Host-tallerflow_session"
 
 type AuthUseCases interface {
-	Login(context.Context, string, string, string) (AuthSession, error)
+	Login(context.Context, string, string, string, SessionKind) (AuthSession, error)
 	Restore(context.Context, string) (AuthSession, error)
 	Logout(context.Context, string) error
 	ChangePassword(context.Context, string, string, string) (AuthSession, error)
 }
 
+// HandlerConfig separates the two transports: the browser (cookie + CSRF)
+// must come from AllowedOrigin, while the Android app (bearer token) comes
+// from one of MobileOrigins or from a native client that sends no Origin.
 type HandlerConfig struct {
 	AllowedOrigin string
+	MobileOrigins []string
 	Environment   string
 	Secure        bool
 }
@@ -66,6 +70,7 @@ func NewHandler(service AuthUseCases, config HandlerConfig) (*Handler, error) {
 type LoginInput struct {
 	Email    string `json:"email" binding:"required,email,max=254"`
 	Password string `json:"password" binding:"required,max=1048576"`
+	Client   string `json:"client"`
 }
 
 type ChangePasswordInput struct {
@@ -74,8 +79,8 @@ type ChangePasswordInput struct {
 }
 
 func (h *Handler) Login(c *gin.Context) {
-	if !security.ValidRequestOrigin(c.Request, h.config.AllowedOrigin) {
-		h.fail(c, http.StatusForbidden, "ORIGIN_INVALID", "Request origin is not allowed.")
+	if h.hasCookie(c) && c.GetHeader("Authorization") != "" {
+		h.ambiguousCredentials(c)
 		return
 	}
 	var input LoginInput
@@ -83,7 +88,24 @@ func (h *Handler) Login(c *gin.Context) {
 		h.fail(c, http.StatusBadRequest, "INVALID_REQUEST", "The request is invalid.")
 		return
 	}
-	result, err := h.service.Login(c.Request.Context(), input.Email, input.Password, requestIP(c))
+	kind := SessionKindWeb
+	switch input.Client {
+	case "", "web":
+		if !security.ValidRequestOrigin(c.Request, h.config.AllowedOrigin) {
+			h.fail(c, http.StatusForbidden, "ORIGIN_INVALID", "Request origin is not allowed.")
+			return
+		}
+	case "mobile":
+		if !h.mobileOriginAllowed(c) {
+			h.fail(c, http.StatusForbidden, "ORIGIN_INVALID", "Request origin is not allowed.")
+			return
+		}
+		kind = SessionKindMobile
+	default:
+		h.fail(c, http.StatusBadRequest, "INVALID_REQUEST", "The request is invalid.")
+		return
+	}
+	result, err := h.service.Login(c.Request.Context(), input.Email, input.Password, requestIP(c), kind)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrInvalidCredentials):
@@ -96,8 +118,7 @@ func (h *Handler) Login(c *gin.Context) {
 		}
 		return
 	}
-	h.setCookie(c, result.Token, result.ExpiresAt)
-	c.JSON(http.StatusOK, gin.H{"data": sessionData(result)})
+	h.respondSession(c, result, true)
 }
 
 func (h *Handler) Session(c *gin.Context) {
@@ -105,7 +126,7 @@ func (h *Handler) Session(c *gin.Context) {
 	if !ok {
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": sessionData(result)})
+	h.respondSession(c, result, false)
 }
 
 func (h *Handler) Logout(c *gin.Context) {
@@ -113,11 +134,10 @@ func (h *Handler) Logout(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if !h.requireCSRF(c, result) {
+	if result.Kind == SessionKindWeb && !h.requireCSRF(c, result) {
 		return
 	}
-	raw, _ := c.Cookie(h.cookieName)
-	if err := h.service.Logout(c.Request.Context(), raw); err != nil {
+	if err := h.service.Logout(c.Request.Context(), result.Token); err != nil {
 		if errors.Is(err, ErrSessionInvalid) {
 			h.invalidSession(c)
 		} else {
@@ -125,7 +145,9 @@ func (h *Handler) Logout(c *gin.Context) {
 		}
 		return
 	}
-	h.clearCookie(c)
+	if result.Kind == SessionKindWeb {
+		h.clearCookie(c)
+	}
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{}})
 }
 
@@ -134,7 +156,7 @@ func (h *Handler) ChangePassword(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if !h.requireCSRF(c, current) {
+	if current.Kind == SessionKindWeb && !h.requireCSRF(c, current) {
 		return
 	}
 	var input ChangePasswordInput
@@ -142,8 +164,7 @@ func (h *Handler) ChangePassword(c *gin.Context) {
 		h.fail(c, http.StatusBadRequest, "INVALID_REQUEST", "The request is invalid.")
 		return
 	}
-	raw, _ := c.Cookie(h.cookieName)
-	replacement, err := h.service.ChangePassword(c.Request.Context(), raw, input.CurrentPassword, input.NewPassword)
+	replacement, err := h.service.ChangePassword(c.Request.Context(), current.Token, input.CurrentPassword, input.NewPassword)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrSessionInvalid):
@@ -155,8 +176,28 @@ func (h *Handler) ChangePassword(c *gin.Context) {
 		}
 		return
 	}
-	h.setCookie(c, replacement.Token, replacement.ExpiresAt)
-	c.JSON(http.StatusOK, gin.H{"data": sessionData(replacement)})
+	h.respondSession(c, replacement, true)
+}
+
+// respondSession answers with the browser shape (cookie + CSRF token) or the
+// mobile shape (bearer token in JSON, no cookie). The bearer token is only
+// returned when it was just issued.
+func (h *Handler) respondSession(c *gin.Context, session AuthSession, issued bool) {
+	if session.Kind == SessionKindMobile {
+		data := gin.H{
+			"expires_at":           session.ExpiresAt.UTC().Format(time.RFC3339),
+			"must_change_password": session.MustChangePassword,
+		}
+		if issued {
+			data["session_token"] = session.Token
+		}
+		c.JSON(http.StatusOK, gin.H{"data": data})
+		return
+	}
+	if issued {
+		h.setCookie(c, session.Token, session.ExpiresAt)
+	}
+	c.JSON(http.StatusOK, gin.H{"data": sessionData(session)})
 }
 
 // RequireSession protects private routes and enforces the bootstrap password
@@ -173,7 +214,7 @@ func (h *Handler) RequireSession() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead && c.Request.Method != http.MethodOptions && !h.requireCSRF(c, result) {
+		if result.Kind == SessionKindWeb && c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead && c.Request.Method != http.MethodOptions && !h.requireCSRF(c, result) {
 			c.Abort()
 			return
 		}
@@ -182,10 +223,12 @@ func (h *Handler) RequireSession() gin.HandlerFunc {
 	}
 }
 
+// restore authenticates the request through exactly one transport and
+// rejects a token presented through the other one, so a mobile token cannot
+// be replayed as a cookie and a browser token cannot skip CSRF as a bearer.
 func (h *Handler) restore(c *gin.Context) (AuthSession, bool) {
-	raw, err := c.Cookie(h.cookieName)
-	if err != nil || raw == "" {
-		h.invalidSession(c)
+	raw, kind, ok := h.credentials(c)
+	if !ok {
 		return AuthSession{}, false
 	}
 	result, err := h.service.Restore(c.Request.Context(), raw)
@@ -197,7 +240,62 @@ func (h *Handler) restore(c *gin.Context) (AuthSession, bool) {
 		}
 		return AuthSession{}, false
 	}
+	if result.Kind.normalized() != kind {
+		h.invalidSession(c)
+		return AuthSession{}, false
+	}
 	return result, true
+}
+
+func (h *Handler) credentials(c *gin.Context) (string, SessionKind, bool) {
+	authorization := c.GetHeader("Authorization")
+	switch {
+	case h.hasCookie(c) && authorization != "":
+		h.ambiguousCredentials(c)
+		return "", "", false
+	case authorization != "":
+		if !h.mobileOriginAllowed(c) {
+			h.fail(c, http.StatusForbidden, "ORIGIN_INVALID", "Request origin is not allowed.")
+			return "", "", false
+		}
+		token, ok := bearerToken(authorization)
+		if !ok {
+			h.invalidSession(c)
+			return "", "", false
+		}
+		return token, SessionKindMobile, true
+	case h.hasCookie(c):
+		raw, _ := c.Cookie(h.cookieName)
+		return raw, SessionKindWeb, true
+	default:
+		h.invalidSession(c)
+		return "", "", false
+	}
+}
+
+func (h *Handler) hasCookie(c *gin.Context) bool {
+	raw, err := c.Cookie(h.cookieName)
+	return err == nil && raw != ""
+}
+
+// mobileOriginAllowed accepts the app's WebView origins and native clients
+// that send no Origin header at all.
+func (h *Handler) mobileOriginAllowed(c *gin.Context) bool {
+	origin := strings.TrimSpace(c.GetHeader("Origin"))
+	return origin == "" || security.MobileOriginAllowed(origin, h.config.MobileOrigins)
+}
+
+func (h *Handler) ambiguousCredentials(c *gin.Context) {
+	h.fail(c, http.StatusBadRequest, "AUTH_AMBIGUOUS_CREDENTIALS", "Send either a session cookie or a bearer token, not both.")
+}
+
+func bearerToken(authorization string) (string, bool) {
+	scheme, token, found := strings.Cut(strings.TrimSpace(authorization), " ")
+	token = strings.TrimSpace(token)
+	if !found || !strings.EqualFold(scheme, "Bearer") || token == "" || strings.ContainsAny(token, " \t") {
+		return "", false
+	}
+	return token, true
 }
 
 func (h *Handler) requireCSRF(c *gin.Context, session AuthSession) bool {

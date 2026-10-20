@@ -46,6 +46,31 @@ func TestBuildApplicationRegistersProtectedTeamRoutes(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, team.Code)
 }
 
+func TestBuildApplicationAnswersMobilePreflightOnly(t *testing.T) {
+	db, _, cleanup := applicationDatabase(t)
+	defer cleanup()
+	cfg := applicationConfig()
+	cfg.MobileOrigins = []string{"https://localhost"}
+	app, err := buildApplication(cfg, applicationTestOptions(db)...)
+	require.NoError(t, err)
+
+	preflight := func(origin string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodOptions, "/api/v1/orders", nil)
+		request.Header.Set("Origin", origin)
+		request.Header.Set("Access-Control-Request-Method", http.MethodPost)
+		response := httptest.NewRecorder()
+		app.handler.ServeHTTP(response, request)
+		return response
+	}
+
+	mobile := preflight("https://localhost")
+	require.Equal(t, http.StatusNoContent, mobile.Code)
+	require.Equal(t, "https://localhost", mobile.Header().Get("Access-Control-Allow-Origin"))
+	foreign := preflight("https://attacker.example")
+	require.Equal(t, http.StatusForbidden, foreign.Code)
+	require.Empty(t, foreign.Header().Get("Access-Control-Allow-Origin"))
+}
+
 func TestBuildApplicationRegistersOnboardingRoutesWithSeparateBootstrapURL(t *testing.T) {
 	db, _, cleanup := applicationDatabase(t)
 	defer cleanup()

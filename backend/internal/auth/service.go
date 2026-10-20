@@ -64,6 +64,7 @@ type PasswordHashing interface {
 type AuthSession struct {
 	Token              string
 	CSRFToken          string
+	Kind               SessionKind
 	ExpiresAt          time.Time
 	MustChangePassword bool
 	Principal          httpx.Principal
@@ -88,7 +89,7 @@ func NewAuthService(credentials CredentialRepository, memberships MembershipReso
 	return service
 }
 
-func (s *AuthService) Login(ctx context.Context, email, password, clientIP string) (AuthSession, error) {
+func (s *AuthService) Login(ctx context.Context, email, password, clientIP string, kind SessionKind) (AuthSession, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	if email == "" || password == "" || len(password) > 1<<20 {
 		return AuthSession{}, ErrInvalidCredentials
@@ -139,14 +140,14 @@ func (s *AuthService) Login(ctx context.Context, email, password, clientIP strin
 	if len(s.csrfSecret) == 0 {
 		return AuthSession{}, errors.New("CSRF secret is not configured")
 	}
-	raw, err := s.sessions.CreateForCredential(ctx, credential.UserID, credential.PasswordHash, SessionMetadata{})
+	raw, err := s.sessions.CreateForCredential(ctx, credential.UserID, credential.PasswordHash, SessionMetadata{Kind: kind})
 	if err != nil {
 		if errors.Is(err, ErrCredentialChanged) {
 			return AuthSession{}, s.recordInvalidLogin(ctx, email, clientIP)
 		}
 		return AuthSession{}, err
 	}
-	return s.authSession(raw.Token, raw.ExpiresAt, s.principal(credential, membership), credential.MustChangePassword), nil
+	return s.authSession(raw.Token, kind, raw.ExpiresAt, s.principal(credential, membership), credential.MustChangePassword), nil
 }
 
 func (s *AuthService) recordInvalidLogin(ctx context.Context, email, clientIP string) error {
@@ -187,7 +188,7 @@ func (s *AuthService) Restore(ctx context.Context, rawToken string) (AuthSession
 		}
 		return AuthSession{}, err
 	}
-	return s.authSession(rawToken, session.ExpiresAt, s.principal(credential, membership), credential.MustChangePassword), nil
+	return s.authSession(rawToken, session.Kind, session.ExpiresAt, s.principal(credential, membership), credential.MustChangePassword), nil
 }
 
 func (s *AuthService) Logout(ctx context.Context, rawToken string) error {
@@ -245,14 +246,16 @@ func (s *AuthService) ChangePassword(ctx context.Context, rawToken, currentPassw
 	if err != nil {
 		return AuthSession{}, err
 	}
-	raw, err := s.sessions.ChangePasswordAndCreate(ctx, session.UserID, credential.PasswordHash, newHash, SessionMetadata{})
+	// The replacement keeps the transport of the session that asked for it;
+	// every other session of the user, web or mobile, is revoked.
+	raw, err := s.sessions.ChangePasswordAndCreate(ctx, session.UserID, credential.PasswordHash, newHash, SessionMetadata{Kind: session.Kind})
 	if err != nil {
 		if errors.Is(err, ErrCredentialChanged) {
 			return AuthSession{}, ErrPasswordInvalid
 		}
 		return AuthSession{}, err
 	}
-	return s.authSession(raw.Token, raw.ExpiresAt, s.principal(credential, membership), false), nil
+	return s.authSession(raw.Token, session.Kind, raw.ExpiresAt, s.principal(credential, membership), false), nil
 }
 
 func (s *AuthService) passwordStore() (PasswordCredentialRepository, error) {
@@ -263,10 +266,17 @@ func (s *AuthService) passwordStore() (PasswordCredentialRepository, error) {
 	return store, nil
 }
 
-func (s *AuthService) authSession(rawToken string, expiresAt time.Time, principal httpx.Principal, mustChange bool) AuthSession {
+// authSession derives the CSRF token only for browser sessions: bearer
+// sessions are not sent automatically by the browser and need none.
+func (s *AuthService) authSession(rawToken string, kind SessionKind, expiresAt time.Time, principal httpx.Principal, mustChange bool) AuthSession {
 	principal.PasswordChangeRequired = mustChange
+	kind = kind.normalized()
+	csrfToken := ""
+	if kind == SessionKindWeb {
+		csrfToken = security.DeriveCSRFToken(s.csrfSecret, rawToken)
+	}
 	return AuthSession{
-		Token: rawToken, CSRFToken: security.DeriveCSRFToken(s.csrfSecret, rawToken),
+		Token: rawToken, CSRFToken: csrfToken, Kind: kind,
 		ExpiresAt: expiresAt.UTC(), MustChangePassword: mustChange, Principal: principal,
 	}
 }

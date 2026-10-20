@@ -43,7 +43,7 @@ func TestLoginReturnsOneGenericErrorForUnknownInactiveAndWrongPassword(t *testin
 				&loginLimiter{attempts: make(map[string]int)},
 			)
 
-			_, err := service.Login(context.Background(), tc.email, tc.password, "192.0.2.10")
+			_, err := service.Login(context.Background(), tc.email, tc.password, "192.0.2.10", SessionKindWeb)
 			if !errors.Is(err, ErrInvalidCredentials) {
 				t.Fatalf("Login() error = %v, want generic ErrInvalidCredentials", err)
 			}
@@ -64,12 +64,12 @@ func TestLoginRateLimitsUnknownAccountsAfterFiveFailures(t *testing.T) {
 	)
 
 	for i := 0; i < 5; i++ {
-		_, err := service.Login(context.Background(), "missing@example.com", "wrong", "192.0.2.10")
+		_, err := service.Login(context.Background(), "missing@example.com", "wrong", "192.0.2.10", SessionKindWeb)
 		if !errors.Is(err, ErrInvalidCredentials) {
 			t.Fatalf("attempt %d error = %v, want ErrInvalidCredentials", i+1, err)
 		}
 	}
-	_, err := service.Login(context.Background(), "missing@example.com", "wrong", "192.0.2.10")
+	_, err := service.Login(context.Background(), "missing@example.com", "wrong", "192.0.2.10", SessionKindWeb)
 	if !errors.Is(err, ErrTooManyAttempts) {
 		t.Fatalf("sixth attempt error = %v, want ErrTooManyAttempts", err)
 	}
@@ -105,7 +105,7 @@ func TestLoginReturns429BeforePasswordVerification(t *testing.T) {
 		&denyingLoginLimiter{},
 	)
 
-	_, err := service.Login(context.Background(), "owner@example.com", "password", "192.0.2.10")
+	_, err := service.Login(context.Background(), "owner@example.com", "password", "192.0.2.10", SessionKindWeb)
 
 	if !errors.Is(err, ErrTooManyAttempts) {
 		t.Fatalf("Login() error = %v, want ErrTooManyAttempts", err)
@@ -168,7 +168,7 @@ func TestLoginRejectsCredentialChangedAfterVerification(t *testing.T) {
 		&loginLimiter{attempts: make(map[string]int)},
 	)
 
-	_, err = service.Login(context.Background(), "owner@example.com", password, "192.0.2.10")
+	_, err = service.Login(context.Background(), "owner@example.com", password, "192.0.2.10", SessionKindWeb)
 
 	if !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("Login() error = %v, want generic ErrInvalidCredentials", err)

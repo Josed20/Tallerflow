@@ -23,6 +23,7 @@ type Config struct {
 	BootstrapDatabaseURL string
 	SessionPepper        string
 	AllowedOrigin        string
+	MobileOrigins        []string
 	TrustedProxies       []string
 	PasswordResetBaseURL string
 	SMTPHost             string
@@ -101,7 +102,45 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	cfg.MobileOrigins, err = mobileOrigins(cfg.Environment, os.Getenv("TF_MOBILE_ORIGINS"))
+	if err != nil {
+		return Config{}, err
+	}
+
 	return cfg, nil
+}
+
+// mobileOrigins lists the WebView origins of the Android (and later iOS) app.
+// Capacitor serves the bundled web app from https://localhost on Android and
+// capacitor://localhost on iOS; plain http is accepted only outside production.
+func mobileOrigins(environment, configured string) ([]string, error) {
+	configured = strings.TrimSpace(configured)
+	if configured == "" {
+		if environment == "production" {
+			return []string{"https://localhost", "capacitor://localhost"}, nil
+		}
+		return []string{"http://localhost", "https://localhost", "capacitor://localhost"}, nil
+	}
+
+	origins := strings.Split(configured, ",")
+	for index := range origins {
+		origin := strings.ToLower(strings.TrimSpace(origins[index]))
+		parsed, err := url.Parse(origin)
+		if err != nil || parsed.Host == "" || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+			return nil, fmt.Errorf("TF_MOBILE_ORIGINS is invalid")
+		}
+		switch parsed.Scheme {
+		case "https", "capacitor":
+		case "http":
+			if environment == "production" {
+				return nil, fmt.Errorf("TF_MOBILE_ORIGINS is invalid")
+			}
+		default:
+			return nil, fmt.Errorf("TF_MOBILE_ORIGINS is invalid")
+		}
+		origins[index] = origin
+	}
+	return origins, nil
 }
 
 func validEnvironment(environment string) bool {
