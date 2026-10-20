@@ -14,8 +14,10 @@ previous=$(git rev-parse HEAD)
 git switch main
 git pull --ff-only origin main
 
+# compose.tunnel.yaml keeps Caddy unpublished: Docker bypasses ufw for
+# published ports, so without it port 8080 would be open in plain HTTP.
 deploy() {
-  docker compose -f compose.yaml -f compose.production.yaml --profile app up -d --build --wait
+  docker compose -f compose.yaml -f compose.production.yaml -f compose.tunnel.yaml --profile app up -d --build --wait
   curl --fail --silent --show-error --retry 8 --retry-delay 3 "$health_url" >/dev/null
 }
 

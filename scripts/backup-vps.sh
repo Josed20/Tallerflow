@@ -9,7 +9,7 @@ cd "$project_dir"
 backup_file=$(mktemp "${TMPDIR:-/tmp}/tallerflow-XXXXXXXX.dump.age")
 trap 'rm -f "$backup_file"' EXIT
 
-docker compose -f compose.yaml -f compose.production.yaml exec -T postgres \
+docker compose -f compose.yaml -f compose.production.yaml -f compose.tunnel.yaml exec -T postgres \
   sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' \
   | age -r "$BACKUP_AGE_RECIPIENT" -o "$backup_file"
 
