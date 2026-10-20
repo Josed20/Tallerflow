@@ -12,9 +12,12 @@ import (
 type RouteRegistrar func(gin.IRouter)
 
 // Dependencies contains optional infrastructure and module route hooks.
+// Middleware runs for every request, including unmatched ones such as CORS
+// preflights, after request IDs and panic recovery.
 type Dependencies struct {
-	Ping   func(context.Context) error
-	Routes []RouteRegistrar
+	Ping       func(context.Context) error
+	Middleware []gin.HandlerFunc
+	Routes     []RouteRegistrar
 }
 
 const readinessTimeout = 2 * time.Second
@@ -23,6 +26,7 @@ const readinessTimeout = 2 * time.Second
 func NewRouter(deps Dependencies) *gin.Engine {
 	router := gin.New()
 	router.Use(RequestID(), Recovery())
+	router.Use(deps.Middleware...)
 
 	router.GET("/health/live", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"status": "alive"}})

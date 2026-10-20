@@ -186,8 +186,65 @@ func TestLoadRejectsInvalidTrustedProxyWithoutLeakingValue(t *testing.T) {
 	require.False(t, strings.Contains(err.Error(), "not-a-network-secret"))
 }
 
+func TestLoadDefaultsMobileOriginsPerEnvironment(t *testing.T) {
+	setValidEnvironment(t)
+
+	development, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, []string{"http://localhost", "https://localhost", "capacitor://localhost"}, development.MobileOrigins)
+
+	t.Setenv("TF_ENVIRONMENT", "production")
+	t.Setenv("TF_ALLOWED_ORIGIN", "https://app.tallerflow.test")
+	t.Setenv("TF_PASSWORD_RESET_BASE_URL", "https://app.tallerflow.test")
+	production, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, []string{"https://localhost", "capacitor://localhost"}, production.MobileOrigins)
+}
+
+func TestLoadParsesMobileOrigins(t *testing.T) {
+	setValidEnvironment(t)
+	t.Setenv("TF_MOBILE_ORIGINS", " HTTPS://LocalHost , capacitor://localhost ")
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"https://localhost", "capacitor://localhost"}, cfg.MobileOrigins)
+}
+
+func TestLoadRejectsInvalidMobileOriginsWithoutLeakingValue(t *testing.T) {
+	for name, value := range map[string]string{
+		"wildcard":     "*",
+		"path":         "https://localhost/app-secret",
+		"empty member": "https://localhost,,capacitor://localhost",
+		"other scheme": "ftp://mobile-secret",
+	} {
+		t.Run(name, func(t *testing.T) {
+			setValidEnvironment(t)
+			t.Setenv("TF_MOBILE_ORIGINS", value)
+
+			_, err := Load()
+
+			require.ErrorContains(t, err, "TF_MOBILE_ORIGINS")
+			require.NotContains(t, err.Error(), "secret")
+		})
+	}
+}
+
+func TestLoadRejectsInsecureMobileOriginInProduction(t *testing.T) {
+	setValidEnvironment(t)
+	t.Setenv("TF_ENVIRONMENT", "production")
+	t.Setenv("TF_ALLOWED_ORIGIN", "https://app.tallerflow.test")
+	t.Setenv("TF_PASSWORD_RESET_BASE_URL", "https://app.tallerflow.test")
+	t.Setenv("TF_MOBILE_ORIGINS", "http://localhost")
+
+	_, err := Load()
+
+	require.ErrorContains(t, err, "TF_MOBILE_ORIGINS")
+}
+
 func setValidEnvironment(t *testing.T) {
 	t.Helper()
+	t.Setenv("TF_MOBILE_ORIGINS", "")
 	t.Setenv("TF_DATABASE_URL", "postgres://tallerflow:password@localhost:5432/tallerflow")
 	t.Setenv("TF_BOOTSTRAP_DATABASE_URL", "postgres://tallerflow_bootstrap:password@localhost:5432/tallerflow")
 	t.Setenv("TF_SESSION_PEPPER", "test-session-pepper")

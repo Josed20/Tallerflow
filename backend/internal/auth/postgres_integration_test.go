@@ -40,7 +40,7 @@ func TestPostgresIntegrationAuthenticationAndTenantIsolation(t *testing.T) {
 
 			sessions := NewSessionService(repository, []byte("integration-session-pepper"), func() time.Time { return now }, nil)
 			service := NewAuthService(repository, repository, sessions, NewPasswordHasher(DefaultPasswordParams()), repository)
-			loggedIn, err := service.Login(ctx, ownerEmail, ownerPassword, "203.0.113.200")
+			loggedIn, err := service.Login(ctx, ownerEmail, ownerPassword, "203.0.113.200", SessionKindWeb)
 			require.NoError(t, err)
 			require.True(t, loggedIn.MustChangePassword)
 			require.Equal(t, membership.WorkshopID, loggedIn.Principal.WorkshopID)

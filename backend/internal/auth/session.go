@@ -15,7 +15,19 @@ const (
 	sessionTokenBytes = 32
 	sessionLifetime   = 8 * time.Hour
 	maxRawTokenBytes  = 1024
+
+	// Mobile sessions slide: each day of use pushes the expiry 30 days out.
+	// Renewing at most once a day keeps the write off most requests.
+	mobileSessionLifetime   = 30 * 24 * time.Hour
+	mobileSessionRenewAfter = 24 * time.Hour
 )
+
+func lifetimeFor(kind SessionKind) time.Duration {
+	if kind.normalized() == SessionKindMobile {
+		return mobileSessionLifetime
+	}
+	return sessionLifetime
+}
 
 type SessionService struct {
 	repository SessionRepository
@@ -93,13 +105,14 @@ func (s *SessionService) Prepare(userID uuid.UUID, metadata SessionMetadata) (Pr
 	now := s.clock().UTC()
 	csrfToken := security.DeriveCSRFToken(s.pepper, token)
 	csrfTokenHash := sha256.Sum256([]byte(csrfToken))
+	metadata.Kind = metadata.Kind.normalized()
 	created := NewSession{
 		UserID:        userID,
 		TokenHash:     security.TokenDigest(s.pepper, token),
 		CSRFTokenHash: csrfTokenHash,
 		Metadata:      metadata,
 		CreatedAt:     now,
-		ExpiresAt:     now.Add(sessionLifetime),
+		ExpiresAt:     now.Add(lifetimeFor(metadata.Kind)),
 	}
 	return PreparedSession{Token: token, CSRFToken: csrfToken, Created: created}, nil
 }
@@ -119,6 +132,13 @@ func (s *SessionService) Authenticate(ctx context.Context, rawToken string) (Ses
 	}
 	if session.RevokedAt != nil || !session.ExpiresAt.After(now) {
 		return Session{}, ErrSessionInvalid
+	}
+	session.Kind = session.Kind.normalized()
+	if renewed := now.Add(mobileSessionLifetime); session.Kind == SessionKindMobile && session.ExpiresAt.Before(renewed.Add(-mobileSessionRenewAfter)) {
+		if err := s.repository.Renew(ctx, session.ID, renewed, now); err != nil {
+			return Session{}, err
+		}
+		session.ExpiresAt = renewed
 	}
 	return session, nil
 }

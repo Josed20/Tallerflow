@@ -182,6 +182,61 @@ func TestSessionRevokePassesSessionAndCurrentTimeToRepository(t *testing.T) {
 	}
 }
 
+func TestSessionPrepareGivesMobileSessionsThirtyDays(t *testing.T) {
+	service := NewSessionService(&fakeSessionRepository{}, testPepper, fixedClock(testNow), bytes.NewReader(make([]byte, 32)))
+
+	web, err := service.Prepare(testUserID, SessionMetadata{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if web.Created.Metadata.Kind.normalized() != SessionKindWeb || !web.Created.ExpiresAt.Equal(testNow.Add(8*time.Hour)) {
+		t.Fatalf("default session = kind %q until %s, want WEB for eight hours", web.Created.Metadata.Kind, web.Created.ExpiresAt)
+	}
+
+	service = NewSessionService(&fakeSessionRepository{}, testPepper, fixedClock(testNow), bytes.NewReader(make([]byte, 32)))
+	mobile, err := service.Prepare(testUserID, SessionMetadata{Kind: SessionKindMobile})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mobile.Created.Metadata.Kind != SessionKindMobile || !mobile.Created.ExpiresAt.Equal(testNow.Add(30*24*time.Hour)) {
+		t.Fatalf("mobile session = kind %q until %s, want MOBILE for 30 days", mobile.Created.Metadata.Kind, mobile.Created.ExpiresAt)
+	}
+}
+
+func TestSessionAuthenticateRenewsMobileSessionAfterADayOfUse(t *testing.T) {
+	repo := &fakeSessionRepository{found: Session{ID: testSessionID, UserID: testUserID, Kind: SessionKindMobile, ExpiresAt: testNow.Add(10 * 24 * time.Hour)}}
+	service := NewSessionService(repo, testPepper, fixedClock(testNow), bytes.NewReader(make([]byte, 32)))
+
+	got, err := service.Authenticate(context.Background(), "mobile-token")
+
+	if err != nil {
+		t.Fatalf("Authenticate() error = %v", err)
+	}
+	want := testNow.Add(30 * 24 * time.Hour)
+	if repo.renewedID != testSessionID || !repo.renewedUntil.Equal(want) || !got.ExpiresAt.Equal(want) {
+		t.Fatalf("renewal = session %s until %s, returned expiry %s; want %s until %s", repo.renewedID, repo.renewedUntil, got.ExpiresAt, testSessionID, want)
+	}
+}
+
+func TestSessionAuthenticateSkipsRenewalForRecentMobileAndAllWebSessions(t *testing.T) {
+	for name, session := range map[string]Session{
+		"mobile renewed within the day": {ID: testSessionID, UserID: testUserID, Kind: SessionKindMobile, ExpiresAt: testNow.Add(30*24*time.Hour - time.Hour)},
+		"web session":                   {ID: testSessionID, UserID: testUserID, Kind: SessionKindWeb, ExpiresAt: testNow.Add(time.Hour)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			repo := &fakeSessionRepository{found: session}
+			service := NewSessionService(repo, testPepper, fixedClock(testNow), bytes.NewReader(make([]byte, 32)))
+
+			if _, err := service.Authenticate(context.Background(), "token"); err != nil {
+				t.Fatalf("Authenticate() error = %v", err)
+			}
+			if repo.renewedID != uuid.Nil {
+				t.Fatalf("session was renewed until %s", repo.renewedUntil)
+			}
+		})
+	}
+}
+
 func fixedClock(now time.Time) func() time.Time {
 	return func() time.Time { return now }
 }
@@ -209,6 +264,14 @@ type fakeSessionRepository struct {
 	findNow                    time.Time
 	revokedID                  uuid.UUID
 	revokedAt                  time.Time
+	renewedID                  uuid.UUID
+	renewedUntil               time.Time
+}
+
+func (r *fakeSessionRepository) Renew(_ context.Context, sessionID uuid.UUID, expiresAt, _ time.Time) error {
+	r.renewedID = sessionID
+	r.renewedUntil = expiresAt
+	return nil
 }
 
 func (r *fakeSessionRepository) Insert(_ context.Context, in NewSession) (Session, error) {

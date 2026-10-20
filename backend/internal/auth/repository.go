@@ -16,6 +16,8 @@ type SessionRepository interface {
 	// adapters must translate their driver's no-row error to ErrSessionInvalid
 	// and preserve operational errors so callers can distinguish outages.
 	FindActiveByTokenHash(context.Context, [32]byte, time.Time) (Session, error)
+	// Renew moves an active session's expiry to expiresAt and records seenAt.
+	Renew(ctx context.Context, sessionID uuid.UUID, expiresAt, seenAt time.Time) error
 	Revoke(context.Context, uuid.UUID, time.Time) error
 	RevokeAllForUser(context.Context, uuid.UUID, time.Time) error
 }
