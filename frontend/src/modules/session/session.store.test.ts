@@ -1,13 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useSessionStore } from './session.store'
+import { configureApiTransport } from './api'
+
+const mobile = vi.hoisted(() => ({ enabled: false, localPreview: false, token: null as string | null }))
+vi.mock('../../native/platform', () => ({ usesNativeToken: () => mobile.enabled && !mobile.localPreview }))
+vi.mock('../../native/session-token', () => ({
+  readMobileToken: async () => mobile.token,
+  writeMobileToken: async (value: string) => { mobile.token = value },
+  clearMobileToken: async () => { mobile.token = null },
+}))
 
 describe('session store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
     localStorage.clear()
     sessionStorage.clear()
+    mobile.enabled = false
+    mobile.localPreview = false
+    mobile.token = null
+    configureApiTransport({ kind: 'web' })
   })
 
   it('restores the authenticated principal from the auth and workshops contracts', async () => {
@@ -183,6 +197,73 @@ describe('session store', () => {
     expect(session.restored).toBe(true)
     expect(localStorage.length).toBe(0)
     expect(sessionStorage.length).toBe(0)
+  })
+
+  it('logs in and restores a mobile session using a stored bearer token', async () => {
+    mobile.enabled = true
+    vi.stubEnv('VITE_API_BASE_URL', 'https://tallerflow.test')
+    configureApiTransport({ kind: 'mobile', getToken: () => mobile.token })
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ data: {
+        expires_at: '2026-11-01T00:00:00Z', session_token: 'secure-token', must_change_password: false,
+      } }))
+      .mockResolvedValueOnce(jsonResponse({ data: {
+        userId: 'operator-1', email: 'operator@test.pe', displayName: 'Operador', workshopId: 'workshop-1',
+      } }))
+      .mockResolvedValueOnce(jsonResponse({ data: {
+        workshop: { id: 'workshop-1', name: 'Taller Lima', timezone: 'America/Lima' }, role: 'OPERATOR',
+      } }))
+      .mockResolvedValueOnce(jsonResponse({ data: {
+        expires_at: '2026-11-01T00:00:00Z', must_change_password: false,
+      } }))
+      .mockResolvedValueOnce(jsonResponse({ data: {
+        userId: 'operator-1', email: 'operator@test.pe', displayName: 'Operador', workshopId: 'workshop-1',
+      } }))
+      .mockResolvedValueOnce(jsonResponse({ data: {
+        workshop: { id: 'workshop-1', name: 'Taller Lima', timezone: 'America/Lima' }, role: 'OPERATOR',
+      } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const session = useSessionStore()
+
+    await session.login('operator@test.pe', 'correct-password')
+
+    expect(mobile.token).toBe('secure-token')
+    expect(session.isAuthenticated).toBe(true)
+    expect(fetchMock.mock.calls[0]?.[1].body).toContain('"client":"mobile"')
+    expect(fetchMock.mock.calls[1]?.[1].headers.Authorization).toBe('Bearer secure-token')
+    expect(fetchMock.mock.calls[1]?.[1].credentials).toBe('omit')
+    expect(fetchMock.mock.calls[1]?.[1].headers).not.toHaveProperty('X-CSRF-Token')
+
+    setActivePinia(createPinia())
+    const restored = useSessionStore()
+    await restored.restore()
+    expect(restored.principal?.role).toBe('OPERATOR')
+    expect(fetchMock.mock.calls[3]?.[1].headers.Authorization).toBe('Bearer secure-token')
+    expect(localStorage.length).toBe(0)
+  })
+
+  it('uses the local web session in the Android USB preview', async () => {
+    mobile.enabled = true
+    mobile.localPreview = true
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ data: {
+        expires_at: '2026-11-01T00:00:00Z', csrf_token: 'local-csrf', must_change_password: false,
+      } }))
+      .mockResolvedValueOnce(jsonResponse({ data: {
+        userId: 'operator-1', email: 'operator@test.pe', displayName: 'Operador', workshopId: 'workshop-1',
+      } }))
+      .mockResolvedValueOnce(jsonResponse({ data: {
+        workshop: { id: 'workshop-1', name: 'Taller Lima', timezone: 'America/Lima' }, role: 'OPERATOR',
+      } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const session = useSessionStore()
+    await session.login('operator@test.pe', 'correct-password')
+
+    expect(session.isAuthenticated).toBe(true)
+    expect(mobile.token).toBeNull()
+    expect(fetchMock.mock.calls[0]?.[1].body).not.toContain('"client":"mobile"')
+    expect(fetchMock.mock.calls[0]?.[1].credentials).toBe('include')
   })
 })
 

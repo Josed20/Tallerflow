@@ -6,6 +6,8 @@ import UiAlert from '../../components/UiAlert.vue'
 import { useSessionStore } from '../session/session.store'
 import { canAdvanceProduction } from '../session/role-policy'
 import { compressImageFile } from '../../utils/image'
+import { capturePhoto } from '../../native/camera'
+import { isNativeApp } from '../../native/platform'
 import { Camera, Check, Copy, ExternalLink, Link2, Printer, RotateCcw, X } from '@lucide/vue'
 import { canManageOperations } from '../session/role-policy'
 import { completedStations, formatOrderQuantity } from './order-display'
@@ -16,6 +18,7 @@ import StageAdvanceDialog from './StageAdvanceDialog.vue'
 const route = useRoute()
 const router = useRouter()
 const session = useSessionStore()
+const nativeApp = isNativeApp()
 
 const order = ref<Order | null>(null)
 const loading = ref(true)
@@ -166,6 +169,28 @@ async function handlePhotoFileSelected(stagePosition: number, event: Event) {
   } finally {
     uploadingPhotoStage.value = null
     target.value = ''
+  }
+}
+
+async function handleNativePhoto(stagePosition: number) {
+  if (!nativeApp || !order.value || !canAdvance.value || !session.isAuthenticated || uploadingPhotoStage.value) return
+  uploadingPhotoStage.value = stagePosition
+  error.value = ''
+  try {
+    const photo = await capturePhoto()
+    if (!photo) return
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onerror = () => reject(new Error('No se pudo leer la foto.'))
+      reader.onload = () => resolve(String(reader.result))
+      reader.readAsDataURL(photo)
+    })
+    await ordersApi.addStagePhoto(order.value.id, stagePosition, dataUrl, '', session.csrfToken ?? undefined)
+    if (await loadOrder(false)) notice.value = 'La foto quedó guardada en la etapa.'
+  } catch (err: any) {
+    error.value = err?.message || 'No se pudo adjuntar la foto a la etapa.'
+  } finally {
+    uploadingPhotoStage.value = null
   }
 }
 
@@ -388,8 +413,17 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               <!-- Botones de Acción (Avance y Foto) -->
               <div class="stage-actions">
                 <!-- Botón de Tomar Foto (Cámara celular) -->
+                <button
+                  v-if="nativeApp && canAdvance && (stage.status === 'IN_PROGRESS' || stage.status === 'COMPLETED')"
+                  type="button"
+                  class="btn-photo-capture"
+                  :disabled="uploadingPhotoStage === stage.position"
+                  @click="handleNativePhoto(stage.position)"
+                >
+                  <Camera :size="16" aria-hidden="true" /> {{ uploadingPhotoStage === stage.position ? 'Subiendo...' : 'Añadir foto' }}
+                </button>
                 <label
-                  v-if="canAdvance && (stage.status === 'IN_PROGRESS' || stage.status === 'COMPLETED')"
+                  v-else-if="canAdvance && (stage.status === 'IN_PROGRESS' || stage.status === 'COMPLETED')"
                   class="btn-photo-capture"
                   :class="{ disabled: uploadingPhotoStage === stage.position }"
                   title="Tomar foto de evidencia de esta estación"

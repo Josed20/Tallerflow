@@ -6,11 +6,21 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
+    "android:sync": "node scripts/require-mobile-url.mjs && npm run build && cap sync android",
+    "android:preview": "node scripts/require-mobile-url.mjs && npm run build && cap sync android",
+    "android:open": "cap open android",
     "test": "vitest run src",
     "test:watch": "vitest",
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@aparajita/capacitor-secure-storage": "^8.0.1",
+    "@capacitor-mlkit/barcode-scanning": "^8.2.1",
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/camera": "^8.2.6",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/splash-screen": "^8.0.2",
     "@lucide/vue": "^1.56.0",
     "@tanstack/vue-query": "^5.66.0",
     "pinia": "^3.0.1",
@@ -22,6 +32,7 @@
     "source-map-js": "^1.2.2"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.4.3",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.0.7",
     "@testing-library/vue": "^8.1.0",

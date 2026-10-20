@@ -17,6 +17,7 @@ export interface AuthSessionPayload {
     expires_at: string
     csrf_token: string
     must_change_password: boolean
+    session_token?: string
   }
 }
 

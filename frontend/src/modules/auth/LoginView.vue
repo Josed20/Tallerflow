@@ -6,6 +6,7 @@ import UiAlert from '../../components/UiAlert.vue'
 import UiButton from '../../components/UiButton.vue'
 import UiField from '../../components/UiField.vue'
 import { useSessionStore } from '../session/session.store'
+import { ApiError } from '../session/api'
 
 const router = useRouter()
 const route = useRoute()
@@ -15,6 +16,11 @@ const password = ref('')
 const attempted = ref(false)
 const submitting = ref(false)
 const serverError = ref('')
+const sessionNotice = computed(() => route.query.session === 'suspended'
+  ? 'El taller está suspendido. Consulta con su propietario antes de volver a entrar.'
+  : route.query.session === 'expired'
+    ? 'Tu sesión terminó. Inicia sesión nuevamente.'
+    : '')
 
 const emailError = computed(() => attempted.value && !/^\S+@\S+\.\S+$/.test(email.value) ? 'Ingresa un correo válido.' : '')
 const passwordError = computed(() => attempted.value && !password.value ? 'La contraseña es obligatoria.' : '')
@@ -29,8 +35,10 @@ async function submit() {
   try {
     await session.login(email.value, password.value)
     await router.replace(session.requiresPasswordChange ? '/change-password' : (route.query.redirect?.toString() ?? '/app'))
-  } catch {
-    serverError.value = 'No pudimos iniciar sesión. Revisa tus datos e inténtalo de nuevo.'
+  } catch (error) {
+    serverError.value = error instanceof ApiError && error.code === 'WORKSHOP_SUSPENDED'
+      ? 'Este taller está suspendido. Consulta con su propietario.'
+      : 'No pudimos iniciar sesión. Revisa tus datos e inténtalo de nuevo.'
   } finally {
     submitting.value = false
   }
@@ -42,6 +50,7 @@ async function submit() {
     <h1 id="auth-title">Controla tus pedidos sin preguntar todo el día</h1>
     <p class="auth-subtitle">Plataforma de trazabilidad para talleres de confección textil</p>
     <form class="auth-form" novalidate @submit.prevent="submit">
+      <p v-if="sessionNotice" class="auth-session-notice" role="status">{{ sessionNotice }}</p>
       <UiAlert v-if="serverError" :message="serverError" />
       <UiField id="email" v-model="email" label="Correo electrónico" type="email" autocomplete="email" placeholder="ejemplo@taller.pe" :error="emailError" />
       <UiField id="password" v-model="password" label="Contraseña" type="password" autocomplete="current-password" placeholder="••••••••" :error="passwordError" />
@@ -56,6 +65,15 @@ async function submit() {
 </template>
 
 <style scoped>
+.auth-session-notice {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--tf-border);
+  border-radius: 0.5rem;
+  background: var(--tf-surface);
+  color: var(--tf-ink);
+}
+
 .auth-recovery-link {
   display: flex;
   justify-content: flex-end;

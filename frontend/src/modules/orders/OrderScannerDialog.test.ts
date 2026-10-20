@@ -1,9 +1,15 @@
 import { nextTick } from 'vue'
 import { fireEvent, render, screen } from '@testing-library/vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import OrderScannerDialog from './OrderScannerDialog.vue'
 import type { Order } from './api'
+
+const native = vi.hoisted(() => ({ enabled: false, scan: vi.fn() }))
+vi.mock('../../native/scanner', () => ({
+  canScanNatively: () => native.enabled,
+  scanOrderCode: native.scan,
+}))
 
 const orders = [{ id: 'order-1', code: 'OT-000001', order_number: 1 }] as Order[]
 
@@ -22,6 +28,20 @@ async function renderScanner() {
 }
 
 describe('OrderScannerDialog', () => {
+  beforeEach(() => {
+    native.enabled = false
+    native.scan.mockReset()
+  })
+
+  it('opens an order read by the Android scanner', async () => {
+    native.enabled = true
+    native.scan.mockResolvedValue('OT-000001')
+    const { router } = await renderScanner()
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(native.scan).toHaveBeenCalledOnce()
+    expect(router.currentRoute.value.path).toBe('/app/orders/order-1')
+  })
+
   it('opens an order from a manually entered short code', async () => {
     const { router } = await renderScanner()
 

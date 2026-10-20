@@ -5,7 +5,7 @@ type ApiTransport =
   | {
       kind: 'mobile'
       getToken: () => string | null | Promise<string | null>
-      onUnauthorized?: () => void | Promise<void>
+      onUnauthorized?: (reason: 'expired' | 'suspended') => void | Promise<void>
     }
 
 let transport: ApiTransport = { kind: 'web' }
@@ -52,8 +52,11 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as APIErrorEnvelope | null
-    if (response.status === 401 && activeTransport.kind === 'mobile') {
-      await activeTransport.onUnauthorized?.()
+    if (activeTransport.kind === 'mobile' && path !== '/api/v1/auth/login') {
+      const suspended = payload?.error?.code === 'WORKSHOP_SUSPENDED'
+      if (response.status === 401 || (response.status === 403 && suspended)) {
+        await activeTransport.onUnauthorized?.(suspended ? 'suspended' : 'expired')
+      }
     }
     throw new ApiError(response.status, payload?.error?.code, payload?.error?.request_id)
   }

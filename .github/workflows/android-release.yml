@@ -1,0 +1,59 @@
+name: Android APK
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      VITE_API_BASE_URL: ${{ secrets.TF_PUBLIC_BASE_URL }}
+      TF_ANDROID_KEYSTORE_B64: ${{ secrets.TF_ANDROID_KEYSTORE_B64 }}
+      TF_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.TF_ANDROID_KEYSTORE_PASSWORD }}
+      TF_ANDROID_KEY_ALIAS: ${{ secrets.TF_ANDROID_KEY_ALIAS }}
+      TF_ANDROID_KEY_PASSWORD: ${{ secrets.TF_ANDROID_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Install frontend dependencies
+        run: npm --prefix frontend ci --no-audit
+      - name: Validate release secrets
+        shell: bash
+        run: |
+          : "${VITE_API_BASE_URL:?TF_PUBLIC_BASE_URL is required}"
+          : "${TF_ANDROID_KEYSTORE_B64:?TF_ANDROID_KEYSTORE_B64 is required}"
+          : "${TF_ANDROID_KEYSTORE_PASSWORD:?TF_ANDROID_KEYSTORE_PASSWORD is required}"
+          : "${TF_ANDROID_KEY_ALIAS:?TF_ANDROID_KEY_ALIAS is required}"
+          : "${TF_ANDROID_KEY_PASSWORD:?TF_ANDROID_KEY_PASSWORD is required}"
+      - name: Build web assets and sync Android
+        run: npm --prefix frontend run android:sync
+      - name: Restore signing key
+        shell: bash
+        run: |
+          printf '%s' "$TF_ANDROID_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/tallerflow-release.jks"
+          echo "TF_ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/tallerflow-release.jks" >> "$GITHUB_ENV"
+      - name: Build signed APK
+        working-directory: frontend/android
+        run: bash ./gradlew assembleRelease --no-daemon
+      - name: Upload signed APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: TallerFlow-${{ github.ref_name }}-android
+          path: frontend/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
