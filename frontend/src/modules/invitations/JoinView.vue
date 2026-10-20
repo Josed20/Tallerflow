@@ -62,7 +62,7 @@ async function join() {
   <main class="auth-layout">
     <section class="auth-card">
       <div class="auth-card__content">
-        <BrandLogo class="brand-mark" :size="40" />
+        <BrandLogo class="brand-mark" :size="34" />
         <h1>Unirte al taller</h1>
         <p class="auth-subtitle">Crea tu acceso para entrar al equipo de TallerFlow.</p>
 

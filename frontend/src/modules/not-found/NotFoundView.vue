@@ -19,7 +19,7 @@ function navigateHome() {
 <template>
   <main class="not-found-layout">
     <div class="not-found-card">
-      <BrandLogo class="brand-mark" :size="40" />
+      <BrandLogo class="brand-mark" :size="34" />
       <p class="error-code" aria-hidden="true">404</p>
       <h1>Página no encontrada</h1>
       <p class="not-found-subtitle">
