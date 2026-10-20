@@ -230,7 +230,7 @@ Casi plano. La separación viene del borde (`border`) y del fondo (`background` 
 
 Un rombo tejido: una cuadrícula de 4×4 de franjas redondeadas que se entrelazan como la trama de una tela, girada 45°, en marino `primary` y turquesa `accent`. Las dos celdas vacías recortan las puntas de arriba y abajo, así que el rombo es más ancho que alto (1.37:1). Solo las esquinas exteriores son redondeadas. El logotipo es "Taller" en marino y "Flow" en turquesa (ver Typography). Sobre fondos oscuros las partes marinas pasan a blanco. Reemplaza a la etiqueta colgante de 7 puntadas del Sprint 3.
 
-**Reglas:** se usa siempre desde los SVG, nunca redibujado ni con texto. Bajo 24 px se usa el ícono de app (rombo sobre cuadrado marino) en lugar del símbolo suelto, porque el tejido se empasta. Espacio libre alrededor: la mitad de la altura del símbolo.
+**Reglas:** se usa siempre desde los SVG, nunca redibujado ni con texto. La única excepción son los correos, donde los clientes suelen bloquear imágenes: la cabecera va en `shell` con orillo turquesa, y el logotipo en texto ("Taller" en blanco y "Flow" en turquesa, 6.6:1). Bajo 24 px se usa el ícono de app (rombo sobre cuadrado marino) en lugar del símbolo suelto, porque el tejido se empasta. Espacio libre alrededor: la mitad de la altura del símbolo.
 
 ### Archivos (`frontend/public/`)
 - `logo-symbol.svg`: el rombo a color.

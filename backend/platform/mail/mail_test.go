@@ -173,7 +173,8 @@ func TestRenderTemplates(t *testing.T) {
 			require.Equal(t, tt.expectSubj, msg.Subject)
 			require.NotEmpty(t, msg.Text)
 			require.NotEmpty(t, msg.HTML)
-			require.Contains(t, msg.HTML, "#1F3A68")
+			require.Contains(t, msg.HTML, "#0A346F")
+			require.Contains(t, msg.HTML, "#00BFB2")
 			require.Contains(t, msg.HTML, "TallerFlow")
 			for _, expectedStr := range tt.containsText {
 				require.Contains(t, msg.Text, expectedStr)
