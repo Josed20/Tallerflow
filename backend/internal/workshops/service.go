@@ -13,12 +13,14 @@ import (
 var (
 	ErrMembershipNotFound = errors.New("active workshop membership not found")
 	ErrMembershipInvalid  = errors.New("workshop membership is invalid")
+	ErrWorkshopSuspended  = errors.New("workshop is suspended")
 )
 
 type Workshop struct {
 	ID       uuid.UUID `json:"id" gorm:"column:id"`
 	Name     string    `json:"name" gorm:"column:name"`
 	Timezone string    `json:"timezone" gorm:"column:timezone"`
+	Status   string    `json:"status" gorm:"column:status"`
 }
 
 func (Workshop) TableName() string { return "workshops" }
@@ -77,6 +79,9 @@ func (s *Service) Resolve(ctx context.Context, userID, workshopID uuid.UUID) (Ac
 		}
 		if result.Error != nil {
 			return fmt.Errorf("find workshop: %w", result.Error)
+		}
+		if workshop.Status != "ACTIVE" {
+			return ErrWorkshopSuspended
 		}
 		access = Access{Workshop: workshop, Role: membership.Role}
 		return nil
