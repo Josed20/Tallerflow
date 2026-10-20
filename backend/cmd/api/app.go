@@ -107,13 +107,15 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 	closeOnboarding := onceClose(onboardingModule.close)
 	var closeConsole = func() error { return nil }
 	var consoleRegistrar httpx.RouteRegistrar
+	var consoleService *platformconsole.Service
 	if cfg.ConsoleDatabaseURL != "" {
 		consoleDB, openErr := dependencies.openDatabase(cfg.ConsoleDatabaseURL)
 		if openErr != nil {
 			return nil, fmt.Errorf("open console database: %w", openErr)
 		}
 		closeConsole = onceClose(func() error { return database.Close(consoleDB) })
-		consoleService, serviceErr := platformconsole.NewService(consoleDB, cfg.ConsoleTOTPKey)
+		var serviceErr error
+		consoleService, serviceErr = platformconsole.NewService(consoleDB, cfg.ConsoleTOTPKey)
 		if serviceErr != nil {
 			_ = closeConsole()
 			return nil, fmt.Errorf("create console service: %w", serviceErr)
@@ -155,6 +157,9 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create mail sender: %w", err)
+	}
+	if consoleService != nil {
+		consoleService.SetMailer(mailSender)
 	}
 	passwordResetService := passwordreset.NewService(
 		passwordResetRepository,
