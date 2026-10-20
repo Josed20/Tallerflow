@@ -32,13 +32,6 @@ type Config struct {
 	SMTPPassword         string
 	SMTPFromAddress      string
 	SMTPRequireTLS       bool
-	R2Endpoint           string
-	R2BucketPhotos       string
-	R2AccessKeyID        string
-	R2SecretAccessKey    string
-	ConsoleDatabaseURL   string
-	ConsoleOrigin        string
-	ConsoleTOTPKey       string
 }
 
 // Load reads and validates the API process configuration.
@@ -54,14 +47,7 @@ func Load() (Config, error) {
 		SMTPPort:             valueOrDefault("TF_SMTP_PORT", "1025"),
 		SMTPUsername:         strings.TrimSpace(os.Getenv("TF_SMTP_USER")),
 		SMTPPassword:         os.Getenv("TF_SMTP_PASSWORD"),
-		SMTPFromAddress:      valueOrDefault("TF_SMTP_FROM", "soporte@tallerflow.pe"),
-		R2Endpoint:           strings.TrimSpace(os.Getenv("TF_R2_ENDPOINT")),
-		R2BucketPhotos:       strings.TrimSpace(os.Getenv("TF_R2_BUCKET_PHOTOS")),
-		R2AccessKeyID:        strings.TrimSpace(os.Getenv("TF_R2_ACCESS_KEY_ID")),
-		R2SecretAccessKey:    os.Getenv("TF_R2_SECRET_ACCESS_KEY"),
-		ConsoleDatabaseURL:   strings.TrimSpace(os.Getenv("TF_CONSOLE_DATABASE_URL")),
-		ConsoleOrigin:        strings.TrimSpace(os.Getenv("TF_CONSOLE_ORIGIN")),
-		ConsoleTOTPKey:       os.Getenv("TF_CONSOLE_TOTP_KEY"),
+		SMTPFromAddress:      valueOrDefault("TF_SMTP_FROM", "soporte@tallerflowpe.com"),
 	}
 
 	missing := make([]string, 0, 4)
@@ -80,11 +66,6 @@ func Load() (Config, error) {
 	if len(missing) > 0 {
 		return Config{}, fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))
 	}
-	configuredR2 := cfg.R2Endpoint != "" || cfg.R2BucketPhotos != "" || cfg.R2AccessKeyID != "" || cfg.R2SecretAccessKey != ""
-	if configuredR2 &&
-		(cfg.R2Endpoint == "" || cfg.R2BucketPhotos == "" || cfg.R2AccessKeyID == "" || cfg.R2SecretAccessKey == "") {
-		return Config{}, fmt.Errorf("TF_R2_ENDPOINT, TF_R2_BUCKET_PHOTOS, TF_R2_ACCESS_KEY_ID and TF_R2_SECRET_ACCESS_KEY are required together")
-	}
 
 	if !validEnvironment(cfg.Environment) {
 		return Config{}, fmt.Errorf("TF_ENVIRONMENT is invalid")
@@ -95,16 +76,6 @@ func Load() (Config, error) {
 	}
 	if cfg.Environment == "production" && origin.Scheme != "https" {
 		return Config{}, fmt.Errorf("TF_ALLOWED_ORIGIN is invalid")
-	}
-	if cfg.ConsoleOrigin == "" {
-		cfg.ConsoleOrigin = cfg.AllowedOrigin
-	}
-	consoleOrigin, err := url.Parse(cfg.ConsoleOrigin)
-	if err != nil || consoleOrigin.Host == "" || (consoleOrigin.Scheme != "http" && consoleOrigin.Scheme != "https") {
-		return Config{}, fmt.Errorf("TF_CONSOLE_ORIGIN is invalid")
-	}
-	if cfg.Environment == "production" && consoleOrigin.Scheme != "https" {
-		return Config{}, fmt.Errorf("TF_CONSOLE_ORIGIN is invalid")
 	}
 	cfg.PasswordResetBaseURL = valueOrDefault("TF_PASSWORD_RESET_BASE_URL", cfg.AllowedOrigin)
 	resetURL, err := url.Parse(cfg.PasswordResetBaseURL)
@@ -124,11 +95,6 @@ func Load() (Config, error) {
 	}
 	if cfg.Environment == "production" && !cfg.SMTPRequireTLS {
 		return Config{}, fmt.Errorf("TF_SMTP_REQUIRE_TLS is invalid")
-	}
-	if cfg.Environment == "production" {
-		if err := validateProductionSecrets(cfg); err != nil {
-			return Config{}, err
-		}
 	}
 
 	cfg.TrustedProxies, err = trustedProxies(cfg.Environment, os.Getenv("TF_TRUSTED_PROXIES"))
@@ -175,46 +141,6 @@ func mobileOrigins(environment, configured string) ([]string, error) {
 		origins[index] = origin
 	}
 	return origins, nil
-}
-
-func validateProductionSecrets(cfg Config) error {
-	if len(cfg.SessionPepper) < 32 || cfg.SessionPepper == "local-session-pepper-change-me" {
-		return fmt.Errorf("TF_SESSION_PEPPER is insecure for production")
-	}
-	if err := validateProductionDatabaseURL("TF_DATABASE_URL", cfg.DatabaseURL, "tallerflow_app"); err != nil {
-		return err
-	}
-	if err := validateProductionDatabaseURL("TF_BOOTSTRAP_DATABASE_URL", cfg.BootstrapDatabaseURL, "tallerflow_bootstrap"); err != nil {
-		return err
-	}
-	if cfg.DatabaseURL == cfg.BootstrapDatabaseURL {
-		return fmt.Errorf("production database roles must be separate")
-	}
-	if err := validateProductionDatabaseURL("TF_CONSOLE_DATABASE_URL", cfg.ConsoleDatabaseURL, "tallerflow_console"); err != nil {
-		return err
-	}
-	if len(cfg.ConsoleTOTPKey) < 32 || strings.Contains(cfg.ConsoleTOTPKey, "change-me") {
-		return fmt.Errorf("TF_CONSOLE_TOTP_KEY is insecure for production")
-	}
-	if cfg.ConsoleDatabaseURL == cfg.DatabaseURL || cfg.ConsoleDatabaseURL == cfg.BootstrapDatabaseURL {
-		return fmt.Errorf("production database roles must be separate")
-	}
-	return nil
-}
-
-func validateProductionDatabaseURL(name, rawURL, expectedUser string) error {
-	parsed, err := url.Parse(rawURL)
-	if err != nil || (parsed.Scheme != "postgres" && parsed.Scheme != "postgresql") || parsed.Host == "" || parsed.User == nil {
-		return fmt.Errorf("%s is invalid for production", name)
-	}
-	password, hasPassword := parsed.User.Password()
-	if parsed.User.Username() != expectedUser || !hasPassword || len(password) < 16 || strings.Contains(password, "change-me") {
-		return fmt.Errorf("%s is insecure for production", name)
-	}
-	if strings.EqualFold(parsed.Query().Get("sslmode"), "disable") {
-		return fmt.Errorf("%s must not disable TLS in production", name)
-	}
-	return nil
 }
 
 func validEnvironment(environment string) bool {

@@ -49,25 +49,25 @@ describe('same-origin API client', () => {
   })
 
   it('prefixes API paths when an external base URL is configured', async () => {
-    vi.stubEnv('VITE_API_BASE_URL', 'https://tallerflow.pe/')
+    vi.stubEnv('VITE_API_BASE_URL', 'https://tallerflowpe.com/')
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
     vi.stubGlobal('fetch', fetchMock)
 
     await api.get('/api/v1/me')
 
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://tallerflow.pe/api/v1/me')
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://tallerflowpe.com/api/v1/me')
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ credentials: 'include' })
   })
 
   it('uses bearer without cookies or CSRF in mobile mode', async () => {
-    vi.stubEnv('VITE_API_BASE_URL', 'https://tallerflow.pe')
+    vi.stubEnv('VITE_API_BASE_URL', 'https://tallerflowpe.com')
     configureApiTransport({ kind: 'mobile', getToken: async () => 'mobile-session' })
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
     vi.stubGlobal('fetch', fetchMock)
 
     await api.post('/api/v1/orders', { product: 'Polo' }, 'web-csrf', { 'Idempotency-Key': 'order-1' })
 
-    expect(fetchMock).toHaveBeenCalledWith('https://tallerflow.pe/api/v1/orders', {
+    expect(fetchMock).toHaveBeenCalledWith('https://tallerflowpe.com/api/v1/orders', {
       method: 'POST',
       credentials: 'omit',
       headers: {
@@ -81,7 +81,7 @@ describe('same-origin API client', () => {
   })
 
   it('allows mobile login without a token and handles a revoked token', async () => {
-    vi.stubEnv('VITE_API_BASE_URL', 'https://tallerflow.pe')
+    vi.stubEnv('VITE_API_BASE_URL', 'https://tallerflowpe.com')
     let token: string | null = 'stale-session'
     const onUnauthorized = vi.fn(() => { token = null })
     configureApiTransport({ kind: 'mobile', getToken: () => token, onUnauthorized })
@@ -101,7 +101,7 @@ describe('same-origin API client', () => {
   })
 
   it('revokes a mobile token when the workshop is suspended', async () => {
-    vi.stubEnv('VITE_API_BASE_URL', 'https://tallerflow.pe')
+    vi.stubEnv('VITE_API_BASE_URL', 'https://tallerflowpe.com')
     const onUnauthorized = vi.fn()
     configureApiTransport({ kind: 'mobile', getToken: () => 'active-token', onUnauthorized })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({

@@ -32,7 +32,7 @@ type SMTPSender struct {
 func NewSMTPSender(cfg SMTPConfig) (*SMTPSender, error) {
 	cfg.Host = strings.TrimSpace(cfg.Host)
 	if cfg.FromAddress == "" {
-		cfg.FromAddress = "soporte@tallerflow.pe"
+		cfg.FromAddress = "soporte@tallerflowpe.com"
 	}
 	if cfg.Host == "" {
 		cfg.Host = "localhost"

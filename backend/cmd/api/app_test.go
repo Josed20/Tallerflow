@@ -163,7 +163,7 @@ func applicationConfig() config.Config {
 		Environment: "development", HTTPAddress: ":0", DatabaseURL: "postgres://runtime-ignored", BootstrapDatabaseURL: "postgres://bootstrap-ignored",
 		SessionPepper: "test-session-pepper", AllowedOrigin: "http://localhost:8080",
 		PasswordResetBaseURL: "http://localhost:8080", SMTPHost: "localhost", SMTPPort: "1025",
-		SMTPFromAddress: "soporte@tallerflow.pe",
+		SMTPFromAddress: "soporte@tallerflowpe.com",
 	}
 }
 
