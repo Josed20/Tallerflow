@@ -52,7 +52,7 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as APIErrorEnvelope | null
-    if (response.status === 401 && activeTransport.kind === 'mobile') {
+    if (response.status === 401 && activeTransport.kind === 'mobile' && path !== '/api/v1/auth/login') {
       await activeTransport.onUnauthorized?.()
     }
     throw new ApiError(response.status, payload?.error?.code, payload?.error?.request_id)

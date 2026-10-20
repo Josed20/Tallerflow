@@ -3,6 +3,8 @@ import { nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { Order } from './api'
 import { orderNumberFromQuery } from './order-search'
+import { canScanNatively, scanOrderCode } from '../../native/scanner'
+import { X } from '@lucide/vue'
 
 const props = defineProps<{ orders: Order[] }>()
 const emit = defineEmits<{ close: [] }>()
@@ -11,6 +13,7 @@ const router = useRouter()
 const scannerError = ref('')
 const manualCodeInput = ref('')
 const isScanning = ref(false)
+const nativeScanner = canScanNatively()
 const videoRef = ref<HTMLVideoElement | null>(null)
 let mediaStream: MediaStream | null = null
 let scanInterval: ReturnType<typeof setInterval> | null = null
@@ -44,6 +47,18 @@ async function openScanner() {
   scannerError.value = ''
   manualCodeInput.value = ''
   isScanning.value = true
+  if (nativeScanner) {
+    try {
+      const code = await scanOrderCode()
+      if (code) await handleCodeScanned(code)
+      else scannerError.value = 'No se leyó ningún código. Puedes intentarlo de nuevo o escribirlo.'
+    } catch {
+      scannerError.value = 'No se pudo abrir el escáner. Escribe el código de la orden.'
+    } finally {
+      isScanning.value = false
+    }
+    return
+  }
   await nextTick()
   if (!('BarcodeDetector' in window)) {
     scannerError.value = 'Este navegador no admite lectura automática. Ingresa el código de la orden manualmente.'
@@ -152,12 +167,12 @@ onUnmounted(stopScanner)
           <p class="scanner-modal__subtitle">Apunta al código impreso o a un QR estándar del lote</p>
         </div>
         <button class="scanner-modal__close" type="button" @click="closeScanner" aria-label="Cerrar escáner">
-          ✕
+          <X :size="20" aria-hidden="true" />
         </button>
       </header>
   
       <div class="scanner-modal__body">
-        <div class="video-container">
+        <div v-if="!nativeScanner" class="video-container">
           <video
             ref="videoRef"
             class="video-preview"
@@ -175,6 +190,9 @@ onUnmounted(stopScanner)
         </div>
   
         <p v-if="scannerError" class="scanner-error-text">{{ scannerError }}</p>
+        <button v-if="nativeScanner" class="manual-submit-btn" type="button" :disabled="isScanning" @click="openScanner">
+          {{ isScanning ? 'Abriendo cámara...' : 'Escanear de nuevo' }}
+        </button>
   
         <form class="manual-input-form" @submit.prevent="handleManualSubmit">
           <label for="manual-code-input">O ingresa el código o ID de la orden:</label>
