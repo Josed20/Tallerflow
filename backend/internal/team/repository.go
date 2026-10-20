@@ -15,4 +15,5 @@ type Store interface {
 	CancelInvitation(ctx context.Context, workshopID, actorUserID, invitationID uuid.UUID, now time.Time) error
 	ConsumeInvitation(ctx context.Context, tokenHash []byte, name, passwordHash string, now time.Time) (ConsumeResult, error)
 	UpdateMember(ctx context.Context, workshopID, actorUserID, membershipID uuid.UUID, input UpdateMemberInput) (Member, error)
+	GetWorkshopName(ctx context.Context, workshopID uuid.UUID) (string, error)
 }

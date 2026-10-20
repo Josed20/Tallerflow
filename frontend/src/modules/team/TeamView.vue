@@ -118,7 +118,7 @@ async function invite() {
     invitations.value = [response.data.invitation, ...invitations.value]
     email.value = ''
     role.value = 'OPERATOR'
-    showToast('Invitación creada', `Copia el enlace y compártelo con ${response.data.invitation.email}.`)
+    showToast('Invitación creada', `Te enviamos la invitación a ${response.data.invitation.email}. También puedes copiar el enlace como respaldo.`)
   } catch (err) {
     error.value = err instanceof ApiError && err.code === 'TEAM_INVITATION_DUPLICATE'
       ? 'Ya hay una invitación pendiente para ese correo. Puedes abrirla en Invitaciones y generar un enlace nuevo.'
@@ -161,7 +161,7 @@ async function confirmInvitationAction() {
       replacementLinkVisible.value = true
       joinUrl.value = ''
       joinLinkVisible.value = false
-      showToast('Enlace nuevo creado', `El enlace anterior de ${response.data.invitation.email} ya no funciona.`, 'info')
+      showToast('Enlace nuevo creado', `Te enviamos la invitación a ${response.data.invitation.email}. El enlace anterior ya no funciona.`, 'info')
     } else {
       await teamApi.cancelInvitation(action.invitation.id, session.csrfToken)
       invitations.value = invitations.value.filter((invitation) => invitation.id !== action.invitation.id)
@@ -251,7 +251,7 @@ onBeforeUnmount(() => {
       <div class="team-panel__heading">
         <div>
           <h2 id="invite-title">Invitar al equipo</h2>
-          <p>Comparte el enlace con la persona. Ella creará su nombre y clave al abrirlo.</p>
+          <p>Le enviaremos un correo con su enlace de acceso. También puedes copiarlo como respaldo.</p>
         </div>
         <span class="team-help">Los enlaces vencen en 7 días.</span>
       </div>

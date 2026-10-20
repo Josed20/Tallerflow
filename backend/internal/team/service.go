@@ -6,13 +6,14 @@ import (
 	"encoding/base64"
 	"errors"
 	"io"
-	"net/mail"
+	netmail "net/mail"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/Josed20/Tallerflow/backend/internal/auth"
 	"github.com/Josed20/Tallerflow/backend/platform/httpx"
+	"github.com/Josed20/Tallerflow/backend/platform/mail"
 	"github.com/google/uuid"
 )
 
@@ -25,9 +26,10 @@ type Service struct {
 	origin string
 	clock  func() time.Time
 	random io.Reader
+	sender mail.Sender
 }
 
-func NewService(store Store, hasher auth.PasswordHasher, pepper []byte, origin string, clock func() time.Time, random io.Reader) (*Service, error) {
+func NewService(store Store, hasher auth.PasswordHasher, pepper []byte, origin string, clock func() time.Time, random io.Reader, sender ...mail.Sender) (*Service, error) {
 	if store == nil {
 		return nil, errors.New("team store is required")
 	}
@@ -44,7 +46,57 @@ func NewService(store Store, hasher auth.PasswordHasher, pepper []byte, origin s
 	if random == nil {
 		random = rand.Reader
 	}
-	return &Service{store: store, hasher: hasher, pepper: append([]byte(nil), pepper...), origin: strings.TrimRight(origin, "/"), clock: clock, random: random}, nil
+	var mailSender mail.Sender
+	if len(sender) > 0 {
+		mailSender = sender[0]
+	}
+	return &Service{
+		store:  store,
+		hasher: hasher,
+		pepper: append([]byte(nil), pepper...),
+		origin: strings.TrimRight(origin, "/"),
+		clock:  clock,
+		random: random,
+		sender: mailSender,
+	}, nil
+}
+
+func (s *Service) dispatchInvitationEmail(ctx context.Context, workshopID uuid.UUID, inviterName, recipientEmail, role, joinURL string) {
+	if s.sender == nil {
+		return
+	}
+	workshopName := "TallerFlow"
+	if s.store != nil {
+		defer func() {
+			_ = recover()
+		}()
+		if name, err := s.store.GetWorkshopName(ctx, workshopID); err == nil && strings.TrimSpace(name) != "" {
+			workshopName = strings.TrimSpace(name)
+		}
+	}
+
+	roleName := "Operador"
+	if role == "ADMIN" {
+		roleName = "Administrador"
+	}
+
+	msg, err := mail.Render("team-invitation", map[string]string{
+		"WorkshopName": workshopName,
+		"InviterName":  inviterName,
+		"Role":         roleName,
+		"URL":          joinURL,
+		"ExpiresIn":    "7 días",
+	})
+	if err != nil {
+		return
+	}
+	msg.To = recipientEmail
+
+	go func() {
+		deliveryCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = s.sender.Send(deliveryCtx, msg)
+	}()
 }
 
 func (s *Service) List(ctx context.Context, principal httpx.Principal) ([]Member, []Invitation, error) {
@@ -77,10 +129,12 @@ func (s *Service) Invite(ctx context.Context, principal httpx.Principal, input I
 	if err != nil {
 		return InvitationCreated{}, err
 	}
+	joinURL := s.origin + "/join?token=" + url.QueryEscape(publicToken(token))
+	s.dispatchInvitationEmail(ctx, principal.WorkshopID, principal.DisplayName, email, role, joinURL)
 	return InvitationCreated{
 		Invitation: invitation,
 		Token:      token,
-		JoinURL:    s.origin + "/join?token=" + url.QueryEscape(publicToken(token)),
+		JoinURL:    joinURL,
 	}, nil
 }
 
@@ -103,10 +157,12 @@ func (s *Service) RegenerateInvitation(ctx context.Context, principal httpx.Prin
 	if err != nil {
 		return InvitationCreated{}, err
 	}
+	joinURL := s.origin + "/join?token=" + url.QueryEscape(publicToken(token))
+	s.dispatchInvitationEmail(ctx, principal.WorkshopID, principal.DisplayName, invitation.Email, invitation.Role, joinURL)
 	return InvitationCreated{
 		Invitation: invitation,
 		Token:      token,
-		JoinURL:    s.origin + "/join?token=" + url.QueryEscape(publicToken(token)),
+		JoinURL:    joinURL,
 	}, nil
 }
 
@@ -182,7 +238,7 @@ func validEmail(value string) bool {
 	if len(value) == 0 || len(value) > 254 {
 		return false
 	}
-	address, err := mail.ParseAddress(value)
+	address, err := netmail.ParseAddress(value)
 	return err == nil && address.Address == value
 }
 

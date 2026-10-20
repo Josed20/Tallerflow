@@ -18,6 +18,7 @@ import (
 	"github.com/Josed20/Tallerflow/backend/platform/config"
 	"github.com/Josed20/Tallerflow/backend/platform/database"
 	"github.com/Josed20/Tallerflow/backend/platform/httpx"
+	"github.com/Josed20/Tallerflow/backend/platform/mail"
 	"github.com/Josed20/Tallerflow/backend/platform/security"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -127,6 +128,17 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 	if err != nil {
 		return nil, fmt.Errorf("create password reset delivery: %w", err)
 	}
+	mailSender, err := mail.NewSMTPSender(mail.SMTPConfig{
+		Host:        cfg.SMTPHost,
+		Port:        cfg.SMTPPort,
+		Username:    cfg.SMTPUsername,
+		Password:    cfg.SMTPPassword,
+		FromAddress: cfg.SMTPFromAddress,
+		RequireTLS:  cfg.SMTPRequireTLS,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create mail sender: %w", err)
+	}
 	passwordResetService := passwordreset.NewService(
 		passwordResetRepository,
 		passwordResetDelivery,
@@ -150,7 +162,7 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 		return nil, fmt.Errorf("create onboarding handler: %w", err)
 	}
 	workshopHandler := workshops.NewHandler(workshopService)
-	teamService, err := team.NewService(teamRepository, auth.NewPasswordHasher(auth.DefaultPasswordParams()), []byte(cfg.SessionPepper), cfg.AllowedOrigin, time.Now, nil)
+	teamService, err := team.NewService(teamRepository, auth.NewPasswordHasher(auth.DefaultPasswordParams()), []byte(cfg.SessionPepper), cfg.AllowedOrigin, time.Now, nil, mailSender)
 	if err != nil {
 		return nil, fmt.Errorf("create team service: %w", err)
 	}

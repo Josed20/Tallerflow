@@ -349,6 +349,14 @@ func (r *PostgresRepository) UpdateMember(ctx context.Context, workshopID, actor
 	return member, nil
 }
 
+func (r *PostgresRepository) GetWorkshopName(ctx context.Context, workshopID uuid.UUID) (string, error) {
+	var name string
+	err := r.tenant.WithinTenant(ctx, workshopID, func(tx *gorm.DB) error {
+		return tx.Raw(`SELECT name FROM workshops WHERE id = ?`, workshopID).Scan(&name).Error
+	})
+	return name, err
+}
+
 func mapConstraint(err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
