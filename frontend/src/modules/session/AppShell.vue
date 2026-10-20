@@ -25,7 +25,7 @@ async function signOut() {
         <RouterLink v-if="canManage" to="/app"><LayoutDashboard :size="18" aria-hidden="true" /> Panel</RouterLink>
         <RouterLink to="/app/orders"><Columns3 :size="18" aria-hidden="true" /> Órdenes</RouterLink>
         <RouterLink v-if="canManage" to="/app/clients"><Users :size="18" aria-hidden="true" /> Clientes</RouterLink>
-        <RouterLink v-if="canManage" to="/app/orders/new"><Plus :size="18" aria-hidden="true" /> Nueva orden</RouterLink>
+        <RouterLink v-if="canManage" class="app-shell__nav-action" to="/app/orders/new"><Plus :size="18" aria-hidden="true" /> Nueva orden</RouterLink>
         <RouterLink v-if="canManage" to="/app/team"><UsersRound :size="18" aria-hidden="true" /> Equipo</RouterLink>
       </nav>
       <div class="app-shell__footer">
@@ -56,5 +56,5 @@ async function signOut() {
 .app-shell__main, .app-shell__content { min-width: 0; }
 .app-shell__header { border-bottom: 1px solid var(--tf-border-soft); background: var(--tf-surface); }
 @media (min-width: 900px) { .app-shell { display: grid; grid-template-columns: 14.5rem minmax(0, 1fr); } .app-shell__sidebar { position: sticky; top: 0; height: 100vh; } .app-shell__nav { flex-direction: column; } .app-shell__footer { width: 100%; flex-direction: column; align-items: stretch; gap: .6rem; margin: auto 0 0; padding-top: 1rem; border-top: 1px solid var(--tf-shell-line); } .app-shell__logout { width: 100%; } }
-@media (max-width: 899px) { .app-shell__sidebar { gap: .75rem; } .app-shell__workshop { display: none; } .app-shell__footer { margin-left: 0; } .app-shell__user { display: none; } .app-shell__nav { order: 3; display: flex; flex-wrap: nowrap; gap: .35rem; margin: 0 -1.2rem; padding: 0 1.2rem .1rem; overflow-x: auto; scrollbar-width: none; } .app-shell__nav::-webkit-scrollbar { display: none; } .app-shell__nav a { flex: 0 0 auto; min-width: 0; padding: .55rem .75rem; font-size: .82rem; gap: .4rem; white-space: nowrap; } .app-shell__nav a svg { flex: 0 0 auto; } .app-shell__logout { position: absolute; top: .7rem; right: 1rem; font-size: 0; } .app-shell__logout svg { width: 20px; height: 20px; } }
+@media (max-width: 899px) { .app-shell__sidebar { gap: .75rem; } .app-shell__workshop { display: none; } .app-shell__footer { margin-left: 0; } .app-shell__user { display: none; } .app-shell__nav { order: 3; display: flex; flex-wrap: nowrap; gap: .35rem; margin: 0 -1.2rem; padding: 0 1.2rem .1rem; overflow-x: auto; scrollbar-width: none; } .app-shell__nav::-webkit-scrollbar { display: none; } .app-shell__nav a { flex: 1 1 0; flex-direction: column; justify-content: center; min-width: 0; padding: .4rem .25rem; font-size: .75rem; gap: .15rem; white-space: nowrap; } .app-shell__nav a svg { flex: 0 0 auto; } .app-shell__nav .app-shell__nav-action { display: none; } .app-shell__logout { position: absolute; top: .7rem; right: 1rem; font-size: 0; } .app-shell__logout svg { width: 20px; height: 20px; } }
 </style>
