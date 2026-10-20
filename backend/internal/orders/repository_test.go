@@ -20,16 +20,19 @@ func TestUpdateStageRejectsCompletingPendingStage(t *testing.T) {
 	workshopID, orderID, stageID := uuid.New(), uuid.New(), uuid.New()
 	now := time.Date(2026, 10, 6, 20, 0, 0, 0, time.UTC)
 	repository.now = func() time.Time { return now }
+	actorID := uuid.New()
 
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, workshop_id, order_id, position, name, status, completed_at FROM order_stages WHERE order_id = $1 AND position = $2")).
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT status FROM orders WHERE id = $1 FOR UPDATE")).WithArgs(orderID).
+		WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("ACTIVE"))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, workshop_id, order_id, position, name, status, completed_at, completed_by FROM order_stages WHERE order_id = $1 AND position = $2 FOR UPDATE")).
 		WithArgs(orderID, 1).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "workshop_id", "order_id", "position", "name", "status", "completed_at"}).
-			AddRow(stageID, workshopID, orderID, 1, "CORTE", "PENDING", nil))
-	mock.ExpectExec(regexp.QuoteMeta("UPDATE order_stages SET status = $1, completed_at = $2 WHERE id = $3 AND status = 'IN_PROGRESS'")).
-		WithArgs("COMPLETED", now, stageID).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "workshop_id", "order_id", "position", "name", "status", "completed_at", "completed_by"}).
+			AddRow(stageID, workshopID, orderID, 1, "CORTE", "PENDING", nil, nil))
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE order_stages SET status = $1, completed_at = $2, completed_by = $3 WHERE id = $4 AND status = 'IN_PROGRESS'")).
+		WithArgs("COMPLETED", now, actorID, stageID).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
-	_, err := repository.UpdateStage(context.Background(), workshopID, orderID, 1, "COMPLETED")
+	_, err := repository.UpdateStage(context.Background(), workshopID, orderID, 1, actorID, "COMPLETED")
 
 	require.ErrorIs(t, err, ErrOrderInvalid)
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -40,14 +43,14 @@ func TestReopenStageRejectsWhenNextStageHasEvidence(t *testing.T) {
 	workshopID, orderID, stageID, nextID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT status FROM orders WHERE id = $1 FOR UPDATE")).WithArgs(orderID).
 		WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("ACTIVE"))
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, workshop_id, order_id, position, name, status, completed_at FROM order_stages WHERE order_id = $1 AND position = $2")).WithArgs(orderID, 1).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "workshop_id", "order_id", "position", "name", "status", "completed_at"}).AddRow(stageID, workshopID, orderID, 1, "CORTE", "COMPLETED", time.Now()))
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, workshop_id, order_id, position, name, status, completed_at FROM order_stages WHERE order_id = $1 AND position = $2")).WithArgs(orderID, 2).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "workshop_id", "order_id", "position", "name", "status", "completed_at"}).AddRow(nextID, workshopID, orderID, 2, "COSTURA", "IN_PROGRESS", nil))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, workshop_id, order_id, position, name, status, completed_at, completed_by FROM order_stages WHERE order_id = $1 AND position = $2 FOR UPDATE")).WithArgs(orderID, 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "workshop_id", "order_id", "position", "name", "status", "completed_at", "completed_by"}).AddRow(stageID, workshopID, orderID, 1, "CORTE", "COMPLETED", time.Now(), uuid.New()))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, workshop_id, order_id, position, name, status, completed_at, completed_by FROM order_stages WHERE order_id = $1 AND position = $2 FOR UPDATE")).WithArgs(orderID, 2).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "workshop_id", "order_id", "position", "name", "status", "completed_at", "completed_by"}).AddRow(nextID, workshopID, orderID, 2, "COSTURA", "IN_PROGRESS", nil, nil))
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT count(*) FROM stage_photos WHERE order_id = $1 AND stage_position = $2")).WithArgs(orderID, 2).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 	_, err := repository.ReopenStage(context.Background(), workshopID, orderID, 1, uuid.New(), "Se avanzó por error")
-	require.ErrorIs(t, err, ErrOrderInvalid)
+	require.ErrorIs(t, err, ErrNextStageHasEvidence)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -58,18 +61,18 @@ func TestReopenStageRecordsCorrectionAndRestoresPreviousStage(t *testing.T) {
 	repository.now = func() time.Time { return now }
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT status FROM orders WHERE id = $1 FOR UPDATE")).WithArgs(orderID).
 		WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("ACTIVE"))
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, workshop_id, order_id, position, name, status, completed_at FROM order_stages WHERE order_id = $1 AND position = $2")).WithArgs(orderID, 1).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "workshop_id", "order_id", "position", "name", "status", "completed_at"}).AddRow(stageID, workshopID, orderID, 1, "CORTE", "COMPLETED", now))
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, workshop_id, order_id, position, name, status, completed_at FROM order_stages WHERE order_id = $1 AND position = $2")).WithArgs(orderID, 2).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "workshop_id", "order_id", "position", "name", "status", "completed_at"}).AddRow(nextID, workshopID, orderID, 2, "COSTURA", "IN_PROGRESS", nil))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, workshop_id, order_id, position, name, status, completed_at, completed_by FROM order_stages WHERE order_id = $1 AND position = $2 FOR UPDATE")).WithArgs(orderID, 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "workshop_id", "order_id", "position", "name", "status", "completed_at", "completed_by"}).AddRow(stageID, workshopID, orderID, 1, "CORTE", "COMPLETED", now, actorID))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, workshop_id, order_id, position, name, status, completed_at, completed_by FROM order_stages WHERE order_id = $1 AND position = $2 FOR UPDATE")).WithArgs(orderID, 2).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "workshop_id", "order_id", "position", "name", "status", "completed_at", "completed_by"}).AddRow(nextID, workshopID, orderID, 2, "COSTURA", "IN_PROGRESS", nil, nil))
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT count(*) FROM stage_photos WHERE order_id = $1 AND stage_position = $2")).WithArgs(orderID, 2).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 	mock.ExpectExec("UPDATE order_stages SET status = 'PENDING'").WithArgs(nextID).WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec("UPDATE order_stages SET status = 'IN_PROGRESS', completed_at = NULL").WithArgs(stageID).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE order_stages SET status = 'IN_PROGRESS', completed_at = NULL, completed_by = NULL").WithArgs(stageID).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec("UPDATE orders SET status = 'ACTIVE'").WithArgs(now, orderID).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(regexp.QuoteMeta("jsonb_build_object('order_id', $3::text, 'stage_position', $4::integer, 'reason', $5::text)")).WithArgs(workshopID, actorID, orderID.String(), 1, "Se marcó por error").WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, workshop_id, order_id, position, name, status, completed_at FROM order_stages WHERE id = $1")).WithArgs(stageID).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "workshop_id", "order_id", "position", "name", "status", "completed_at"}).AddRow(stageID, workshopID, orderID, 1, "CORTE", "IN_PROGRESS", nil))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, workshop_id, order_id, position, name, status, completed_at, completed_by FROM order_stages WHERE id = $1")).WithArgs(stageID).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "workshop_id", "order_id", "position", "name", "status", "completed_at", "completed_by"}).AddRow(stageID, workshopID, orderID, 1, "CORTE", "IN_PROGRESS", nil, nil))
 
 	stage, err := repository.ReopenStage(context.Background(), workshopID, orderID, 1, actorID, "Se marcó por error")
 	require.NoError(t, err)

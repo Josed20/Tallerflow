@@ -81,6 +81,33 @@ func TestReopenStageRequiresReason(t *testing.T) {
 	}
 }
 
+func TestCancelRejectsOperator(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &handlerRepository{}
+	router := gin.New()
+	router.POST("/api/v1/orders/:id/cancel", principalMiddleware("OPERATOR"), NewHandler(NewService(repo)).Cancel)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/orders/"+uuid.NewString()+"/cancel", strings.NewReader(`{"reason":"Pedido duplicado"}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden || repo.cancelCalled {
+		t.Fatalf("operator cancellation = %d, repository called = %v", response.Code, repo.cancelCalled)
+	}
+}
+
+func TestUndoAllowsOperator(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &handlerRepository{}
+	router := gin.New()
+	router.POST("/api/v1/orders/:id/stages/:position/undo", principalMiddleware("OPERATOR"), NewHandler(NewService(repo)).UndoStage)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/orders/"+uuid.NewString()+"/stages/1/undo", nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !repo.undoStageCalled {
+		t.Fatalf("operator undo = %d, repository called = %v", response.Code, repo.undoStageCalled)
+	}
+}
+
 func TestAddStagePhotoRejectsOversizedPayloadBeforeRepository(t *testing.T) {
 	repo := &handlerRepository{}
 	service := NewService(repo)
@@ -120,6 +147,8 @@ type handlerRepository struct {
 	updateStageCalled   bool
 	reopenStageCalled   bool
 	addStagePhotoCalled bool
+	undoStageCalled     bool
+	cancelCalled        bool
 }
 
 func (r *handlerRepository) List(context.Context, uuid.UUID) ([]Order, error) { return nil, nil }
@@ -129,9 +158,19 @@ func (r *handlerRepository) GetByID(context.Context, uuid.UUID, uuid.UUID) (*Ord
 func (r *handlerRepository) Create(context.Context, uuid.UUID, CreateOrderInput, string) (*Order, error) {
 	return nil, ErrOrderInvalid
 }
-func (r *handlerRepository) UpdateStage(context.Context, uuid.UUID, uuid.UUID, int, string) (*OrderStage, error) {
+func (r *handlerRepository) UpdateStage(context.Context, uuid.UUID, uuid.UUID, int, uuid.UUID, string) (*OrderStage, error) {
 	r.updateStageCalled = true
 	return &OrderStage{}, nil
+}
+
+func (r *handlerRepository) UndoStage(context.Context, uuid.UUID, uuid.UUID, int, uuid.UUID) (*OrderStage, error) {
+	r.undoStageCalled = true
+	return &OrderStage{}, nil
+}
+
+func (r *handlerRepository) Cancel(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string) (*Order, error) {
+	r.cancelCalled = true
+	return &Order{}, nil
 }
 
 func (r *handlerRepository) ReopenStage(context.Context, uuid.UUID, uuid.UUID, int, uuid.UUID, string) (*OrderStage, error) {

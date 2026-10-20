@@ -15,6 +15,7 @@ import OrdersListView from '../modules/orders/OrdersListView.vue'
 import OrderCreateView from '../modules/orders/OrderCreateView.vue'
 import OrderDetailView from '../modules/orders/OrderDetailView.vue'
 import TrackingView from '../modules/tracking/TrackingView.vue'
+import ConsoleView from '../modules/console/ConsoleView.vue'
 import { useOnboardingStore } from '../modules/onboarding/onboarding.store'
 import { useSessionStore } from '../modules/session/session.store'
 
@@ -32,6 +33,7 @@ export const routes = [
   { path: '/reset-password', name: 'reset-password', component: ResetPasswordView, meta: { public: true, allowAuthenticated: true } },
   { path: '/change-password', name: 'change-password', component: ChangePasswordView },
   { path: '/seguimiento/:token', name: 'tracking', component: TrackingView, meta: { public: true, allowAuthenticated: true } },
+  { path: '/consola', name: 'console', component: ConsoleView, meta: { public: true, allowAuthenticated: true } },
   { path: '/app', name: 'app', component: SessionHomeView },
   { path: '/app/production', redirect: '/app/orders' },
   { path: '/app/clients', name: 'clients', component: ClientsView, meta: { roles: ['OWNER', 'ADMIN'] } },

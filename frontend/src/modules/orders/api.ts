@@ -12,6 +12,7 @@ export interface OrderStage {
   name: string
   status: StageStatus
   completed_at: string | null
+  completed_by?: string | null
 }
 
 export interface StagePhoto {
@@ -40,6 +41,9 @@ export interface Order {
   version: number
   created_at: string
   updated_at: string
+  cancelled_at?: string | null
+  cancelled_by?: string | null
+  cancellation_reason?: string
   traffic_light: TrafficLight
   current_stage?: string
   stages?: OrderStage[]
@@ -87,6 +91,14 @@ export const ordersApi = {
       { reason },
       csrfToken
     ),
+  undoStage: (orderId: string, position: number, csrfToken?: string) =>
+    api.post<{ data: OrderStage }>(
+      `/api/v1/orders/${orderId}/stages/${position}/undo`,
+      undefined,
+      csrfToken
+    ),
+  cancel: (orderId: string, reason: string, csrfToken?: string) =>
+    api.post<{ data: Order }>(`/api/v1/orders/${orderId}/cancel`, { reason }, csrfToken),
   addStagePhoto: (orderId: string, position: number, photoData: string, caption?: string, csrfToken?: string) =>
     api.post<{ data: StagePhoto }>(
       `/api/v1/orders/${orderId}/stages/${position}/photos`,

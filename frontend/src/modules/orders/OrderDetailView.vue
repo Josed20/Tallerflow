@@ -36,6 +36,12 @@ const generatingLink = ref(false)
 const shareError = ref('')
 const copied = ref(false)
 const trackingInput = ref<HTMLInputElement | null>(null)
+const clock = ref(Date.now())
+const undoingPosition = ref<number | null>(null)
+const showCancelDialog = ref(false)
+const cancellationReason = ref('')
+const cancellationError = ref('')
+const cancelling = ref(false)
 
 const canAdvance = computed(() => canAdvanceProduction(session.principal?.role))
 const canCorrect = computed(() => canManageOperations(session.principal?.role))
@@ -46,6 +52,49 @@ function canReopen(stage: OrderStage) {
   if (stage.position === 7) return order.value?.status === 'COMPLETED'
   const next = order.value?.stages?.find((item) => item.position === stage.position + 1)
   return next?.status === 'IN_PROGRESS' && getStagePhotos(stage.position + 1).length === 0
+}
+
+function canUndo(stage: OrderStage) {
+  if (!stage.completed_at || !stage.completed_by || stage.completed_by !== session.principal?.id) return false
+  if (stage.position !== lastCompletedPosition.value) return false
+  return clock.value - new Date(stage.completed_at).getTime() <= 5 * 60 * 1000
+}
+
+function undoSecondsLeft(stage: OrderStage) {
+  if (!stage.completed_at) return 0
+  return Math.max(0, Math.ceil((new Date(stage.completed_at).getTime() + 5 * 60 * 1000 - clock.value) / 1000))
+}
+
+async function handleUndo(stage: OrderStage) {
+  if (!order.value || undoingPosition.value !== null || !session.csrfToken) return
+  undoingPosition.value = stage.position
+  error.value = ''
+  try {
+    await ordersApi.undoStage(order.value.id, stage.position, session.csrfToken)
+    if (await loadOrder(false)) notice.value = `El avance se deshizo. La orden volvió a ${stage.name}.`
+  } catch (err: any) {
+    await loadOrder(false)
+    error.value = err?.message || 'Ya no se puede deshacer este avance.'
+  } finally {
+    undoingPosition.value = null
+  }
+}
+
+async function handleCancelOrder() {
+  if (!order.value || cancelling.value) return
+  if (cancellationReason.value.trim().length < 5) { cancellationError.value = 'Escribe un motivo de al menos 5 caracteres.'; return }
+  if (!session.csrfToken) { cancellationError.value = 'Tu sesión necesita renovarse.'; return }
+  cancelling.value = true
+  cancellationError.value = ''
+  try {
+    order.value = (await ordersApi.cancel(order.value.id, cancellationReason.value.trim(), session.csrfToken)).data
+    showCancelDialog.value = false
+    notice.value = 'La orden fue cancelada y salió del flujo de producción.'
+  } catch (err: any) {
+    cancellationError.value = err?.message || 'No pudimos cancelar la orden.'
+  } finally {
+    cancelling.value = false
+  }
 }
 
 async function handleCorrection() {
@@ -240,6 +289,7 @@ function printTicket() {
 // focus returns to the thumbnail that opened it.
 const photoCloseButton = ref<HTMLButtonElement | null>(null)
 let photoOpener: HTMLElement | null = null
+let clockTimer: number | undefined
 
 async function openPhoto(photo: StagePhoto, event: Event) {
   photoOpener = event.currentTarget as HTMLElement
@@ -260,10 +310,14 @@ function onKeydown(event: KeyboardEvent) {
 
 onMounted(() => {
   loadOrder()
+  clockTimer = window.setInterval(() => { clock.value = Date.now() }, 1000)
   window.addEventListener('keydown', onKeydown)
 })
 
-onUnmounted(() => window.removeEventListener('keydown', onKeydown))
+onUnmounted(() => {
+  if (clockTimer !== undefined) window.clearInterval(clockTimer)
+  window.removeEventListener('keydown', onKeydown)
+})
 </script>
 
 <template>
@@ -281,6 +335,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           </button>
           <button class="btn-ticket" type="button" @click="showTicketModal = true">
             <Printer :size="17" aria-hidden="true" /> Imprimir ficha viajera
+          </button>
+          <button v-if="canCorrect && order.status !== 'CANCELLED'" class="btn-ticket btn-cancel-order" type="button" @click="showCancelDialog = true; cancellationReason = ''; cancellationError = ''">
+            <X :size="17" aria-hidden="true" /> Cancelar orden
           </button>
         </div>
       </div>
@@ -415,6 +472,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                 </button>
 
                 <span v-else-if="stage.status === 'COMPLETED'" class="done-badge"><Check :size="15" aria-hidden="true" /> Listo</span>
+                <button v-if="canUndo(stage)" class="btn-correct-stage" type="button" :disabled="undoingPosition === stage.position" @click="handleUndo(stage)"><RotateCcw :size="15" aria-hidden="true" /> {{ undoingPosition === stage.position ? 'Deshaciendo...' : `Deshacer (${undoSecondsLeft(stage)} s)` }}</button>
                 <button v-if="canReopen(stage)" class="btn-correct-stage" type="button" @click="correctionStage = stage; correctionReason = ''; correctionError = ''"><RotateCcw :size="15" aria-hidden="true" /> Corregir avance</button>
               </div>
             </div>
@@ -490,6 +548,19 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <label for="correction-reason">Motivo de la corrección</label>
           <textarea id="correction-reason" v-model="correctionReason" required minlength="5" maxlength="300" rows="3" placeholder="Ej. Se marcó por error antes de terminar la revisión" />
           <div class="correction-dialog__actions"><button type="button" class="ops-button" @click="correctionStage = null">Mantener etapa</button><button type="submit" class="ops-button ops-button--primary" :disabled="correcting">{{ correcting ? 'Corrigiendo...' : 'Confirmar corrección' }}</button></div>
+        </form>
+      </div>
+    </div>
+
+    <div v-if="showCancelDialog && order" class="modal-backdrop" @click.self="!cancelling && (showCancelDialog = false)">
+      <div class="correction-dialog" role="dialog" aria-modal="true" aria-labelledby="cancel-order-title">
+        <h2 id="cancel-order-title">Cancelar {{ order.code }}</h2>
+        <p>La orden saldrá del tablero y el cliente verá que fue cancelada. Esta acción quedará registrada.</p>
+        <form @submit.prevent="handleCancelOrder">
+          <UiAlert v-if="cancellationError" :message="cancellationError" />
+          <label for="cancellation-reason">Motivo de la cancelación</label>
+          <textarea id="cancellation-reason" v-model="cancellationReason" required minlength="5" maxlength="300" rows="3" />
+          <div class="correction-dialog__actions"><button type="button" class="ops-button" :disabled="cancelling" @click="showCancelDialog = false">Mantener orden</button><button type="submit" class="ops-button ops-button--primary" :disabled="cancelling">{{ cancelling ? 'Cancelando...' : 'Confirmar cancelación' }}</button></div>
         </form>
       </div>
     </div>
@@ -633,6 +704,9 @@ h1 {
   background: var(--tf-done-soft);
   color: var(--tf-done);
 }
+
+.status-cancelled { background: var(--tf-error-soft); color: var(--tf-error); }
+.btn-cancel-order { color: var(--tf-error); border-color: var(--tf-error); }
 
 .specification-box {
   margin-top: 0.75rem;
