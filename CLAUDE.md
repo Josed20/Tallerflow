@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-TallerFlow is a multi-tenant traceability platform for garment workshops (talleres de confección). Go API + Vue 3 SPA + PostgreSQL with row-level security, all run through Docker Compose. README, docs and UI copy are in Spanish; product context lives in `docs/contexto-proyecto.md`, API contracts in `docs/contracts/` (OpenAPI), and sprint plans in `docs/superpowers/plans/`.
+TallerFlow is a multi-tenant traceability platform for garment workshops (talleres de confección). Go API + Vue 3 SPA + PostgreSQL with row-level security, all run through Docker Compose. README, docs and UI copy are in Spanish; product context lives in `docs/contexto-proyecto.md`, API contracts in `docs/contracts/` (OpenAPI), team sprint plans in `docs/sprints/` (current: `sprint-03-team-plan.md`), and earlier design specs/implementation plans in `docs/superpowers/specs/` and `docs/superpowers/plans/`.
 
 ## Commands
 
@@ -14,6 +14,7 @@ Copy-Item .env.example .env
 docker compose up -d --wait postgres flyway            # DB + migrations only
 docker compose -f compose.yaml -f compose.mail.yaml --profile app up -d --build --wait   # full app at http://localhost:8080 (+ Mailpit)
 docker compose -f compose.yaml -f compose.mail.yaml --profile app --profile tools down --remove-orphans   # stop (add --volumes to wipe DB)
+.\scripts\share-public.ps1                               # temporary public HTTPS URL via cloudflared (trycloudflare.com); needs the app running
 
 # Backend (module github.com/Josed20/Tallerflow/backend)
 go -C backend test ./...
@@ -30,11 +31,11 @@ npm --prefix frontend run test:e2e -- onboarding-flow.spec.ts   # Playwright, ne
 
 Postgres integration tests (`*_integration_test.go`, `TestPostgresIntegration*`) skip unless `TF_TEST_DATABASE_URL` (and for some, `TF_TEST_BOOTSTRAP_DATABASE_URL` / `TF_TEST_ADMIN_DATABASE_URL`) point at a migrated DB; see `scripts/verify-sprint2.sh` for the exact values.
 
-Full verification (what CI runs, from empty isolated Compose volumes): `./scripts/verify-sprint2.sh` (or `scripts\verify-sprint2.ps1` on Windows). It runs the Sprint 1 suite first, then `go test -race`, `go vet`, vitest + build, Redocly OpenAPI lint, SQL contract tests in `database/tests/`, Postgres integration tests and Playwright E2E. It uses isolated project names/ports (`tallerflow_sprint2_verify`, PG on 55434, app on 18081) so it does not touch the normal dev volume.
+Full verification (what CI runs, from empty isolated Compose volumes): `./scripts/verify-sprint2.sh` (or `scripts\verify-sprint2.ps1` on Windows). GitHub Actions (`.github/workflows/ci.yml`) runs it on every PR and push to `main`. It runs the Sprint 1 suite first, then `go test -race`, `go vet`, vitest + build, Redocly OpenAPI lint (only `docs/contracts/openapi.yaml` and `docs/contracts/openapi/sprint2/onboarding.yaml`), SQL contract tests in `database/tests/`, Postgres integration tests and Playwright E2E. It uses isolated project names/ports (`tallerflow_sprint2_verify`, PG on 55434, app on 18081) so it does not touch the normal dev volume.
 
 ## Architecture
 
-**Request path:** Caddy (`infra/caddy/Caddyfile`) serves everything from one origin: `/api/*` and `/health/*` → Go backend, everything else → nginx serving the Vue build. Frontend fetches use relative paths with `credentials: 'include'`. In dev, `frontend/vite.config.ts` proxies to that same origin (`VITE_API_TARGET`, default `http://localhost:8080`) and rewrites `Origin`/`Referer`, because the backend rejects mutations whose origin isn't `TF_ALLOWED_ORIGIN`. `frontend/nginx.conf` serves `index.html` as `no-cache` and hashed `/assets/` as immutable.
+**Request path:** Caddy (`infra/caddy/Caddyfile`) serves everything from one origin: `/api/*` and `/health/*` → Go backend, everything else → nginx serving the Vue build. Frontend fetches use relative paths with `credentials: 'include'`. In dev, `frontend/vite.config.ts` proxies to that same origin (`VITE_API_TARGET`, default `http://localhost:8080`) and rewrites `Origin`/`Referer`, because the backend rejects mutations whose origin isn't `TF_ALLOWED_ORIGIN`. `frontend/nginx.conf` serves `index.html` as `no-cache` and hashed `/assets/` as immutable. Production layers `compose.production.yaml` over `compose.yaml`: it unpublishes the Postgres port, sets `restart: always`, sets `TF_ENVIRONMENT=production` with SMTP over TLS, and fails fast (`${VAR:?}`) on any missing secret or DB password. A new required env var in prod has to be added there. On the VPS, `compose.tunnel.yaml` is layered on top: it removes Caddy's published port and adds a `cloudflared` container (tunnel config in `infra/cloudflared/config.yml`), so the server exposes only SSH. Setup steps are in `docs/runbooks/vps.md`.
 
 **Backend (`backend/`)** — Gin + GORM (pgx). Layout:
 
@@ -47,7 +48,7 @@ Full verification (what CI runs, from empty isolated Compose volumes): `./script
 
 **DB roles** (created by `infra/postgres/init-roles.sh`): `tallerflow_migrator` (Flyway), `tallerflow_app` (API, limited grants + RLS), `tallerflow_bootstrap` (onboarding/first-OWNER creation, separate connection `TF_BOOTSTRAP_DATABASE_URL`), `tallerflow_owner` (DB ownership only). Grants for new tables must be added in migrations.
 
-**Migrations:** Flyway, `database/migrations/V<n>__description.sql`. Never edit an applied migration; add a new version. The backend does not use `AutoMigrate`. SQL contract/RLS tests live in `database/tests/` and are run with `psql` as the appropriate role (see README).
+**Migrations:** Flyway, `database/migrations/V<n>__description.sql`. Never edit an applied migration; add a new version above the highest existing one (V3/V4 are intentionally absent on `main`, so don't backfill them). The backend does not use `AutoMigrate`. SQL contract/RLS tests live in `database/tests/` and are run with `psql` as the appropriate role (see README).
 
 **Auth/session:** cookie sessions (peppered with `TF_SESSION_PEPPER`), CSRF token required on mutating requests (`X-CSRF-Token`), origin check against `TF_ALLOWED_ORIGIN`, in-memory rate limiters. Roles: OWNER, ADMIN, SUPERVISOR, OPERATOR (`internal/workshops/role.go`); a first login after CLI bootstrap forces a password change. Error responses use a `{ "error": { "code", "request_id", ... } }` envelope with stable codes.
 
@@ -64,6 +65,7 @@ UI, flag code that doesn't match DESIGN.md.
 When the user's request matches an available skill, invoke it via the Skill tool. When in doubt, invoke the skill.
 
 Key routing rules:
+
 - Product ideas/brainstorming → invoke /office-hours
 - Strategy/scope → invoke /plan-ceo-review
 - Architecture → invoke /plan-eng-review

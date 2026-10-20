@@ -1,0 +1,22 @@
+# Publica la app por Cloudflare Tunnel en vez de abrir puertos en el servidor.
+# Se usa encima de compose.production.yaml:
+#   docker compose -f compose.yaml -f compose.production.yaml -f compose.tunnel.yaml --profile app up -d --build --wait
+# El túnel sale del servidor hacia Cloudflare (puerto 7844), así que el VPS
+# solo necesita SSH abierto. Ver docs/runbooks/vps.md.
+services:
+  gateway:
+    # Sin puerto publicado: solo cloudflared llega a Caddy por la red interna.
+    ports: !reset []
+
+  cloudflared:
+    profiles: ["app"]
+    image: cloudflare/cloudflared:2026.10.0
+    # La imagen ya arranca con "cloudflared --no-autoupdate" y corre como el usuario 65532.
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./infra/cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+      - ${TF_TUNNEL_CREDENTIALS_FILE:?set the path to the tunnel credentials JSON}:/etc/cloudflared/credentials.json:ro
+    depends_on:
+      - gateway
+    read_only: true
+    restart: always
