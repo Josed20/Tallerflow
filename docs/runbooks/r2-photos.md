@@ -5,8 +5,8 @@
 ## Preparación
 
 1. En la cuenta Cloudflare del equipo, crea un bucket privado **distinto** del bucket de respaldos. Crea credenciales R2 con acceso de lectura, escritura y eliminación solo a este bucket; la eliminación permite limpiar una subida cuyo registro SQL falle. No configures dominio público para el bucket.
-2. En el entorno local usa un bucket de prueba, no el de producción. Define `TF_R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com`, `TF_R2_BUCKET_PHOTOS`, `TF_R2_ACCESS_KEY_ID` y `TF_R2_SECRET_ACCESS_KEY` en un `.env` privado. Las cuatro variables se requieren juntas; producción no arranca sin ellas.
-3. Antes de desplegar, José agrega esas cuatro variables al `/opt/tallerflow/.env` del VPS. Confirma un respaldo del mismo día. La migración `V17` se fusiona **después** de las migraciones `V14`, `V15` y `V16` de Michael y se aplica una sola vez con Flyway.
+2. En el entorno local usa un bucket de prueba, no el de producción. Define `TF_R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com`, `TF_R2_BUCKET_PHOTOS`, `TF_R2_ACCESS_KEY_ID` y `TF_R2_SECRET_ACCESS_KEY` en un `.env` privado. Las cuatro variables se requieren juntas. Sin ellas, las fotos nuevas continúan en PostgreSQL.
+3. José agrega esas cuatro variables al `/opt/tallerflow/.env` del VPS antes de activar R2 y confirma un respaldo del mismo día. La migración `V17` se aplica después de las migraciones `V14`, `V15` y `V16` de Michael. Una vez creada una foto en R2, no retires las variables: se necesitan para mostrarla.
 4. Sube una foto JPEG pequeña en el entorno de prueba, abre la orden y el link de seguimiento, confirma que la imagen aparece, y verifica que el enlace deja de funcionar después de 15 minutos. La respuesta de detalle y seguimiento usa `Cache-Control: no-store`.
 5. Comprueba que una foto anterior sigue visible, que otra cuenta/taller no puede consultar la orden, y que la pestaña de consola del navegador no informa bloqueos CSP para la URL de R2.
 

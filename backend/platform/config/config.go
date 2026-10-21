@@ -81,7 +81,7 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))
 	}
 	configuredR2 := cfg.R2Endpoint != "" || cfg.R2BucketPhotos != "" || cfg.R2AccessKeyID != "" || cfg.R2SecretAccessKey != ""
-	if (configuredR2 || cfg.Environment == "production") &&
+	if configuredR2 &&
 		(cfg.R2Endpoint == "" || cfg.R2BucketPhotos == "" || cfg.R2AccessKeyID == "" || cfg.R2SecretAccessKey == "") {
 		return Config{}, fmt.Errorf("TF_R2_ENDPOINT, TF_R2_BUCKET_PHOTOS, TF_R2_ACCESS_KEY_ID and TF_R2_SECRET_ACCESS_KEY are required together")
 	}

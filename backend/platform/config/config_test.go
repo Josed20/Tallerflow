@@ -299,6 +299,18 @@ func TestLoadRejectsPartialR2Configuration(t *testing.T) {
 	require.NotContains(t, err.Error(), "test-access-key")
 }
 
+func TestLoadProductionWithoutR2KeepsLegacyPhotoStorage(t *testing.T) {
+	setValidProductionEnvironment(t)
+	t.Setenv("TF_R2_ENDPOINT", "")
+	t.Setenv("TF_R2_BUCKET_PHOTOS", "")
+	t.Setenv("TF_R2_ACCESS_KEY_ID", "")
+	t.Setenv("TF_R2_SECRET_ACCESS_KEY", "")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Empty(t, cfg.R2BucketPhotos)
+}
+
 func setValidProductionEnvironment(t *testing.T) {
 	t.Helper()
 	t.Setenv("TF_R2_ENDPOINT", "https://account.r2.cloudflarestorage.com")

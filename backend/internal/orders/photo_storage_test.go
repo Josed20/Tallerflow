@@ -79,6 +79,18 @@ func TestNewPhotoRemovesObjectWhenDatabaseInsertFails(t *testing.T) {
 	}
 }
 
+func TestNewPhotoKeepsDatabaseStorageWithoutR2(t *testing.T) {
+	repo := &photoRepository{}
+	data := jpegDataURL(t)
+	photo, err := NewService(repo).AddStagePhoto(context.Background(), uuid.New(), uuid.New(), 1, data, "Costura")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo.photoData != data || repo.objectKey != "" || photo.PhotoData != data {
+		t.Fatalf("legacy photo storage changed: data=%q key=%q", repo.photoData, repo.objectKey)
+	}
+}
+
 func TestGetOrderKeepsLegacyPhotoAndSignsNewPhoto(t *testing.T) {
 	repo := &photoRepository{order: &Order{Photos: []StagePhoto{
 		{PhotoData: "data:image/jpeg;base64,old"}, {ObjectKey: "workshops/new.jpg"},
