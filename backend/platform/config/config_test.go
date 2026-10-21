@@ -285,10 +285,38 @@ func setValidEnvironment(t *testing.T) {
 	t.Setenv("TF_SMTP_PASSWORD", "")
 	t.Setenv("TF_SMTP_FROM", "")
 	t.Setenv("TF_SMTP_REQUIRE_TLS", "")
+	t.Setenv("TF_R2_ENDPOINT", "https://account.r2.cloudflarestorage.com")
+	t.Setenv("TF_R2_BUCKET_PHOTOS", "test-photos")
+	t.Setenv("TF_R2_ACCESS_KEY_ID", "test-access-key")
+	t.Setenv("TF_R2_SECRET_ACCESS_KEY", "test-secret-key")
+}
+
+func TestLoadRejectsPartialR2Configuration(t *testing.T) {
+	setValidEnvironment(t)
+	t.Setenv("TF_R2_SECRET_ACCESS_KEY", "")
+	_, err := Load()
+	require.ErrorContains(t, err, "TF_R2_SECRET_ACCESS_KEY")
+	require.NotContains(t, err.Error(), "test-access-key")
+}
+
+func TestLoadProductionWithoutR2KeepsLegacyPhotoStorage(t *testing.T) {
+	setValidProductionEnvironment(t)
+	t.Setenv("TF_R2_ENDPOINT", "")
+	t.Setenv("TF_R2_BUCKET_PHOTOS", "")
+	t.Setenv("TF_R2_ACCESS_KEY_ID", "")
+	t.Setenv("TF_R2_SECRET_ACCESS_KEY", "")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Empty(t, cfg.R2BucketPhotos)
 }
 
 func setValidProductionEnvironment(t *testing.T) {
 	t.Helper()
+	t.Setenv("TF_R2_ENDPOINT", "https://account.r2.cloudflarestorage.com")
+	t.Setenv("TF_R2_BUCKET_PHOTOS", "test-photos")
+	t.Setenv("TF_R2_ACCESS_KEY_ID", "test-access-key")
+	t.Setenv("TF_R2_SECRET_ACCESS_KEY", "test-secret-key")
 	t.Setenv("TF_DATABASE_URL", "postgres://tallerflow_app:runtime-database-secret-123@db:5432/tallerflow?sslmode=require")
 	t.Setenv("TF_BOOTSTRAP_DATABASE_URL", "postgres://tallerflow_bootstrap:bootstrap-database-secret-123@db:5432/tallerflow?sslmode=require")
 	t.Setenv("TF_SESSION_PEPPER", "production-session-pepper-at-least-32-bytes")

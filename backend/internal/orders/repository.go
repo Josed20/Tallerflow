@@ -43,7 +43,8 @@ type StagePhoto struct {
 	WorkshopID    uuid.UUID `json:"workshop_id" gorm:"type:uuid;not null"`
 	OrderID       uuid.UUID `json:"order_id" gorm:"type:uuid;not null"`
 	StagePosition int       `json:"stage_position" gorm:"not null"`
-	PhotoData     string    `json:"photo_data" gorm:"not null"`
+	PhotoData     string    `json:"photo_data"`
+	ObjectKey     string    `json:"-" gorm:"-"`
 	Caption       string    `json:"caption"`
 	CreatedAt     time.Time `json:"created_at"`
 }
@@ -125,9 +126,9 @@ type Repository interface {
 	Update(ctx context.Context, workshopID uuid.UUID, orderID uuid.UUID, actorID uuid.UUID, input UpdateOrderInput) (*Order, error)
 	UpdateStage(ctx context.Context, workshopID uuid.UUID, orderID uuid.UUID, position int, actorID uuid.UUID, status string) (*OrderStage, error)
 	ReopenStage(ctx context.Context, workshopID uuid.UUID, orderID uuid.UUID, position int, actorID uuid.UUID, reason string) (*OrderStage, error)
+	AddStagePhoto(ctx context.Context, workshopID uuid.UUID, orderID uuid.UUID, stagePosition int, photoData string, objectKey string, caption string) (*StagePhoto, error)
 	UndoStage(ctx context.Context, workshopID uuid.UUID, orderID uuid.UUID, position int, actorID uuid.UUID) (*OrderStage, error)
 	Cancel(ctx context.Context, workshopID uuid.UUID, orderID uuid.UUID, actorID uuid.UUID, reason string) (*Order, error)
-	AddStagePhoto(ctx context.Context, workshopID uuid.UUID, orderID uuid.UUID, stagePosition int, photoData string, caption string) (*StagePhoto, error)
 	GetDashboardMetrics(ctx context.Context, workshopID uuid.UUID) (*DashboardMetrics, error)
 }
 
@@ -220,9 +221,10 @@ func (r *PostgresRepository) GetByID(ctx context.Context, workshopID uuid.UUID, 
 		order.Stages = stages
 
 		var photos []StagePhoto
-		if err := tx.Raw("SELECT id, workshop_id, order_id, stage_position, photo_data, caption, created_at FROM stage_photos WHERE order_id = ? ORDER BY created_at ASC", id).Scan(&photos).Error; err == nil {
-			order.Photos = photos
+		if err := tx.Raw("SELECT id, workshop_id, order_id, stage_position, COALESCE(photo_data, '') AS photo_data, COALESCE(object_key, '') AS object_key, caption, created_at FROM stage_photos WHERE order_id = ? ORDER BY created_at ASC", id).Scan(&photos).Error; err != nil {
+			return err
 		}
+		order.Photos = photos
 		return nil
 	})
 	if err != nil {
@@ -297,8 +299,8 @@ func (r *PostgresRepository) Update(ctx context.Context, workshopID uuid.UUID, o
 	return r.GetByID(ctx, workshopID, orderID)
 }
 
-func (r *PostgresRepository) AddStagePhoto(ctx context.Context, workshopID uuid.UUID, orderID uuid.UUID, stagePosition int, photoData string, caption string) (*StagePhoto, error) {
-	if strings.TrimSpace(photoData) == "" || stagePosition < 1 || stagePosition > 7 {
+func (r *PostgresRepository) AddStagePhoto(ctx context.Context, workshopID uuid.UUID, orderID uuid.UUID, stagePosition int, photoData string, objectKey string, caption string) (*StagePhoto, error) {
+	if (strings.TrimSpace(photoData) == "") == (strings.TrimSpace(objectKey) == "") || stagePosition < 1 || stagePosition > 7 {
 		return nil, ErrOrderInvalid
 	}
 	now := r.now().UTC()
@@ -308,14 +310,25 @@ func (r *PostgresRepository) AddStagePhoto(ctx context.Context, workshopID uuid.
 		OrderID:       orderID,
 		StagePosition: stagePosition,
 		PhotoData:     strings.TrimSpace(photoData),
+		ObjectKey:     strings.TrimSpace(objectKey),
 		Caption:       strings.TrimSpace(caption),
 		CreatedAt:     now,
 	}
 	err := r.tenant.WithinTenant(ctx, workshopID, func(tx *gorm.DB) error {
-		return tx.Exec(
-			"INSERT INTO stage_photos (id, workshop_id, order_id, stage_position, photo_data, caption, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-			photo.ID, photo.WorkshopID, photo.OrderID, photo.StagePosition, photo.PhotoData, photo.Caption, photo.CreatedAt,
-		).Error
+		result := tx.Exec(`
+			INSERT INTO stage_photos (id, workshop_id, order_id, stage_position, photo_data, object_key, caption, created_at)
+			SELECT ?, ?, o.id, ?, NULLIF(?, ''), NULLIF(?, ''), ?, ?
+			FROM orders o WHERE o.id = ? AND o.workshop_id = ?`,
+			photo.ID, photo.WorkshopID, photo.StagePosition, photo.PhotoData, photo.ObjectKey, photo.Caption, photo.CreatedAt,
+			photo.OrderID, workshopID,
+		)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return ErrOrderNotFound
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err

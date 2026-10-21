@@ -53,6 +53,7 @@ type TrackingStage struct {
 type TrackingPhoto struct {
 	StagePosition int       `json:"stage_position"`
 	PhotoData     string    `json:"photo_data"`
+	ObjectKey     string    `json:"-"`
 	Caption       string    `json:"caption"`
 	CreatedAt     time.Time `json:"created_at"`
 }
@@ -140,7 +141,7 @@ func (r *PostgresTrackingRepository) FindByToken(ctx context.Context, tokenHash 
 		if err := tx.Raw("SELECT position, name, status, completed_at FROM order_stages WHERE order_id = ? ORDER BY position", link.OrderID).Scan(&order.Stages).Error; err != nil {
 			return err
 		}
-		return tx.Raw("SELECT stage_position, photo_data, caption, created_at FROM stage_photos WHERE order_id = ? ORDER BY created_at", link.OrderID).Scan(&order.Photos).Error
+		return tx.Raw("SELECT stage_position, COALESCE(photo_data, '') AS photo_data, COALESCE(object_key, '') AS object_key, caption, created_at FROM stage_photos WHERE order_id = ? ORDER BY created_at", link.OrderID).Scan(&order.Photos).Error
 	})
 	if err != nil {
 		return nil, err
@@ -157,13 +158,18 @@ func (r *PostgresTrackingRepository) FindByToken(ctx context.Context, tokenHash 
 type TrackingService struct {
 	repo   TrackingRepository
 	random io.Reader
+	photos PhotoStore
 }
 
-func NewTrackingService(repo TrackingRepository, random io.Reader) *TrackingService {
+func NewTrackingService(repo TrackingRepository, random io.Reader, photos ...PhotoStore) *TrackingService {
 	if random == nil {
 		random = rand.Reader
 	}
-	return &TrackingService{repo: repo, random: random}
+	service := &TrackingService{repo: repo, random: random}
+	if len(photos) > 0 {
+		service.photos = photos[0]
+	}
+	return service
 }
 
 // CreateLink returns the raw token; only its hash is stored, so it cannot be
@@ -183,7 +189,16 @@ func (s *TrackingService) Find(ctx context.Context, token string) (*TrackingOrde
 	if !trackingTokenFormat.MatchString(token) {
 		return nil, ErrTrackingNotFound
 	}
-	return s.repo.FindByToken(ctx, trackingDigest(token))
+	order, err := s.repo.FindByToken(ctx, trackingDigest(token))
+	if err != nil {
+		return nil, err
+	}
+	for i := range order.Photos {
+		if err := resolvePhoto(ctx, s.photos, &order.Photos[i].PhotoData, order.Photos[i].ObjectKey); err != nil {
+			return nil, err
+		}
+	}
+	return order, nil
 }
 
 func trackingDigest(token string) []byte {

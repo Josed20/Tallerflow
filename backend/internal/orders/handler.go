@@ -36,6 +36,7 @@ func (h *Handler) List(c *gin.Context) {
 }
 
 func (h *Handler) GetByID(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	principal, err := httpx.PrincipalFromGin(c)
 	if err != nil {
 		httpx.RespondError(c, http.StatusUnauthorized, "SESSION_INVALID", "The session is invalid or has expired.")
@@ -318,6 +319,7 @@ func (h *Handler) ReopenStage(c *gin.Context) {
 }
 
 func (h *Handler) AddPhoto(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	principal, err := httpx.PrincipalFromGin(c)
 	if err != nil {
 		httpx.RespondError(c, http.StatusUnauthorized, "SESSION_INVALID", "The session is invalid or has expired.")
@@ -350,6 +352,10 @@ func (h *Handler) AddPhoto(c *gin.Context) {
 
 	photo, err := h.service.AddStagePhoto(c.Request.Context(), principal.WorkshopID, orderID, pos, input.PhotoData, input.Caption)
 	if err != nil {
+		if errors.Is(err, ErrOrderNotFound) {
+			httpx.RespondError(c, http.StatusNotFound, "ORDER_NOT_FOUND", "The order does not exist.")
+			return
+		}
 		if errors.Is(err, ErrOrderInvalid) {
 			httpx.RespondError(c, http.StatusUnprocessableEntity, "PHOTO_INVALID", "Review the submitted fields.")
 			return

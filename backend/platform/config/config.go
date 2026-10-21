@@ -32,6 +32,10 @@ type Config struct {
 	SMTPPassword         string
 	SMTPFromAddress      string
 	SMTPRequireTLS       bool
+	R2Endpoint           string
+	R2BucketPhotos       string
+	R2AccessKeyID        string
+	R2SecretAccessKey    string
 	ConsoleDatabaseURL   string
 	ConsoleOrigin        string
 	ConsoleTOTPKey       string
@@ -51,6 +55,10 @@ func Load() (Config, error) {
 		SMTPUsername:         strings.TrimSpace(os.Getenv("TF_SMTP_USER")),
 		SMTPPassword:         os.Getenv("TF_SMTP_PASSWORD"),
 		SMTPFromAddress:      valueOrDefault("TF_SMTP_FROM", "soporte@tallerflow.pe"),
+		R2Endpoint:           strings.TrimSpace(os.Getenv("TF_R2_ENDPOINT")),
+		R2BucketPhotos:       strings.TrimSpace(os.Getenv("TF_R2_BUCKET_PHOTOS")),
+		R2AccessKeyID:        strings.TrimSpace(os.Getenv("TF_R2_ACCESS_KEY_ID")),
+		R2SecretAccessKey:    os.Getenv("TF_R2_SECRET_ACCESS_KEY"),
 		ConsoleDatabaseURL:   strings.TrimSpace(os.Getenv("TF_CONSOLE_DATABASE_URL")),
 		ConsoleOrigin:        strings.TrimSpace(os.Getenv("TF_CONSOLE_ORIGIN")),
 		ConsoleTOTPKey:       os.Getenv("TF_CONSOLE_TOTP_KEY"),
@@ -71,6 +79,11 @@ func Load() (Config, error) {
 	}
 	if len(missing) > 0 {
 		return Config{}, fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))
+	}
+	configuredR2 := cfg.R2Endpoint != "" || cfg.R2BucketPhotos != "" || cfg.R2AccessKeyID != "" || cfg.R2SecretAccessKey != ""
+	if configuredR2 &&
+		(cfg.R2Endpoint == "" || cfg.R2BucketPhotos == "" || cfg.R2AccessKeyID == "" || cfg.R2SecretAccessKey == "") {
+		return Config{}, fmt.Errorf("TF_R2_ENDPOINT, TF_R2_BUCKET_PHOTOS, TF_R2_ACCESS_KEY_ID and TF_R2_SECRET_ACCESS_KEY are required together")
 	}
 
 	if !validEnvironment(cfg.Environment) {

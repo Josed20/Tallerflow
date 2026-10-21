@@ -65,6 +65,10 @@ services:
       TF_SMTP_PASSWORD: ${TF_SMTP_PASSWORD:-}
       TF_SMTP_FROM: ${TF_SMTP_FROM:-soporte@tallerflow.pe}
       TF_SMTP_REQUIRE_TLS: ${TF_SMTP_REQUIRE_TLS:-false}
+      TF_R2_ENDPOINT: ${TF_R2_ENDPOINT:-}
+      TF_R2_BUCKET_PHOTOS: ${TF_R2_BUCKET_PHOTOS:-}
+      TF_R2_ACCESS_KEY_ID: ${TF_R2_ACCESS_KEY_ID:-}
+      TF_R2_SECRET_ACCESS_KEY: ${TF_R2_SECRET_ACCESS_KEY:-}
     depends_on:
       flyway:
         condition: service_completed_successfully

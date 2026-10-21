@@ -22,7 +22,7 @@ tags:
   - name: Workshops
     description: Access to the workshop bound to the current session.
   - name: Orders
-    description: Tenant-scoped workshop orders.
+    description: Tenant-scoped workshop orders and production evidence.
 paths:
   /api/v1/orders/{id}:
     patch:
@@ -662,6 +662,63 @@ paths:
                       message: The current workshop is not available.
                       details: {}
                       request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/orders/{id}/stages/{position}/photos:
+    post:
+      tags: [Orders]
+      operationId: ordersAddStagePhoto
+      summary: Add JPEG evidence to a production stage
+      description: >-
+        New photos are stored in a private R2 bucket. The response photo_data
+        contains a signed GET URL valid for 15 minutes. Older photos retain
+        their data URL representation. The request requires an active workshop
+        session with OWNER, ADMIN or OPERATOR role.
+      security:
+        - sessionCookie: []
+        - bearerSession: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: position
+          required: true
+          schema: { type: integer, minimum: 1, maximum: 7 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [photo_data]
+              properties:
+                photo_data:
+                  type: string
+                  description: JPEG data URL, at most 3 MiB decoded.
+                caption:
+                  type: string
+                  maxLength: 300
+      responses:
+        '201':
+          description: Evidence stored in the private photo bucket.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id: { type: string, format: uuid }
+                      stage_position: { type: integer }
+                      photo_data: { type: string, format: uri }
+                      caption: { type: string }
+        '401':
+          $ref: '#/components/responses/SessionInvalid'
+        '404':
+          description: The order is not available in this workshop.
         '500':
           $ref: '#/components/responses/InternalError'
 components:
