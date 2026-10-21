@@ -40,7 +40,9 @@ npm --prefix frontend test
 npm --prefix frontend run build
 npx --yes '@redocly/cli@2.11.1' lint docs/contracts/openapi.yaml docs/contracts/openapi/sprint2/onboarding.yaml
 
-docker compose up -d --wait postgres flyway
+docker compose up -d --wait postgres
+# `up --wait` can return before the one-shot Flyway container finishes, so migrate in the foreground.
+docker compose run --rm flyway
 docker compose run --rm flyway validate
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d tallerflow < database/tests/console_role.sql
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_bootstrap -d tallerflow < database/tests/constraints.sql
@@ -49,7 +51,8 @@ docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_bootstrap 
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_app -d tallerflow < database/tests/rls.sql
 
 docker compose down --volumes --remove-orphans
-docker compose up -d --wait postgres flyway
+docker compose up -d --wait postgres
+docker compose run --rm flyway
 export TF_TEST_DATABASE_URL='postgres://tallerflow_app:local-app-change-me@127.0.0.1:55434/tallerflow?sslmode=disable'
 export TF_TEST_BOOTSTRAP_DATABASE_URL='postgres://tallerflow_bootstrap:local-bootstrap-change-me@127.0.0.1:55434/tallerflow?sslmode=disable'
 export TF_TEST_ADMIN_DATABASE_URL='postgres://postgres:local-postgres-change-me@127.0.0.1:55434/tallerflow?sslmode=disable'

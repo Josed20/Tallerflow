@@ -52,8 +52,11 @@ try {
     npx --yes '@redocly/cli@2.11.1' lint docs/contracts/openapi.yaml docs/contracts/openapi/sprint2/onboarding.yaml
     Assert-NativeSuccess 'OpenAPI lint'
 
-    docker compose up -d --wait postgres flyway
-    Assert-NativeSuccess 'Database migration startup'
+    docker compose up -d --wait postgres
+    Assert-NativeSuccess 'Database startup'
+    # `up --wait` can return before the one-shot Flyway container finishes, so migrate in the foreground.
+    docker compose run --rm flyway
+    Assert-NativeSuccess 'Database migration'
     docker compose run --rm flyway validate
     Assert-NativeSuccess 'Flyway validation'
     Get-Content database/tests/console_role.sql -Raw | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d tallerflow
@@ -69,8 +72,10 @@ try {
 
     docker compose down --volumes --remove-orphans
     Assert-NativeSuccess 'Reset before concurrent onboarding test'
-    docker compose up -d --wait postgres flyway
+    docker compose up -d --wait postgres
     Assert-NativeSuccess 'Fresh integration database startup'
+    docker compose run --rm flyway
+    Assert-NativeSuccess 'Fresh integration database migration'
     $env:TF_TEST_DATABASE_URL = 'postgres://tallerflow_app:local-app-change-me@127.0.0.1:55434/tallerflow?sslmode=disable'
     $env:TF_TEST_BOOTSTRAP_DATABASE_URL = 'postgres://tallerflow_bootstrap:local-bootstrap-change-me@127.0.0.1:55434/tallerflow?sslmode=disable'
     $env:TF_TEST_ADMIN_DATABASE_URL = 'postgres://postgres:local-postgres-change-me@127.0.0.1:55434/tallerflow?sslmode=disable'

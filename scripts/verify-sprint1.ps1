@@ -54,8 +54,11 @@ try {
     docker compose --profile tools build bootstrap
     Assert-NativeSuccess 'Bootstrap image build'
 
-    docker compose up -d --wait postgres flyway
-    Assert-NativeSuccess 'Database migration startup'
+    docker compose up -d --wait postgres
+    Assert-NativeSuccess 'Database startup'
+    # `up --wait` can return before the one-shot Flyway container finishes, so migrate in the foreground.
+    docker compose run --rm flyway
+    Assert-NativeSuccess 'Database migration'
     docker compose run --rm flyway validate
     Assert-NativeSuccess 'Flyway validation'
     Get-Content database/tests/constraints.sql -Raw | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_bootstrap -d tallerflow
