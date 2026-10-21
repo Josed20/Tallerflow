@@ -42,7 +42,9 @@ npm --prefix frontend test
 npm --prefix frontend run build
 docker compose --profile tools build bootstrap
 
-docker compose up -d --wait postgres flyway
+docker compose up -d --wait postgres
+# `up --wait` can return before the one-shot Flyway container finishes, so migrate in the foreground.
+docker compose run --rm flyway
 docker compose run --rm flyway validate
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_bootstrap -d tallerflow < database/tests/constraints.sql
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_bootstrap -d tallerflow < database/tests/identity_contract.sql
