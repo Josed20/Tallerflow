@@ -10,6 +10,7 @@ import (
 
 	"github.com/Josed20/Tallerflow/backend/internal/auth"
 	"github.com/Josed20/Tallerflow/backend/internal/clients"
+	platformconsole "github.com/Josed20/Tallerflow/backend/internal/console"
 	"github.com/Josed20/Tallerflow/backend/internal/onboarding"
 	"github.com/Josed20/Tallerflow/backend/internal/orders"
 	"github.com/Josed20/Tallerflow/backend/internal/passwordreset"
@@ -105,8 +106,26 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 		return nil, fmt.Errorf("create onboarding module: %w", err)
 	}
 	closeOnboarding := onceClose(onboardingModule.close)
+	var closeConsole = func() error { return nil }
+	var consoleRegistrar httpx.RouteRegistrar
+	var consoleService *platformconsole.Service
+	if cfg.ConsoleDatabaseURL != "" {
+		consoleDB, openErr := dependencies.openDatabase(cfg.ConsoleDatabaseURL)
+		if openErr != nil {
+			return nil, fmt.Errorf("open console database: %w", openErr)
+		}
+		closeConsole = onceClose(func() error { return database.Close(consoleDB) })
+		var serviceErr error
+		consoleService, serviceErr = platformconsole.NewService(consoleDB, cfg.ConsoleTOTPKey)
+		if serviceErr != nil {
+			_ = closeConsole()
+			return nil, fmt.Errorf("create console service: %w", serviceErr)
+		}
+		consoleHandler := platformconsole.NewHandler(consoleService, cfg.ConsoleOrigin, cfg.Environment != "development")
+		consoleRegistrar = func(routes gin.IRouter) { platformconsole.RegisterRoutes(routes, consoleHandler) }
+	}
 	closeApplication := onceClose(func() error {
-		return errors.Join(closeOnboarding(), closeDatabase())
+		return errors.Join(closeConsole(), closeOnboarding(), closeDatabase())
 	})
 	defer func() {
 		if failed {
@@ -139,6 +158,9 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create mail sender: %w", err)
+	}
+	if consoleService != nil {
+		consoleService.SetMailer(mailSender)
 	}
 	passwordResetService := passwordreset.NewService(
 		passwordResetRepository,
@@ -232,6 +254,9 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 			},
 		},
 	})
+	if consoleRegistrar != nil {
+		consoleRegistrar(router)
+	}
 	if err := router.SetTrustedProxies(cfg.TrustedProxies); err != nil {
 		return nil, fmt.Errorf("TF_TRUSTED_PROXIES is invalid")
 	}

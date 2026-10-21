@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
@@ -10,6 +11,13 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
+)
+
+const (
+	maxOpenConnections    = 25
+	maxIdleConnections    = 5
+	connectionMaxLifetime = 30 * time.Minute
+	connectionMaxIdleTime = 5 * time.Minute
 )
 
 // Open creates the application's GORM connection. Schema changes are owned by
@@ -23,7 +31,19 @@ func Open(databaseURL string) (*gorm.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("configure database pool: %w", err)
+	}
+	configurePool(sqlDB)
 	return db, nil
+}
+
+func configurePool(sqlDB *sql.DB) {
+	sqlDB.SetMaxOpenConns(maxOpenConnections)
+	sqlDB.SetMaxIdleConns(maxIdleConnections)
+	sqlDB.SetConnMaxLifetime(connectionMaxLifetime)
+	sqlDB.SetConnMaxIdleTime(connectionMaxIdleTime)
 }
 
 func runtimeGORMConfig() *gorm.Config {

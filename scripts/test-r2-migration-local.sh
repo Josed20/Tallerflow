@@ -15,12 +15,10 @@ docker compose exec -T postgres sh -eu -c '
 
 docker compose run --rm -T \
   -e "FLYWAY_URL=jdbc:postgresql://postgres:5432/$test_db" \
-  flyway -target=13 migrate
-
-docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$1" -v ON_ERROR_STOP=1' sh "$test_db" < database/migrations/V16__stage_photos_r2_objects.sql
+  flyway migrate
 
 result=$(docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$1" -Atc "SELECT count(*) FROM stage_photos WHERE photo_data IS NULL OR object_key IS NOT NULL"' sh "$test_db")
-[[ "$result" == "0" ]] || { echo "Legacy photos changed during V16 migration." >&2; exit 1; }
+[[ "$result" == "0" ]] || { echo "Legacy photos changed during V17 migration." >&2; exit 1; }
 docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$1" -Atc "SELECT column_name FROM information_schema.columns WHERE table_name = '\''stage_photos'\'' AND column_name = '\''object_key'\''"' sh "$test_db" | grep -qx object_key
 docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$1" -Atc "SELECT conname FROM pg_constraint WHERE conname = '\''stage_photos_storage_check'\''"' sh "$test_db" | grep -qx stage_photos_storage_check
-echo "V16 passed on an isolated copy; legacy photos are intact."
+echo "V17 passed on an isolated copy; legacy photos are intact."

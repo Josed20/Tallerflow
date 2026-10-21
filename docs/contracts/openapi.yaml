@@ -22,8 +22,65 @@ tags:
   - name: Workshops
     description: Access to the workshop bound to the current session.
   - name: Orders
-    description: Tenant-scoped orders and production evidence.
+    description: Tenant-scoped workshop orders and production evidence.
 paths:
+  /api/v1/orders/{id}:
+    patch:
+      tags: [Orders]
+      operationId: updateOrder
+      summary: Edit an active order using its current version
+      description: >-
+        OWNER and ADMIN only. Updates the client, product, quantity and promised
+        date in one transaction. The client must belong to the same workshop.
+        Returns the updated order and records changed fields in ORDER_UPDATED.
+      security:
+        - sessionCookie: []
+        - bearerSession: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [client_id, product, quantity, promised_at, version]
+              properties:
+                client_id:
+                  type: string
+                  format: uuid
+                product:
+                  type: string
+                  minLength: 1
+                  maxLength: 160
+                quantity:
+                  type: number
+                  exclusiveMinimum: 0
+                  multipleOf: 0.01
+                promised_at:
+                  type: string
+                  format: date-time
+                version:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: Updated order in the standard data envelope.
+        '403':
+          description: ROLE_FORBIDDEN for a role other than OWNER or ADMIN.
+        '404':
+          description: ORDER_NOT_FOUND, including an order in another workshop.
+        '409':
+          description: ORDER_VERSION_CONFLICT or ORDER_NOT_EDITABLE.
+        '422':
+          description: ORDER_INVALID.
   /api/v1/onboarding/status:
     get:
       tags: [Onboarding]

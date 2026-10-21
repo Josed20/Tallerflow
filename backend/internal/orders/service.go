@@ -55,8 +55,20 @@ func (s *Service) Create(ctx context.Context, workshopID uuid.UUID, input Create
 	return s.repo.Create(ctx, workshopID, input, idempotencyKey)
 }
 
-func (s *Service) UpdateStage(ctx context.Context, workshopID uuid.UUID, orderID uuid.UUID, position int, status string) (*OrderStage, error) {
-	return s.repo.UpdateStage(ctx, workshopID, orderID, position, status)
+func (s *Service) Update(ctx context.Context, workshopID uuid.UUID, orderID uuid.UUID, actorID uuid.UUID, input UpdateOrderInput) (*Order, error) {
+	return s.repo.Update(ctx, workshopID, orderID, actorID, input)
+}
+
+func (s *Service) UpdateStage(ctx context.Context, workshopID uuid.UUID, orderID uuid.UUID, position int, actorID uuid.UUID, status string) (*OrderStage, error) {
+	return s.repo.UpdateStage(ctx, workshopID, orderID, position, actorID, status)
+}
+
+func (s *Service) UndoStage(ctx context.Context, workshopID uuid.UUID, orderID uuid.UUID, position int, actorID uuid.UUID) (*OrderStage, error) {
+	return s.repo.UndoStage(ctx, workshopID, orderID, position, actorID)
+}
+
+func (s *Service) Cancel(ctx context.Context, workshopID uuid.UUID, orderID uuid.UUID, actorID uuid.UUID, reason string) (*Order, error) {
+	return s.repo.Cancel(ctx, workshopID, orderID, actorID, reason)
 }
 
 func (s *Service) ReopenStage(ctx context.Context, workshopID uuid.UUID, orderID uuid.UUID, position int, actorID uuid.UUID, reason string) (*OrderStage, error) {

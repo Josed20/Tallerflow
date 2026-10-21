@@ -81,6 +81,61 @@ func TestReopenStageRequiresReason(t *testing.T) {
 	}
 }
 
+func TestCancelRejectsOperator(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &handlerRepository{}
+	router := gin.New()
+	router.POST("/api/v1/orders/:id/cancel", principalMiddleware("OPERATOR"), NewHandler(NewService(repo)).Cancel)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/orders/"+uuid.NewString()+"/cancel", strings.NewReader(`{"reason":"Pedido duplicado"}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden || repo.cancelCalled {
+		t.Fatalf("operator cancellation = %d, repository called = %v", response.Code, repo.cancelCalled)
+	}
+}
+
+func TestUpdateRejectsOperator(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &handlerRepository{}
+	router := gin.New()
+	router.PATCH("/api/v1/orders/:id", principalMiddleware("OPERATOR"), NewHandler(NewService(repo)).Update)
+	request := httptest.NewRequest(http.MethodPatch, "/api/v1/orders/"+uuid.NewString(), strings.NewReader(`{"version":1}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden || repo.updateCalled {
+		t.Fatalf("operator update = %d, repository called = %v", response.Code, repo.updateCalled)
+	}
+}
+
+func TestUpdateReportsVersionConflict(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &handlerRepository{updateError: ErrOrderVersionConflict}
+	router := gin.New()
+	router.PATCH("/api/v1/orders/:id", principalMiddleware("ADMIN"), NewHandler(NewService(repo)).Update)
+	request := httptest.NewRequest(http.MethodPatch, "/api/v1/orders/"+uuid.NewString(), strings.NewReader(`{"client_id":"`+uuid.NewString()+`","product":"Camisa","quantity":2,"promised_at":"2026-11-01T00:00:00Z","version":1}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "ORDER_VERSION_CONFLICT") || !repo.updateCalled {
+		t.Fatalf("version conflict = %d %s, repository called = %v", response.Code, response.Body.String(), repo.updateCalled)
+	}
+}
+
+func TestUndoAllowsOperator(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &handlerRepository{}
+	router := gin.New()
+	router.POST("/api/v1/orders/:id/stages/:position/undo", principalMiddleware("OPERATOR"), NewHandler(NewService(repo)).UndoStage)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/orders/"+uuid.NewString()+"/stages/1/undo", nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !repo.undoStageCalled {
+		t.Fatalf("operator undo = %d, repository called = %v", response.Code, repo.undoStageCalled)
+	}
+}
+
 func TestAddStagePhotoRejectsOversizedPayloadBeforeRepository(t *testing.T) {
 	repo := &handlerRepository{}
 	service := NewService(repo)
@@ -117,9 +172,13 @@ func principalMiddleware(role string) gin.HandlerFunc {
 }
 
 type handlerRepository struct {
+	updateCalled        bool
+	updateError         error
 	updateStageCalled   bool
 	reopenStageCalled   bool
 	addStagePhotoCalled bool
+	undoStageCalled     bool
+	cancelCalled        bool
 }
 
 func TestAddPhotoReturnsNotFoundWhenOrderIsNotInWorkshop(t *testing.T) {
@@ -144,9 +203,26 @@ func (r *handlerRepository) GetByID(context.Context, uuid.UUID, uuid.UUID) (*Ord
 func (r *handlerRepository) Create(context.Context, uuid.UUID, CreateOrderInput, string) (*Order, error) {
 	return nil, ErrOrderInvalid
 }
-func (r *handlerRepository) UpdateStage(context.Context, uuid.UUID, uuid.UUID, int, string) (*OrderStage, error) {
+func (r *handlerRepository) Update(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, UpdateOrderInput) (*Order, error) {
+	r.updateCalled = true
+	if r.updateError != nil {
+		return nil, r.updateError
+	}
+	return &Order{}, nil
+}
+func (r *handlerRepository) UpdateStage(context.Context, uuid.UUID, uuid.UUID, int, uuid.UUID, string) (*OrderStage, error) {
 	r.updateStageCalled = true
 	return &OrderStage{}, nil
+}
+
+func (r *handlerRepository) UndoStage(context.Context, uuid.UUID, uuid.UUID, int, uuid.UUID) (*OrderStage, error) {
+	r.undoStageCalled = true
+	return &OrderStage{}, nil
+}
+
+func (r *handlerRepository) Cancel(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string) (*Order, error) {
+	r.cancelCalled = true
+	return &Order{}, nil
 }
 
 func (r *handlerRepository) ReopenStage(context.Context, uuid.UUID, uuid.UUID, int, uuid.UUID, string) (*OrderStage, error) {

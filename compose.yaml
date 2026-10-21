@@ -75,6 +75,10 @@ services:
     expose:
       - "8080"
     read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     tmpfs:
       - /tmp
     restart: unless-stopped
@@ -92,6 +96,10 @@ services:
         condition: service_completed_successfully
     stdin_open: true
     read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     tmpfs:
       - /tmp
     restart: "no"
@@ -104,6 +112,10 @@ services:
     expose:
       - "8080"
     read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     tmpfs:
       - /tmp
       - /var/cache/nginx
