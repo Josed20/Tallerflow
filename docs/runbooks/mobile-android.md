@@ -1,6 +1,6 @@
 # Android: build and pilot
 
-The Vue application is packaged with Capacitor 8. A release APK uses the same HTTPS API as the web application. A release APK cannot connect until José's mobile bearer session and CORS contract are merged.
+The Vue application is packaged with Capacitor 8. The release APK connects to `https://tallerflowpe.com` through the mobile bearer session and CORS contract already merged in Sprint 3.
 
 ## Vista previa local por USB
 
@@ -36,14 +36,14 @@ Para volver al build móvil normal en la misma terminal, quita `TF_ANDROID_LOCAL
 
 ```powershell
 Remove-Item Env:TF_ANDROID_LOCAL_PREVIEW -ErrorAction SilentlyContinue
-$env:VITE_API_BASE_URL = "https://tu-dominio-real"
+$env:VITE_API_BASE_URL = "https://tallerflowpe.com"
 npm --prefix frontend run android:sync
 ```
 
 ## Local build
 
 1. Install Node 24, Android Studio with Android SDK 36, and JDK 21.
-2. Set `VITE_API_BASE_URL` to the public HTTPS origin, for example `https://tallerflow.pe`. Do not include `/api`.
+2. Set `VITE_API_BASE_URL` to `https://tallerflowpe.com`. Do not include `/api`.
 3. Run `npm --prefix frontend ci` and `npm --prefix frontend run android:sync`.
 4. Run `npm --prefix frontend run android:open`; select a connected Android device or emulator in Android Studio.
 
@@ -51,6 +51,6 @@ The Android app uses encrypted storage backed by Android Keystore for the opaque
 
 ## Signed release
 
-The `Android APK` workflow runs on a `v*` tag. Set GitHub Actions secrets `TF_PUBLIC_BASE_URL`, `TF_ANDROID_KEYSTORE_B64`, `TF_ANDROID_KEYSTORE_PASSWORD`, `TF_ANDROID_KEY_ALIAS`, and `TF_ANDROID_KEY_PASSWORD`. The keystore must also be stored securely outside GitHub by José. Download the signed APK from the workflow artifact and test it on an older and a current Android phone before distributing it.
+The `Android APK` workflow runs manually or on a `v*` tag and targets `https://tallerflowpe.com`. Set GitHub Actions secrets `TF_ANDROID_KEYSTORE_B64`, `TF_ANDROID_KEYSTORE_PASSWORD`, `TF_ANDROID_KEY_ALIAS`, and `TF_ANDROID_KEY_PASSWORD`. The keystore must also be stored securely outside GitHub by José; losing it prevents signing future updates with the same identity. The workflow verifies the APK signature and prints its SHA-256 digest. Download the signed artifact and test it on an older and a current Android phone before distributing it. A GitHub Actions artifact is for the team and is not a permanent public download URL for the landing page; choose an approved release host before Lucero links it.
 
-Never commit a `.jks`, `.keystore`, APK, password, or `.env`. The Android project ignores them. The app icons and splash can be generated after Lucero's resource files are merged; this branch intentionally retains Capacitor's provisional artwork.
+Never commit a `.jks`, `.keystore`, APK, password, or `.env`. The Android project ignores them. Check the installed icon and splash on both test phones before release.
