@@ -29,6 +29,10 @@ services:
       TF_SMTP_PASSWORD: ${TF_SMTP_PASSWORD:?set the production SMTP password}
       TF_SMTP_FROM: ${TF_SMTP_FROM:?set the verified SMTP sender}
       TF_SMTP_REQUIRE_TLS: "true"
+      TF_R2_ENDPOINT: ${TF_R2_ENDPOINT:?set the R2 S3 endpoint}
+      TF_R2_BUCKET_PHOTOS: ${TF_R2_BUCKET_PHOTOS:?set the private photos bucket}
+      TF_R2_ACCESS_KEY_ID: ${TF_R2_ACCESS_KEY_ID:?set the photo bucket access key}
+      TF_R2_SECRET_ACCESS_KEY: ${TF_R2_SECRET_ACCESS_KEY:?set the photo bucket secret key}
       TF_ENVIRONMENT: production
     restart: always
 

@@ -257,4 +257,16 @@ func setValidEnvironment(t *testing.T) {
 	t.Setenv("TF_SMTP_PASSWORD", "")
 	t.Setenv("TF_SMTP_FROM", "")
 	t.Setenv("TF_SMTP_REQUIRE_TLS", "")
+	t.Setenv("TF_R2_ENDPOINT", "https://account.r2.cloudflarestorage.com")
+	t.Setenv("TF_R2_BUCKET_PHOTOS", "test-photos")
+	t.Setenv("TF_R2_ACCESS_KEY_ID", "test-access-key")
+	t.Setenv("TF_R2_SECRET_ACCESS_KEY", "test-secret-key")
+}
+
+func TestLoadRejectsPartialR2Configuration(t *testing.T) {
+	setValidEnvironment(t)
+	t.Setenv("TF_R2_SECRET_ACCESS_KEY", "")
+	_, err := Load()
+	require.ErrorContains(t, err, "TF_R2_SECRET_ACCESS_KEY")
+	require.NotContains(t, err.Error(), "test-access-key")
 }

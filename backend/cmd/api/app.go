@@ -15,6 +15,7 @@ import (
 	"github.com/Josed20/Tallerflow/backend/internal/passwordreset"
 	"github.com/Josed20/Tallerflow/backend/internal/team"
 	"github.com/Josed20/Tallerflow/backend/internal/workshops"
+	"github.com/Josed20/Tallerflow/backend/platform/blob"
 	"github.com/Josed20/Tallerflow/backend/platform/config"
 	"github.com/Josed20/Tallerflow/backend/platform/database"
 	"github.com/Josed20/Tallerflow/backend/platform/httpx"
@@ -178,18 +179,28 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 	}
 	clientsService := clients.NewService(clientsRepo)
 	clientsHandler := clients.NewHandler(clientsService)
+	var photoStore orders.PhotoStore
+	if cfg.R2BucketPhotos != "" {
+		photoStore, err = blob.NewR2(context.Background(), blob.Config{
+			Endpoint: cfg.R2Endpoint, Bucket: cfg.R2BucketPhotos,
+			AccessKey: cfg.R2AccessKeyID, SecretKey: cfg.R2SecretAccessKey,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("create photo store: %w", err)
+		}
+	}
 
 	ordersRepo, err := orders.NewPostgresRepository(tenantRunner)
 	if err != nil {
 		return nil, fmt.Errorf("create orders repository: %w", err)
 	}
-	ordersService := orders.NewService(ordersRepo)
+	ordersService := orders.NewService(ordersRepo, photoStore)
 	ordersHandler := orders.NewHandler(ordersService)
 	trackingRepo, err := orders.NewPostgresTrackingRepository(db, tenantRunner)
 	if err != nil {
 		return nil, fmt.Errorf("create tracking repository: %w", err)
 	}
-	trackingHandler := orders.NewTrackingHandler(orders.NewTrackingService(trackingRepo, nil))
+	trackingHandler := orders.NewTrackingHandler(orders.NewTrackingService(trackingRepo, nil, photoStore))
 
 	ping := func(ctx context.Context) error {
 		if err := database.Ping(ctx, db); err != nil {

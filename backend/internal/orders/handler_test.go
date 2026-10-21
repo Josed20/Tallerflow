@@ -122,6 +122,21 @@ type handlerRepository struct {
 	addStagePhotoCalled bool
 }
 
+func TestAddPhotoReturnsNotFoundWhenOrderIsNotInWorkshop(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := &photoStore{}
+	repo := &photoRepository{insertErr: ErrOrderNotFound}
+	router := gin.New()
+	router.POST("/api/v1/orders/:id/stages/:position/photos", principalMiddleware("OPERATOR"), NewHandler(NewService(repo, store)).AddPhoto)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/orders/"+uuid.NewString()+"/stages/1/photos", strings.NewReader(`{"photo_data":"`+jpegDataURL(t)+`"}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound || store.putKey == "" || store.deletedKey != store.putKey {
+		t.Fatalf("status=%d, uploaded=%q, deleted=%q", response.Code, store.putKey, store.deletedKey)
+	}
+}
+
 func (r *handlerRepository) List(context.Context, uuid.UUID) ([]Order, error) { return nil, nil }
 func (r *handlerRepository) GetByID(context.Context, uuid.UUID, uuid.UUID) (*Order, error) {
 	return nil, ErrOrderNotFound
@@ -138,7 +153,7 @@ func (r *handlerRepository) ReopenStage(context.Context, uuid.UUID, uuid.UUID, i
 	r.reopenStageCalled = true
 	return &OrderStage{}, nil
 }
-func (r *handlerRepository) AddStagePhoto(context.Context, uuid.UUID, uuid.UUID, int, string, string) (*StagePhoto, error) {
+func (r *handlerRepository) AddStagePhoto(context.Context, uuid.UUID, uuid.UUID, int, string, string, string) (*StagePhoto, error) {
 	r.addStagePhotoCalled = true
 	return nil, ErrOrderInvalid
 }
