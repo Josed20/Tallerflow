@@ -8,10 +8,13 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/bootstrap ./cmd/bootstrap
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/tallerflow-consoleadmin ./cmd/consoleadmin
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build --chown=nonroot:nonroot /out/api /api
 COPY --from=build --chown=nonroot:nonroot /out/bootstrap /bootstrap
+COPY --from=build --chown=nonroot:nonroot /out/tallerflow-consoleadmin /tallerflow-consoleadmin
 USER nonroot:nonroot
 EXPOSE 8080
 ENTRYPOINT ["/api"]
