@@ -7,6 +7,7 @@ import UiButton from '../../components/UiButton.vue'
 import UiField from '../../components/UiField.vue'
 import { useSessionStore } from '../session/session.store'
 import { ApiError } from '../session/api'
+import { useResendVerification } from '../signup/useResendVerification'
 
 const router = useRouter()
 const route = useRoute()
@@ -16,6 +17,9 @@ const password = ref('')
 const attempted = ref(false)
 const submitting = ref(false)
 const serverError = ref('')
+// Sprint 4 - José: an open-signup owner who has not opened the emailed link yet.
+const unverifiedEmail = ref('')
+const resend = useResendVerification()
 const sessionNotice = computed(() => route.query.session === 'suspended'
   ? 'El taller está suspendido. Consulta con su propietario antes de volver a entrar.'
   : route.query.session === 'expired'
@@ -29,6 +33,7 @@ async function submit() {
   if (submitting.value) return
   attempted.value = true
   serverError.value = ''
+  unverifiedEmail.value = ''
   if (emailError.value || passwordError.value) return
 
   submitting.value = true
@@ -36,6 +41,10 @@ async function submit() {
     await session.login(email.value, password.value)
     await router.replace(session.requiresPasswordChange ? '/change-password' : (route.query.redirect?.toString() ?? '/app'))
   } catch (error) {
+    if (error instanceof ApiError && error.code === 'EMAIL_NOT_VERIFIED') {
+      unverifiedEmail.value = email.value.trim()
+      return
+    }
     serverError.value = error instanceof ApiError && error.code === 'WORKSHOP_SUSPENDED'
       ? 'Este taller está suspendido. Consulta con su propietario.'
       : 'No pudimos iniciar sesión. Revisa tus datos e inténtalo de nuevo.'
@@ -52,6 +61,14 @@ async function submit() {
     <form class="auth-form" novalidate @submit.prevent="submit">
       <p v-if="sessionNotice" class="auth-session-notice" role="status">{{ sessionNotice }}</p>
       <UiAlert v-if="serverError" :message="serverError" />
+      <div v-if="unverifiedEmail" class="auth-session-notice auth-unverified" role="status">
+        <p><strong>Activa tu taller primero.</strong> Abre el enlace que enviamos a {{ unverifiedEmail }} para verificar tu correo.</p>
+        <p v-if="resend.failed.value" class="auth-unverified__error">{{ resend.failed.value }}</p>
+        <p v-else-if="resend.sent.value">Listo, te enviamos un enlace nuevo. Revisa también spam.</p>
+        <UiButton type="button" variant="secondary" :loading="resend.sending.value" :disabled="resend.remaining.value > 0" @click="resend.resend(unverifiedEmail)">
+          {{ resend.remaining.value > 0 ? `Reenviar en ${resend.remaining.value} s` : 'Reenviar el correo' }}
+        </UiButton>
+      </div>
       <UiField id="email" v-model="email" label="Correo electrónico" type="email" autocomplete="email" placeholder="ejemplo@taller.pe" :error="emailError" />
       <UiField id="password" v-model="password" label="Contraseña" type="password" autocomplete="current-password" placeholder="••••••••" :error="passwordError" />
       <div class="auth-recovery-link">
@@ -60,6 +77,7 @@ async function submit() {
         </RouterLink>
       </div>
       <UiButton type="submit" :loading="submitting">Iniciar sesión</UiButton>
+      <p class="auth-signup-link">¿Tu taller aún no tiene cuenta? <RouterLink to="/registro" class="auth-link">Créala aquí</RouterLink></p>
     </form>
   </AuthLayout>
 </template>
@@ -72,6 +90,26 @@ async function submit() {
   border-radius: 0.5rem;
   background: var(--tf-surface);
   color: var(--tf-ink);
+}
+
+.auth-unverified {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.auth-unverified p {
+  margin: 0;
+}
+
+.auth-unverified__error {
+  color: var(--tf-danger);
+}
+
+.auth-signup-link {
+  margin: 0;
+  color: var(--tf-text-muted);
+  font-size: 0.875rem;
+  text-align: center;
 }
 
 .auth-recovery-link {

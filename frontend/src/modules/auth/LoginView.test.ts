@@ -57,3 +57,34 @@ describe('LoginView', () => {
     expect(alert.textContent).toContain('No pudimos iniciar sesión')
   })
 })
+
+describe('LoginView with an unverified email', () => {
+  it('asks the owner to open the emailed link and lets them resend it', async () => {
+    const { ApiError } = await import('../session/api')
+    const { signupApi } = await import('../signup/api')
+    const pinia = createPinia()
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/', component: LoginView },
+        { path: '/forgot-password', component: { template: '<div />' } },
+        { path: '/registro', component: { template: '<div />' } },
+      ],
+    })
+    await router.push('/')
+    await router.isReady()
+    vi.spyOn(useSessionStore(pinia), 'login').mockRejectedValue(new ApiError(403, 'EMAIL_NOT_VERIFIED'))
+    const resend = vi.spyOn(signupApi, 'resend').mockResolvedValue({ data: {} })
+    render(LoginView, { global: { plugins: [pinia, router] } })
+
+    await fireEvent.update(screen.getByLabelText('Correo electrónico'), 'lucho@taller.pe')
+    await fireEvent.update(screen.getByLabelText('Contraseña'), 'Secure signup password 2026!')
+    await fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
+
+    expect(await screen.findByText('Activa tu taller primero.')).toBeTruthy()
+    expect(screen.queryByText(/No pudimos iniciar sesión/)).toBeNull()
+    await fireEvent.click(screen.getByRole('button', { name: 'Reenviar el correo' }))
+    expect(resend).toHaveBeenCalledWith('lucho@taller.pe')
+    expect(screen.getByRole('link', { name: 'Créala aquí' }).getAttribute('href')).toBe('/registro')
+  })
+})

@@ -22,14 +22,14 @@ describe('application router guards', () => {
     expect(onboarding.loadStatus).toHaveBeenCalled()
   })
 
-  it('sends onboarding back to login once the installation is claimed', async () => {
+  it('sends onboarding to open signup once the installation is claimed', async () => {
     const { router, onboarding } = buildAnonymousRouter()
     vi.spyOn(onboarding, 'loadStatus').mockResolvedValue(false)
 
     await router.push('/onboarding')
     await router.isReady()
 
-    expect(router.currentRoute.value.path).toBe('/login')
+    expect(router.currentRoute.value.path).toBe('/registro')
   })
 
   it('routes a first anonymous private visit through the available onboarding flow', async () => {

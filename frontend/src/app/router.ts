@@ -21,6 +21,9 @@ import TermsView from '../modules/legal/TermsView.vue'
 import PrivacyView from '../modules/legal/PrivacyView.vue'
 // Sprint 4 - Michael
 import ConsoleView from '../modules/console/ConsoleView.vue'
+// Sprint 4 - José
+import SignupView from '../modules/signup/SignupView.vue'
+import VerifyEmailView from '../modules/signup/VerifyEmailView.vue'
 import { useOnboardingStore } from '../modules/onboarding/onboarding.store'
 import { useSessionStore } from '../modules/session/session.store'
 
@@ -42,6 +45,9 @@ export const routes = [
   { path: '/change-password', name: 'change-password', component: ChangePasswordView },
   { path: '/seguimiento/:token', name: 'tracking', component: TrackingView, meta: { public: true, allowAuthenticated: true } },
   { path: '/consola', name: 'console', component: ConsoleView, meta: { public: true, allowAuthenticated: true } },
+  // Sprint 4 - José
+  { path: '/registro', name: 'signup', component: SignupView, meta: { public: true } },
+  { path: '/verificar-correo', name: 'verify-email', component: VerifyEmailView, meta: { public: true, allowAuthenticated: true } },
   { path: '/app', name: 'app', component: SessionHomeView },
   { path: '/app/production', redirect: '/app/orders' },
   { path: '/app/clients', name: 'clients', component: ClientsView, meta: { roles: ['OWNER', 'ADMIN'] } },
@@ -75,7 +81,8 @@ export function createAppRouter({ pinia, history }: AppRouterOptions) {
       try {
         const available = await useOnboardingStore(pinia).loadStatus()
         if (available && to.name === 'login') return { name: 'onboarding' }
-        if (!available && to.name === 'onboarding') return { name: 'login' }
+        // Once the first workshop exists, "register" means open signup.
+        if (!available && to.name === 'onboarding') return { name: 'signup' }
       } catch {
         // Keep the requested public screen usable when the availability probe is offline.
       }
