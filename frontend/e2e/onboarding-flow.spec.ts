@@ -60,6 +60,7 @@ test('an empty installation creates its permanent OWNER through the browser', as
 
   await page.getByRole('button', { name: 'Cerrar sesión' }).click()
   await expect(page).toHaveURL(/\/login$/)
+  // A claimed installation sends "register" to open signup.
   await page.goto('/onboarding')
-  await expect(page).toHaveURL(/\/login$/)
+  await expect(page).toHaveURL(/\/registro$/)
 })
