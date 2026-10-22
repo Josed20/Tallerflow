@@ -19,6 +19,9 @@ var (
 	ErrPasswordPolicy     = errors.New("new password violates policy")
 	ErrPasswordReuse      = errors.New("new password must differ from current password")
 	ErrCredentialNotFound = errors.New("credential not found")
+	// ErrEmailNotVerified is returned only after the password matched, so it
+	// never tells a stranger that an address is registered.
+	ErrEmailNotVerified = errors.New("email is not verified")
 )
 
 var nonexistentCredentialHash struct {
@@ -34,6 +37,9 @@ type Credential struct {
 	PasswordHash       string
 	Active             bool
 	MustChangePassword bool
+	// PendingEmailVerification is true for an open-signup owner who has not
+	// opened the emailed link yet. The zero value is a verified account.
+	PendingEmailVerification bool
 }
 
 type CredentialRepository interface {
@@ -129,6 +135,9 @@ func (s *AuthService) Login(ctx context.Context, email, password, clientIP strin
 	}
 	if !valid {
 		return AuthSession{}, s.recordInvalidLogin(ctx, email, clientIP)
+	}
+	if credential.PendingEmailVerification {
+		return AuthSession{}, ErrEmailNotVerified
 	}
 	membership, err := s.memberships.ResolveActive(ctx, credential.UserID)
 	if err != nil {

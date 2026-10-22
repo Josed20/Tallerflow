@@ -100,6 +100,7 @@ func TestLoginMapsCredentialFailureAndThrottleWithoutSettingCookie(t *testing.T)
 	}{
 		{name: "invalid credentials", err: ErrInvalidCredentials, status: http.StatusUnauthorized, code: "AUTH_INVALID_CREDENTIALS"},
 		{name: "rate limited", err: ErrTooManyAttempts, status: http.StatusTooManyRequests, code: "AUTH_RATE_LIMITED", retryAfter: true},
+		{name: "email not verified", err: ErrEmailNotVerified, status: http.StatusForbidden, code: "EMAIL_NOT_VERIFIED"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fixture := newHandlerFixture(t, false)

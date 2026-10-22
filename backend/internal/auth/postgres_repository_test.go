@@ -15,7 +15,7 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-const credentialSelect = `SELECT u.id AS user_id, u.email::text AS email, u.name AS display_name, c.password_hash, (u.status = 'ACTIVE') AS active, c.must_change_password FROM users AS u JOIN user_credentials AS c ON c.user_id = u.id WHERE u.email = $1 LIMIT 1`
+const credentialSelect = `SELECT u.id AS user_id, u.email::text AS email, u.name AS display_name, c.password_hash, (u.status = 'ACTIVE') AS active, c.must_change_password, (u.email_verified_at IS NULL) AS pending_email_verification FROM users AS u JOIN user_credentials AS c ON c.user_id = u.id WHERE u.email = $1 LIMIT 1`
 
 func TestPostgresRepositoryNormalizesCredentialEmail(t *testing.T) {
 	repository, mock := newPostgresRepositoryFixture(t)

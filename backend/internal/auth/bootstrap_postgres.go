@@ -40,9 +40,11 @@ type postgresBootstrapTx struct {
 	tx pgx.Tx
 }
 
+// The team provisions the bootstrap owner by hand, so the address counts as
+// verified and the login never asks for an emailed link.
 func (tx postgresBootstrapTx) InsertUser(ctx context.Context, email, name string) (uuid.UUID, error) {
 	var id uuid.UUID
-	err := tx.tx.QueryRow(ctx, `INSERT INTO users (email, name, status) VALUES ($1, $2, 'ACTIVE') RETURNING id`, email, name).Scan(&id)
+	err := tx.tx.QueryRow(ctx, `INSERT INTO users (email, name, status, email_verified_at) VALUES ($1, $2, 'ACTIVE', now()) RETURNING id`, email, name).Scan(&id)
 	return id, err
 }
 
