@@ -328,3 +328,24 @@ func setValidProductionEnvironment(t *testing.T) {
 	t.Setenv("TF_CONSOLE_ORIGIN", "https://admin.tallerflow.test")
 	t.Setenv("TF_CONSOLE_TOTP_KEY", "production-console-totp-key-at-least-32-bytes")
 }
+
+func TestLoadOpensSignupOnlyInDevelopmentUnlessConfigured(t *testing.T) {
+	setValidEnvironment(t)
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.True(t, cfg.SignupEnabled, "development keeps open signup on for local testing")
+
+	setValidProductionEnvironment(t)
+	cfg, err = Load()
+	require.NoError(t, err)
+	require.False(t, cfg.SignupEnabled, "production stays closed until TF_SIGNUP_ENABLED is set")
+
+	t.Setenv("TF_SIGNUP_ENABLED", "true")
+	cfg, err = Load()
+	require.NoError(t, err)
+	require.True(t, cfg.SignupEnabled)
+
+	t.Setenv("TF_SIGNUP_ENABLED", "maybe")
+	_, err = Load()
+	require.ErrorContains(t, err, "TF_SIGNUP_ENABLED is invalid")
+}

@@ -26,19 +26,22 @@ type Config struct {
 	MobileOrigins        []string
 	TrustedProxies       []string
 	PasswordResetBaseURL string
-	SMTPHost             string
-	SMTPPort             string
-	SMTPUsername         string
-	SMTPPassword         string
-	SMTPFromAddress      string
-	SMTPRequireTLS       bool
-	R2Endpoint           string
-	R2BucketPhotos       string
-	R2AccessKeyID        string
-	R2SecretAccessKey    string
-	ConsoleDatabaseURL   string
-	ConsoleOrigin        string
-	ConsoleTOTPKey       string
+	// SignupEnabled turns open workshop registration on. It defaults to on in
+	// development and off everywhere else, so a deploy never opens it by accident.
+	SignupEnabled      bool
+	SMTPHost           string
+	SMTPPort           string
+	SMTPUsername       string
+	SMTPPassword       string
+	SMTPFromAddress    string
+	SMTPRequireTLS     bool
+	R2Endpoint         string
+	R2BucketPhotos     string
+	R2AccessKeyID      string
+	R2SecretAccessKey  string
+	ConsoleDatabaseURL string
+	ConsoleOrigin      string
+	ConsoleTOTPKey     string
 }
 
 // Load reads and validates the API process configuration.
@@ -120,6 +123,13 @@ func Load() (Config, error) {
 		cfg.SMTPRequireTLS, err = strconv.ParseBool(configuredTLS)
 		if err != nil {
 			return Config{}, fmt.Errorf("TF_SMTP_REQUIRE_TLS is invalid")
+		}
+	}
+	cfg.SignupEnabled = cfg.Environment == "development"
+	if configuredSignup := strings.TrimSpace(os.Getenv("TF_SIGNUP_ENABLED")); configuredSignup != "" {
+		cfg.SignupEnabled, err = strconv.ParseBool(configuredSignup)
+		if err != nil {
+			return Config{}, fmt.Errorf("TF_SIGNUP_ENABLED is invalid")
 		}
 	}
 	if cfg.Environment == "production" && !cfg.SMTPRequireTLS {
