@@ -103,12 +103,25 @@ async function handleUndo(stage: OrderStage) {
 async function openEditModal() {
   if (!order.value) return
   editError.value = ''
+  let localDate = ''
+  let localTime = '18:00'
+  if (order.value.promised_at) {
+    const d = new Date(order.value.promised_at)
+    const yyyy = d.getFullYear()
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    localDate = `${yyyy}-${mm}-${dd}`
+    const hh = String(d.getHours()).padStart(2, '0')
+    const min = String(d.getMinutes()).padStart(2, '0')
+    localTime = `${hh}:${min}`
+  }
+
   editForm.value = {
     clientId: order.value.client_id,
     product: order.value.product,
     quantity: order.value.quantity,
-    promisedDate: order.value.promised_at ? order.value.promised_at.split('T')[0] : '',
-    promisedTime: order.value.promised_at && order.value.promised_at.includes('T') ? order.value.promised_at.split('T')[1].slice(0, 5) : '18:00',
+    promisedDate: localDate,
+    promisedTime: localTime,
   }
   showEditModal.value = true
   if (clients.value.length === 0) {

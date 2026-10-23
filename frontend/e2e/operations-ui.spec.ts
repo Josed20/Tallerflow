@@ -161,3 +161,62 @@ test('client directory stays usable on mobile and saves a contact correction', a
   await expect(page.getByRole('status')).toContainText('se actualizó')
   await expect(page.getByRole('link', { name: '987654321' })).toBeVisible()
 })
+
+test('manager can edit an order from the order detail', async ({ page }, testInfo) => {
+  await mockWorkshop(page)
+  await page.route('**/api/v1/clients', (route) =>
+    route.fulfill({
+      json: {
+        data: [{ id: 'client-1', workshop_id: 'workshop-1', name: 'Confecciones Sur', is_active: true }],
+      },
+    }),
+  )
+
+  let patchedData: any = null
+  await page.route('**/api/v1/orders/order-1', (route) => {
+    if (route.request().method() === 'PATCH') {
+      expect(route.request().headers()['x-csrf-token']).toBe('csrf-e2e')
+      patchedData = route.request().postDataJSON()
+      return route.fulfill({
+        json: {
+          data: {
+            ...firstOrder,
+            product: patchedData.product,
+            quantity: patchedData.quantity,
+            version: 2,
+            stages: [
+              { id: 'stage-1', workshop_id: 'workshop-1', order_id: 'order-1', position: 1, name: 'CORTE', status: 'IN_PROGRESS', completed_at: null },
+              { id: 'stage-2', workshop_id: 'workshop-1', order_id: 'order-1', position: 2, name: 'COSTURA', status: 'PENDING', completed_at: null },
+            ],
+          },
+        },
+      })
+    }
+    return route.fulfill({
+      json: {
+        data: {
+          ...firstOrder,
+          stages: [
+            { id: 'stage-1', workshop_id: 'workshop-1', order_id: 'order-1', position: 1, name: 'CORTE', status: 'IN_PROGRESS', completed_at: null },
+            { id: 'stage-2', workshop_id: 'workshop-1', order_id: 'order-1', position: 2, name: 'COSTURA', status: 'PENDING', completed_at: null },
+          ],
+        },
+      },
+    })
+  })
+
+  await page.goto('/app/orders/order-1')
+  await expect(page.getByRole('heading', { name: 'Polos de algodón' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /editar orden/i })).toBeVisible()
+  await page.getByRole('button', { name: /editar orden/i }).click()
+
+  await expect(page.getByRole('dialog', { name: /editar orden/i })).toBeVisible()
+  await page.getByLabel(/prenda \/ producto/i).fill('Polos cuello camisero')
+  await page.screenshot({ path: testInfo.outputPath('order-edit-dialog.png'), fullPage: true })
+  await page.getByRole('button', { name: 'Guardar cambios' }).click()
+
+  await expect(page.getByRole('status')).toContainText('actualizados exitosamente')
+  await expect(page.getByRole('heading', { name: 'Polos cuello camisero' })).toBeVisible()
+  expect(patchedData.product).toBe('Polos cuello camisero')
+  expect(patchedData.version).toBe(1)
+})

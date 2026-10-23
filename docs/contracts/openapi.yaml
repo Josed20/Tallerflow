@@ -23,6 +23,8 @@ tags:
     description: Access to the workshop bound to the current session.
   - name: Orders
     description: Tenant-scoped workshop orders and production evidence.
+  - name: Exports
+    description: Workshop data export in CSV format for managers.
 paths:
   /api/v1/orders/{id}:
     patch:
@@ -719,6 +721,72 @@ paths:
           $ref: '#/components/responses/SessionInvalid'
         '404':
           description: The order is not available in this workshop.
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/exports/orders.csv:
+    get:
+      tags: [Exports]
+      operationId: exportOrdersCSV
+      summary: Export workshop orders in CSV format
+      description: >-
+        OWNER and ADMIN only. Generates and downloads a CSV of all orders
+        belonging to the active workshop, with localized columns and sanitized values.
+      security:
+        - sessionCookie: []
+        - bearerSession: []
+      responses:
+        '200':
+          description: CSV file containing the workshop's orders.
+          headers:
+            Content-Type:
+              schema:
+                type: string
+                example: text/csv; charset=utf-8
+            Content-Disposition:
+              schema:
+                type: string
+                example: attachment; filename="ordenes.csv"
+          content:
+            text/csv:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/SessionInvalid'
+        '403':
+          description: ROLE_FORBIDDEN for roles other than OWNER or ADMIN.
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/exports/clients.csv:
+    get:
+      tags: [Exports]
+      operationId: exportClientsCSV
+      summary: Export workshop clients in CSV format
+      description: >-
+        OWNER and ADMIN only. Generates and downloads a CSV of all clients
+        belonging to the active workshop, with sanitized values.
+      security:
+        - sessionCookie: []
+        - bearerSession: []
+      responses:
+        '200':
+          description: CSV file containing the workshop's clients.
+          headers:
+            Content-Type:
+              schema:
+                type: string
+                example: text/csv; charset=utf-8
+            Content-Disposition:
+              schema:
+                type: string
+                example: attachment; filename="clientes.csv"
+          content:
+            text/csv:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/SessionInvalid'
+        '403':
+          description: ROLE_FORBIDDEN for roles other than OWNER or ADMIN.
         '500':
           $ref: '#/components/responses/InternalError'
 components:

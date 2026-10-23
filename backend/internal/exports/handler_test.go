@@ -54,13 +54,12 @@ func setupTestRouter(role string, ordersProv OrdersProvider, clientsProv Clients
 	return r
 }
 
-func TestExportOrders_Success(t *testing.T) {
-	workshopID := uuid.New()
+func TestExportOrders_SuccessAndSanitization(t *testing.T) {
 	fakeOrders := []orders.Order{
 		{
 			Code:       "OT-000001",
-			ClientName: "Confecciones Perú",
-			Product:    "Polo 100% Algodón",
+			ClientName: "=SUM(A1:A2)", // intento de fórmula
+			Product:    "+Polo Malicioso", // intento de fórmula
 			Quantity:   50,
 			Unit:       "UNITS",
 			Status:     "ACTIVE",
@@ -68,7 +67,6 @@ func TestExportOrders_Success(t *testing.T) {
 			CreatedAt:  time.Date(2026, 10, 20, 10, 0, 0, 0, time.UTC),
 		},
 	}
-	_ = workshopID
 	router := setupTestRouter("OWNER", &mockOrdersProvider{orders: fakeOrders}, &mockClientsProvider{})
 
 	req, _ := http.NewRequest(http.MethodGet, "/api/v1/exports/orders.csv", nil)
@@ -80,13 +78,17 @@ func TestExportOrders_Success(t *testing.T) {
 	body := w.Body.String()
 	require.True(t, strings.HasPrefix(body, "\xEF\xBB\xBF"), "must have UTF-8 BOM")
 	require.Contains(t, body, "OT-000001")
-	require.Contains(t, body, "Confecciones Perú")
-	require.Contains(t, body, "Polo 100% Algodón")
+	// Verificar sanitización con comilla simple
+	require.Contains(t, body, "'=SUM(A1:A2)")
+	require.Contains(t, body, "'+Polo Malicioso")
+	// Verificar traducción a español
+	require.Contains(t, body, "En producción")
+	require.Contains(t, body, "Unidades")
 }
 
-func TestExportClients_Success(t *testing.T) {
-	phone := "987654321"
-	email := "cliente@textil.pe"
+func TestExportClients_SuccessAndSanitization(t *testing.T) {
+	phone := "@987654321" // empieza con @
+	email := "-cliente@textil.pe" // empieza con -
 	fakeClients := []clients.Client{
 		{
 			Name:      "Marca Gamarra",
@@ -106,7 +108,8 @@ func TestExportClients_Success(t *testing.T) {
 	body := w.Body.String()
 	require.True(t, strings.HasPrefix(body, "\xEF\xBB\xBF"))
 	require.Contains(t, body, "Marca Gamarra")
-	require.Contains(t, body, "987654321")
+	require.Contains(t, body, "'@987654321")
+	require.Contains(t, body, "'-cliente@textil.pe")
 	require.Contains(t, body, "Activo")
 }
 

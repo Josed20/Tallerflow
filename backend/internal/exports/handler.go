@@ -6,6 +6,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Josed20/Tallerflow/backend/internal/clients"
@@ -35,6 +36,48 @@ func NewHandler(orders OrdersProvider, clients ClientsProvider) *Handler {
 	}
 }
 
+// sanitizeCSVField previene la ejecución de fórmulas en Excel (CSV Injection)
+// anteponiendo una comilla simple (') si el texto comienza con =, +, - o @
+func sanitizeCSVField(val string) string {
+	if len(val) > 0 {
+		first := val[0]
+		if first == '=' || first == '+' || first == '-' || first == '@' {
+			return "'" + val
+		}
+	}
+	return val
+}
+
+// translateOrderStatus traduce el estado interno al español
+func translateOrderStatus(status string) string {
+	switch strings.ToUpper(status) {
+	case "ACTIVE":
+		return "En producción"
+	case "COMPLETED":
+		return "Completada"
+	case "CANCELLED":
+		return "Cancelada"
+	default:
+		return status
+	}
+}
+
+// translateUnit traduce la unidad interna al español
+func translateUnit(unit string) string {
+	switch strings.ToUpper(unit) {
+	case "UNITS":
+		return "Unidades"
+	case "DOZENS":
+		return "Docenas"
+	case "KILOGRAMS":
+		return "Kilogramos"
+	case "METERS":
+		return "Metros"
+	default:
+		return unit
+	}
+}
+
 func (h *Handler) ExportOrders(c *gin.Context) {
 	principal, err := httpx.PrincipalFromGin(c)
 	if err != nil {
@@ -58,7 +101,6 @@ func (h *Handler) ExportOrders(c *gin.Context) {
 	buf.WriteString("\xEF\xBB\xBF")
 
 	w := csv.NewWriter(&buf)
-	// Cabeceras en español para el taller
 	header := []string{
 		"Código",
 		"Cliente",
@@ -81,12 +123,12 @@ func (h *Handler) ExportOrders(c *gin.Context) {
 			created = o.CreatedAt.Format(time.RFC3339)
 		}
 		record := []string{
-			o.Code,
-			o.ClientName,
-			o.Product,
+			sanitizeCSVField(o.Code),
+			sanitizeCSVField(o.ClientName),
+			sanitizeCSVField(o.Product),
 			fmt.Sprintf("%.2f", o.Quantity),
-			o.Unit,
-			o.Status,
+			translateUnit(o.Unit),
+			translateOrderStatus(o.Status),
 			promised,
 			created,
 		}
@@ -134,11 +176,11 @@ func (h *Handler) ExportClients(c *gin.Context) {
 	for _, cl := range list {
 		email := ""
 		if cl.Email != nil {
-			email = *cl.Email
+			email = sanitizeCSVField(*cl.Email)
 		}
 		phone := ""
 		if cl.Phone != nil {
-			phone = *cl.Phone
+			phone = sanitizeCSVField(*cl.Phone)
 		}
 		status := "Inactivo"
 		if cl.IsActive {
@@ -149,7 +191,7 @@ func (h *Handler) ExportClients(c *gin.Context) {
 			created = cl.CreatedAt.Format(time.RFC3339)
 		}
 		record := []string{
-			cl.Name,
+			sanitizeCSVField(cl.Name),
 			email,
 			phone,
 			status,

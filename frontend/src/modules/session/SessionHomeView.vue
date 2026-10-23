@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { ArrowRight, Check, Download, ClipboardList, Plus, RefreshCw, Smartphone, Users } from '@lucide/vue'
 import { useSessionStore } from './session.store'
+import { api } from './api'
 import { ordersApi, type DashboardMetrics, type Order } from '../orders/api'
 import { clientsApi } from '../clients/api'
 import { teamApi } from '../team/api'
@@ -30,15 +31,7 @@ async function downloadExport(type: 'orders' | 'clients') {
   else exportingClients.value = true
 
   try {
-    const res = await fetch(`/api/v1/exports/${type}.csv`, {
-      method: 'GET',
-      credentials: 'include',
-    })
-    if (!res.ok) {
-      if (res.status === 403) throw new Error('No tienes permisos para descargar los datos.')
-      throw new Error('Ocurrió un error al generar la descarga.')
-    }
-    const blob = await res.blob()
+    const blob = await api.getBlob(`/api/v1/exports/${type}.csv`)
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -48,7 +41,11 @@ async function downloadExport(type: 'orders' | 'clients') {
     document.body.removeChild(a)
     window.URL.revokeObjectURL(url)
   } catch (err: any) {
-    exportError.value = err?.message || 'Error al exportar los datos.'
+    if (err?.status === 403) {
+      exportError.value = 'No tienes permisos para descargar los datos.'
+    } else {
+      exportError.value = err?.message || 'Error al exportar los datos.'
+    }
   } finally {
     if (type === 'orders') exportingOrders.value = false
     else exportingClients.value = false
@@ -157,6 +154,9 @@ onMounted(() => {
         <p class="overview-date">{{ dateLabel }}</p>
       </div>
       <div class="overview-header__actions">
+        <button v-if="isManager" class="ops-button" type="button" title="Descargar mis datos" @click="showExportModal = true">
+          <Download :size="17" aria-hidden="true" /> Descargar mis datos
+        </button>
         <button class="ops-icon-button" type="button" title="Actualizar panel" aria-label="Actualizar panel" :disabled="loading" @click="loadDashboardData"><RefreshCw :size="19" /></button>
         <RouterLink class="ops-button ops-button--primary" to="/app/orders/new"><Plus :size="18" /> Nueva orden</RouterLink>
       </div>
