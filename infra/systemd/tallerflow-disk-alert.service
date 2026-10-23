@@ -1,0 +1,12 @@
+[Unit]
+Description=TallerFlow disk usage alert for the Docker data partition
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+StateDirectory=tallerflow-disk-alert
+EnvironmentFile=/opt/tallerflow/.env
+EnvironmentFile=/etc/tallerflow/disk-alert.env
+ExecStart=/usr/bin/bash /opt/tallerflow/scripts/disk-alert.sh
+TimeoutStartSec=2min
