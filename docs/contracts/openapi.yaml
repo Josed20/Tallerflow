@@ -363,7 +363,11 @@ paths:
         `session_token`, to be stored in the Android Keystore and sent as
         `Authorization: Bearer`. Mobile sessions last 30 days, renew with use,
         and need no CSRF token. A correct password on an unverified account
-        returns 403 EMAIL_NOT_VERIFIED.
+        returns 403 EMAIL_NOT_VERIFIED, and on a workshop that the platform
+        console suspended or scheduled for deletion, 403 WORKSHOP_SUSPENDED.
+        Neither creates a session. Every private route answers the same 403
+        WORKSHOP_SUSPENDED while the workshop is not ACTIVE; logout and the
+        password change keep working.
       security: []
       requestBody:
         required: true
@@ -422,7 +426,8 @@ paths:
         '403':
           description: >-
             Request origin is not allowed for the requested client, or the
-            password is correct but the email has not been verified yet.
+            password is correct but the email has not been verified yet or the
+            workshop is suspended.
           headers:
             X-Request-ID:
               $ref: '#/components/headers/RequestID'
@@ -443,6 +448,13 @@ paths:
                     error:
                       code: EMAIL_NOT_VERIFIED
                       message: Verify your email before signing in.
+                      details: {}
+                      request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
+                workshopSuspended:
+                  value:
+                    error:
+                      code: WORKSHOP_SUSPENDED
+                      message: The workshop is suspended.
                       details: {}
                       request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
         '429':
@@ -522,6 +534,15 @@ paths:
                   - $ref: '#/components/schemas/MobileSessionResponse'
         '401':
           $ref: '#/components/responses/SessionInvalid'
+        '403':
+          description: WORKSHOP_SUSPENDED while the workshop is not ACTIVE.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
   /api/v1/auth/change-password:

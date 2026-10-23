@@ -22,6 +22,9 @@ var (
 	// ErrEmailNotVerified is returned only after the password matched, so it
 	// never tells a stranger that an address is registered.
 	ErrEmailNotVerified = errors.New("email is not verified")
+	// ErrWorkshopSuspended keeps members of a suspended or deleting workshop
+	// out. Like ErrEmailNotVerified, login returns it only after the password.
+	ErrWorkshopSuspended = errors.New("workshop is suspended")
 )
 
 var nonexistentCredentialHash struct {
@@ -57,6 +60,14 @@ type MembershipResolver interface {
 	ResolveActive(context.Context, uuid.UUID) (ActiveMembership, error)
 }
 
+// WorkshopGate reports whether the member's workshop may be used. Login and
+// every private route check it, so a suspension from the platform console
+// stops web and mobile sessions alike, not only the ones it revoked. Logout
+// and the password change skip it, like the bootstrap password gate.
+type WorkshopGate interface {
+	EnsureActive(ctx context.Context, workshopID uuid.UUID) error
+}
+
 type LoginLimiter interface {
 	Allow(context.Context, string, string) (bool, error)
 	RecordFailure(context.Context, string, string) error
@@ -82,7 +93,25 @@ type AuthService struct {
 	sessions    *SessionService
 	hasher      PasswordHashing
 	limiter     LoginLimiter
+	workshops   WorkshopGate
 	csrfSecret  []byte
+}
+
+// UseWorkshopGate turns on the workshop status check. Without a gate, as in
+// unit tests, every resolved membership is treated as active.
+func (s *AuthService) UseWorkshopGate(gate WorkshopGate) { s.workshops = gate }
+
+// EnsureWorkshopActive returns ErrWorkshopSuspended when the workshop of an
+// authenticated principal may not be used.
+func (s *AuthService) EnsureWorkshopActive(ctx context.Context, workshopID uuid.UUID) error {
+	return s.ensureWorkshopActive(ctx, workshopID)
+}
+
+func (s *AuthService) ensureWorkshopActive(ctx context.Context, workshopID uuid.UUID) error {
+	if s.workshops == nil {
+		return nil
+	}
+	return s.workshops.EnsureActive(ctx, workshopID)
 }
 
 // A purpose label in DeriveCSRFToken separates CSRF values from session-token
@@ -145,6 +174,9 @@ func (s *AuthService) Login(ctx context.Context, email, password, clientIP strin
 			return AuthSession{}, err
 		}
 		return AuthSession{}, s.recordInvalidLogin(ctx, email, clientIP)
+	}
+	if err := s.ensureWorkshopActive(ctx, membership.WorkshopID); err != nil {
+		return AuthSession{}, err
 	}
 	if len(s.csrfSecret) == 0 {
 		return AuthSession{}, errors.New("CSRF secret is not configured")

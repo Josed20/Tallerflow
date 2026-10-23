@@ -134,6 +134,12 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 		}
 	}()
 	authService := auth.NewAuthService(repository, repository, sessions, auth.NewPasswordHasher(auth.DefaultPasswordParams()), repository)
+	// Sprint 4 - José: a suspended workshop is refused at login and on every private route.
+	workshopGate, err := auth.NewTenantWorkshopGate(tenantRunner)
+	if err != nil {
+		return nil, fmt.Errorf("create workshop gate: %w", err)
+	}
+	authService.UseWorkshopGate(workshopGate)
 	passwordResetRepository, err := passwordreset.NewPostgresRepository(db, time.Now)
 	if err != nil {
 		return nil, fmt.Errorf("create password reset repository: %w", err)
