@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { ArrowRight, Check, ClipboardList, Plus, RefreshCw, Smartphone, Users } from '@lucide/vue'
+import { ArrowRight, Check, Download, ClipboardList, Plus, RefreshCw, Smartphone, Users } from '@lucide/vue'
 import { useSessionStore } from './session.store'
 import { ordersApi, type DashboardMetrics, type Order } from '../orders/api'
 import { clientsApi } from '../clients/api'
 import { teamApi } from '../team/api'
 import { completedStations, productionStations } from '../orders/order-display'
 import UiAlert from '../../components/UiAlert.vue'
+import UiButton from '../../components/UiButton.vue'
 import OrderTicket from '../../components/OrderTicket.vue'
 
 const session = useSessionStore()
@@ -14,6 +15,46 @@ const metrics = ref<DashboardMetrics>({ active: 0, on_time: 0, at_risk: 0, late:
 const orders = ref<Order[]>([])
 const loading = ref(true)
 const error = ref('')
+
+// Exportar datos del taller (Sprint 4 - Lucero)
+const showExportModal = ref(false)
+const exportingOrders = ref(false)
+const exportingClients = ref(false)
+const exportError = ref('')
+
+const isManager = computed(() => session.principal?.role === 'OWNER' || session.principal?.role === 'ADMIN')
+
+async function downloadExport(type: 'orders' | 'clients') {
+  exportError.value = ''
+  if (type === 'orders') exportingOrders.value = true
+  else exportingClients.value = true
+
+  try {
+    const res = await fetch(`/api/v1/exports/${type}.csv`, {
+      method: 'GET',
+      credentials: 'include',
+    })
+    if (!res.ok) {
+      if (res.status === 403) throw new Error('No tienes permisos para descargar los datos.')
+      throw new Error('Ocurrió un error al generar la descarga.')
+    }
+    const blob = await res.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${type === 'orders' ? 'ordenes' : 'clientes'}_${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  } catch (err: any) {
+    exportError.value = err?.message || 'Error al exportar los datos.'
+  } finally {
+    if (type === 'orders') exportingOrders.value = false
+    else exportingClients.value = false
+  }
+}
+
 
 // Sprint 3 - Lucero: Primeros pasos
 const clientsCount = ref(0)
@@ -238,6 +279,47 @@ onMounted(() => {
         </li>
       </ol>
     </section>
+  
+    <!-- Modal Exportar Datos (Sprint 4 - Lucero) -->
+    <Teleport to="body">
+      <div v-if="showExportModal" class="export-modal-backdrop" @click.self="showExportModal = false">
+        <section class="export-modal" role="dialog" aria-modal="true" aria-labelledby="export-dialog-title" @keydown.esc="showExportModal = false">
+          <div class="export-modal__head">
+            <h2 id="export-dialog-title">Exportar datos del taller</h2>
+            <button class="export-modal__close" type="button" aria-label="Cerrar diálogo" @click="showExportModal = false">×</button>
+          </div>
+          <p class="export-modal__desc">Descarga los registros en formato CSV compatible con Microsoft Excel (UTF-8) para reportes y contabilidad.</p>
+
+          <UiAlert v-if="exportError" :message="exportError" />
+
+          <div class="export-options">
+            <div class="export-card">
+              <div>
+                <strong>Órdenes de producción</strong>
+                <span>Incluye código, cliente, prenda, cantidad, fecha de entrega y estado.</span>
+              </div>
+              <UiButton type="button" :loading="exportingOrders" @click="downloadExport('orders')">
+                <Download :size="16" aria-hidden="true" /> Descargar CSV
+              </UiButton>
+            </div>
+
+            <div class="export-card">
+              <div>
+                <strong>Clientes y marcas</strong>
+                <span>Incluye nombre de la marca, teléfono, correo de contacto y estado.</span>
+              </div>
+              <UiButton type="button" variant="secondary" :loading="exportingClients" @click="downloadExport('clients')">
+                <Download :size="16" aria-hidden="true" /> Descargar CSV
+              </UiButton>
+            </div>
+          </div>
+
+          <div class="export-modal__actions">
+            <button type="button" class="btn-secondary" @click="showExportModal = false">Cerrar</button>
+          </div>
+        </section>
+      </div>
+    </Teleport>
   </main>
 </template>
 
@@ -399,5 +481,79 @@ onMounted(() => {
 }
 .first-step:hover .first-step__arrow {
   color: var(--tf-accent, #1F3A68);
+}
+
+/* Modal de Exportación (Sprint 4 - Lucero) */
+.export-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(22, 35, 61, 0.48);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  z-index: 100;
+}
+.export-modal {
+  background: var(--tf-surface);
+  border: 1px solid var(--tf-border-soft);
+  border-radius: var(--tf-radius, 8px);
+  width: min(100%, 30rem);
+  padding: 1.5rem;
+  display: grid;
+  gap: 1rem;
+  box-shadow: 0 18px 50px rgba(22, 35, 61, 0.28);
+}
+.export-modal__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.export-modal__head h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: var(--tf-ink);
+}
+.export-modal__close {
+  background: transparent;
+  border: 0;
+  font-size: 1.5rem;
+  color: var(--tf-text-subtle);
+  cursor: pointer;
+  line-height: 1;
+}
+.export-modal__desc {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--tf-text-subtle);
+}
+.export-options {
+  display: grid;
+  gap: 0.75rem;
+}
+.export-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--tf-border-soft);
+  border-radius: 6px;
+  background: var(--tf-surface-subtle);
+}
+.export-card strong {
+  display: block;
+  font-size: 0.9375rem;
+  color: var(--tf-ink);
+}
+.export-card span {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--tf-text-subtle);
+  margin-top: 0.15rem;
+}
+.export-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
 }
 </style>
