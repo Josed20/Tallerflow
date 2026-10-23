@@ -209,6 +209,18 @@ func TestLoadAcceptsHardenedProductionConfiguration(t *testing.T) {
 	require.Equal(t, "production", cfg.Environment)
 }
 
+func TestLoadAcceptsPlaintextToComposeDatabaseInProduction(t *testing.T) {
+	// Same shape as the VPS .env in docs/runbooks/vps.md.
+	setValidProductionEnvironment(t)
+	t.Setenv("TF_DATABASE_URL", "postgres://tallerflow_app:runtime-database-secret-123@postgres:5432/tallerflow?sslmode=disable")
+	t.Setenv("TF_BOOTSTRAP_DATABASE_URL", "postgres://tallerflow_bootstrap:bootstrap-database-secret-123@postgres:5432/tallerflow?sslmode=disable")
+	t.Setenv("TF_CONSOLE_DATABASE_URL", "postgres://tallerflow_console:console-database-secret-123@postgres:5432/tallerflow?sslmode=disable")
+
+	_, err := Load()
+
+	require.NoError(t, err)
+}
+
 func TestLoadRejectsInvalidTrustedProxyWithoutLeakingValue(t *testing.T) {
 	setValidEnvironment(t)
 	t.Setenv("TF_TRUSTED_PROXIES", "not-a-network-secret")

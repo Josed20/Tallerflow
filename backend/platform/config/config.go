@@ -211,11 +211,16 @@ func validateProductionDatabaseURL(name, rawURL, expectedUser string) error {
 	if parsed.User.Username() != expectedUser || !hasPassword || len(password) < 16 || strings.Contains(password, "change-me") {
 		return fmt.Errorf("%s is insecure for production", name)
 	}
-	if strings.EqualFold(parsed.Query().Get("sslmode"), "disable") {
+	// The Compose "postgres" service is reachable only on the private Docker
+	// network (compose.production.yaml unpublishes its port) and has no TLS
+	// certificate, so plaintext is expected there. Any other host must use TLS.
+	if strings.EqualFold(parsed.Query().Get("sslmode"), "disable") && parsed.Hostname() != composeDatabaseHost {
 		return fmt.Errorf("%s must not disable TLS in production", name)
 	}
 	return nil
 }
+
+const composeDatabaseHost = "postgres"
 
 func validEnvironment(environment string) bool {
 	switch environment {
