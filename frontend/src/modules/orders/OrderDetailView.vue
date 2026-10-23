@@ -8,7 +8,10 @@ import { canAdvanceProduction } from '../session/role-policy'
 import { compressImageFile } from '../../utils/image'
 import { capturePhoto } from '../../native/camera'
 import { isNativeApp } from '../../native/platform'
-import { Camera, Check, Copy, ExternalLink, Link2, Printer, RotateCcw, X } from '@lucide/vue'
+import { Camera, Check, Copy, ExternalLink, Link2, Pencil, Printer, RotateCcw, X } from '@lucide/vue'
+import { clientsApi, type Client } from '../clients/api'
+import UiField from '../../components/UiField.vue'
+import UiButton from '../../components/UiButton.vue'
 import { canManageOperations } from '../session/role-policy'
 import { completedStations, formatOrderQuantity } from './order-display'
 import StatusChip from '../../components/StatusChip.vue'
@@ -46,6 +49,20 @@ const cancellationReason = ref('')
 const cancellationError = ref('')
 const cancelling = ref(false)
 
+// Estado para edición de orden (Sprint 4 - Lucero)
+const showEditModal = ref(false)
+const editingOrder = ref(false)
+const editError = ref('')
+const clients = ref<Client[]>([])
+const loadingClients = ref(false)
+const editForm = ref({
+  clientId: '',
+  product: '',
+  quantity: 0,
+  promisedDate: '',
+  promisedTime: '18:00',
+})
+
 const canAdvance = computed(() => canAdvanceProduction(session.principal?.role))
 const canCorrect = computed(() => canManageOperations(session.principal?.role))
 const lastCompletedPosition = computed(() => Math.max(0, ...(order.value?.stages?.filter((stage) => stage.status === 'COMPLETED').map((stage) => stage.position) ?? [])))
@@ -80,6 +97,81 @@ async function handleUndo(stage: OrderStage) {
     error.value = err?.message || 'Ya no se puede deshacer este avance.'
   } finally {
     undoingPosition.value = null
+  }
+}
+
+async function openEditModal() {
+  if (!order.value) return
+  editError.value = ''
+  editForm.value = {
+    clientId: order.value.client_id,
+    product: order.value.product,
+    quantity: order.value.quantity,
+    promisedDate: order.value.promised_at ? order.value.promised_at.split('T')[0] : '',
+    promisedTime: order.value.promised_at && order.value.promised_at.includes('T') ? order.value.promised_at.split('T')[1].slice(0, 5) : '18:00',
+  }
+  showEditModal.value = true
+  if (clients.value.length === 0) {
+    loadingClients.value = true
+    try {
+      const res = await clientsApi.list()
+      clients.value = res.data || []
+    } catch {
+      // client select will fallback to current client
+    } finally {
+      loadingClients.value = false
+    }
+  }
+}
+
+async function handleEditOrder() {
+  if (!order.value || editingOrder.value) return
+  if (!editForm.value.product.trim()) {
+    editError.value = 'El nombre de la prenda es obligatorio.'
+    return
+  }
+  if (Number(editForm.value.quantity) <= 0) {
+    editError.value = 'La cantidad debe ser mayor a 0.'
+    return
+  }
+  if (!editForm.value.promisedDate) {
+    editError.value = 'La fecha prometida es obligatoria.'
+    return
+  }
+  if (!session.csrfToken) {
+    editError.value = 'Tu sesión necesita renovarse. Vuelve a iniciar sesión.'
+    return
+  }
+
+  editingOrder.value = true
+  editError.value = ''
+  const timeStr = editForm.value.promisedTime || '18:00'
+  const combinedISO = new Date(`${editForm.value.promisedDate}T${timeStr}:00`).toISOString()
+
+  try {
+    const res = await ordersApi.update(
+      order.value.id,
+      {
+        client_id: editForm.value.clientId,
+        product: editForm.value.product.trim(),
+        quantity: Number(editForm.value.quantity),
+        promised_at: combinedISO,
+        version: order.value.version,
+      },
+      session.csrfToken
+    )
+    order.value = res.data
+    showEditModal.value = false
+    notice.value = 'Los datos de la orden fueron actualizados exitosamente.'
+  } catch (err: any) {
+    if (err && (err.status === 409 || err.code === 'ORDER_VERSION_CONFLICT')) {
+      editError.value = 'La orden fue modificada recientemente por otro usuario. Recarga la página para ver los cambios actualizados.'
+      await loadOrder(false)
+    } else {
+      editError.value = (err && err.message) || 'No pudimos actualizar la orden. Verifica los datos ingresados.'
+    }
+  } finally {
+    editingOrder.value = false
   }
 }
 
@@ -361,6 +453,9 @@ onUnmounted(() => {
           <button class="btn-ticket" type="button" @click="showTicketModal = true">
             <Printer :size="17" aria-hidden="true" /> Imprimir ficha viajera
           </button>
+          <button v-if="canCorrect && order.status !== 'CANCELLED' && order.status !== 'COMPLETED'" class="btn-ticket btn-edit-order" type="button" @click="openEditModal">
+            <Pencil :size="17" aria-hidden="true" /> Editar orden
+          </button>
           <button v-if="canCorrect && order.status !== 'CANCELLED'" class="btn-ticket btn-cancel-order" type="button" @click="showCancelDialog = true; cancellationReason = ''; cancellationError = ''">
             <X :size="17" aria-hidden="true" /> Cancelar orden
           </button>
@@ -586,7 +681,62 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div v-if="showCancelDialog && order" class="modal-backdrop" @click.self="!cancelling && (showCancelDialog = false)">
+        <!-- Modal de Editar Orden (Sprint 4 - Lucero) -->
+    <div v-if="showEditModal && order" class="modal-backdrop" @click.self="!editingOrder && (showEditModal = false)">
+      <div class="edit-dialog" role="dialog" aria-modal="true" aria-labelledby="edit-order-title">
+        <div class="edit-dialog__head">
+          <h2 id="edit-order-title">Editar orden {{ order.code }}</h2>
+          <button class="btn-close-modal" type="button" aria-label="Cerrar" :disabled="editingOrder" @click="showEditModal = false">
+            <X :size="18" />
+          </button>
+        </div>
+        <p class="edit-dialog__desc">Modifica los datos generales de la orden de producción. Los cambios se reflejarán de inmediato.</p>
+
+        <form @submit.prevent="handleEditOrder" class="edit-order-form">
+          <UiAlert v-if="editError" :message="editError" />
+
+          <div class="form-group">
+            <label for="edit-client">Cliente / Marca</label>
+            <select id="edit-client" v-model="editForm.clientId" required :disabled="loadingClients || editingOrder">
+              <option v-for="c in clients" :key="c.id" :value="c.id">{{ c.name }}</option>
+              <option v-if="!clients.some(c => c.id === editForm.clientId)" :value="editForm.clientId">{{ order.client_name }}</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="edit-product">Prenda / Producto</label>
+            <input id="edit-product" v-model="editForm.product" type="text" required maxlength="120" placeholder="Ej. Polo Jersey 30/1 cuello redondo" :disabled="editingOrder" />
+          </div>
+
+          <div class="form-group">
+            <label for="edit-quantity">Cantidad ({{ order.unit || 'unidades' }})</label>
+            <input id="edit-quantity" v-model.number="editForm.quantity" type="number" step="any" min="0.01" required :disabled="editingOrder" />
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="edit-date">Fecha de entrega</label>
+              <input id="edit-date" v-model="editForm.promisedDate" type="date" required :disabled="editingOrder" />
+            </div>
+            <div class="form-group">
+              <label for="edit-time">Hora</label>
+              <input id="edit-time" v-model="editForm.promisedTime" type="time" required :disabled="editingOrder" />
+            </div>
+          </div>
+
+          <div class="edit-dialog__actions">
+            <button type="button" class="btn-secondary" :disabled="editingOrder" @click="showEditModal = false">
+              Cancelar
+            </button>
+            <button type="submit" class="btn-primary" :disabled="editingOrder">
+              {{ editingOrder ? 'Guardando cambios...' : 'Guardar cambios' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+<div v-if="showCancelDialog && order" class="modal-backdrop" @click.self="!cancelling && (showCancelDialog = false)">
       <div class="correction-dialog" role="dialog" aria-modal="true" aria-labelledby="cancel-order-title">
         <h2 id="cancel-order-title">Cancelar {{ order.code }}</h2>
         <p>La orden saldrá del tablero y el cliente verá que fue cancelada. Esta acción quedará registrada.</p>
@@ -741,6 +891,89 @@ h1 {
 
 .status-cancelled { background: var(--tf-error-soft); color: var(--tf-error); }
 .btn-cancel-order { color: var(--tf-error); border-color: var(--tf-error); }
+.btn-edit-order {
+  color: var(--tf-primary);
+  border-color: var(--tf-primary-border);
+}
+.btn-edit-order:hover {
+  background: var(--tf-primary-soft);
+  border-color: var(--tf-primary);
+}
+
+/* Modal de edición (Lucero - Sprint 4) */
+.edit-dialog {
+  background: var(--tf-surface);
+  border: 1px solid var(--tf-border-soft);
+  border-radius: var(--tf-radius, 8px);
+  width: min(100%, 32rem);
+  padding: 1.5rem;
+  display: grid;
+  gap: 1rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.edit-dialog__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.edit-dialog__head h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: var(--tf-ink);
+}
+.edit-dialog__desc {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--tf-text-subtle);
+}
+.edit-order-form {
+  display: grid;
+  gap: 0.9rem;
+}
+.edit-order-form .form-group {
+  display: grid;
+  gap: 0.35rem;
+}
+.edit-order-form label {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--tf-ink);
+}
+.edit-order-form input,
+.edit-order-form select {
+  width: 100%;
+  min-height: 48px;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--tf-border);
+  border-radius: 6px;
+  background: var(--tf-surface);
+  color: var(--tf-ink);
+  font: inherit;
+  font-size: 0.9rem;
+  box-sizing: border-box;
+}
+.edit-order-form input:focus,
+.edit-order-form select:focus {
+  outline: 3px solid var(--tf-focus);
+  outline-offset: 2px;
+  border-color: var(--tf-primary);
+}
+.form-row-2 {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 0.75rem;
+}
+.edit-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--tf-border-soft);
+}
+
 
 .specification-box {
   margin-top: 0.75rem;

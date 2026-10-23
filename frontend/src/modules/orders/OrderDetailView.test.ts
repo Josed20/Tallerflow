@@ -6,7 +6,7 @@ import OrderDetailView from './OrderDetailView.vue'
 import { ordersApi } from './api'
 import { useSessionStore } from '../session/session.store'
 
-vi.mock('./api', () => ({ ordersApi: { getByID: vi.fn(), updateStage: vi.fn(), reopenStage: vi.fn(), addStagePhoto: vi.fn(), createTrackingLink: vi.fn() } }))
+vi.mock('./api', () => ({ ordersApi: { getByID: vi.fn(), update: vi.fn(), updateStage: vi.fn(), reopenStage: vi.fn(), addStagePhoto: vi.fn(), createTrackingLink: vi.fn() } }))
 
 const order = {
   id: 'order-1', code: 'OT-000001', product: 'Polo Demo', client_name: 'Cliente Demo', quantity: 12, unit: 'UNITS', status: 'ACTIVE',
@@ -152,4 +152,27 @@ describe('OrderDetailView', () => {
     await renderAs('OPERATOR')
     expect(screen.queryByRole('button', { name: /compartir con el cliente/i })).toBeNull()
   })
-})
+  it('lets a manager open edit modal and submit order updates', async () => {
+    vi.mocked(ordersApi.update).mockResolvedValue({ data: { ...order, product: 'Polo Pique Actualizado', quantity: 24 } } as never)
+    await renderAs('OWNER')
+
+    const editBtn = await screen.findByRole('button', { name: /editar orden/i })
+    expect(editBtn).toBeTruthy()
+    await fireEvent.click(editBtn)
+
+    expect(screen.getByRole('dialog', { name: /editar orden/i })).toBeTruthy()
+    const productInput = screen.getByLabelText(/prenda \/ producto/i) as HTMLInputElement
+    const quantityInput = screen.getByLabelText(/cantidad/i) as HTMLInputElement
+
+    await fireEvent.update(productInput, 'Polo Pique Actualizado')
+    await fireEvent.update(quantityInput, '24')
+    await fireEvent.click(screen.getByRole('button', { name: /guardar cambios/i }))
+
+    await waitFor(() => expect(ordersApi.update).toHaveBeenCalled())
+  })
+
+  it('does not offer order editing to an operator', async () => {
+    await renderAs('OPERATOR')
+    expect(screen.queryByRole('button', { name: /editar orden/i })).toBeNull()
+  })
+});
