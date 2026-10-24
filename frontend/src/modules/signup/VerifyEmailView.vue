@@ -10,25 +10,43 @@ import { useSessionStore } from '../session/session.store'
 import { signupApi } from './api'
 import { useResendVerification } from './useResendVerification'
 
-type VerifyState = 'verifying' | 'invalid' | 'failed'
+type VerifyState = 'password' | 'invalid' | 'failed'
 
 const route = useRoute()
 const router = useRouter()
 const session = useSessionStore()
-const state = ref<VerifyState>('verifying')
+const state = ref<VerifyState>('password')
+const token = ref('')
+const password = ref('')
+const passwordError = ref('')
+const verifying = ref(false)
 const email = ref('')
 const attempted = ref(false)
 const resend = useResendVerification()
 const emailError = computed(() => attempted.value && !/^\S+@\S+\.\S+$/.test(email.value.trim()) ? 'Ingresa un correo válido.' : '')
 
-async function verify(token: string) {
-  state.value = 'verifying'
+// The link alone does not activate the workshop: whoever opens it also has
+// to know the password chosen at signup, so nobody can activate an account
+// someone else registered with their address.
+async function verify() {
+  passwordError.value = ''
+  if (!password.value) {
+    passwordError.value = 'Escribe la contraseña que elegiste al registrarte.'
+    return
+  }
+  verifying.value = true
   try {
-    const result = await signupApi.verify(token)
+    const result = await signupApi.verify(token.value, password.value)
     await session.acceptSession(result)
     await router.replace('/app')
   } catch (error) {
-    state.value = error instanceof ApiError && (error.code === 'VERIFICATION_TOKEN_INVALID' || error.status === 400) ? 'invalid' : 'failed'
+    if (error instanceof ApiError && error.code === 'VERIFICATION_PASSWORD_INVALID') {
+      passwordError.value = 'Esa no es la contraseña con la que se registró este taller.'
+    } else {
+      state.value = error instanceof ApiError && (error.code === 'VERIFICATION_TOKEN_INVALID' || error.status === 400) ? 'invalid' : 'failed'
+    }
+  } finally {
+    verifying.value = false
   }
 }
 
@@ -39,25 +57,25 @@ function requestNewLink() {
 }
 
 onMounted(() => {
-  const token = typeof route.query.token === 'string' ? route.query.token : ''
+  token.value = typeof route.query.token === 'string' ? route.query.token : ''
   // The token works once; keep it out of the address bar, the history and
   // the Referer of any link on the next screen.
   window.history.replaceState(window.history.state, '', route.path)
-  if (!token) {
-    state.value = 'invalid'
-    return
-  }
-  verify(token)
+  if (!token.value) state.value = 'invalid'
 })
 </script>
 
 <template>
   <AuthLayout>
-    <div v-if="state === 'verifying'" class="verify-state" role="status" aria-live="polite">
-      <span class="ui-button__spinner verify-state__spinner" aria-hidden="true" />
-      <h1 id="auth-title">Activando tu taller…</h1>
-      <p class="auth-subtitle">Un momento, estamos verificando tu correo.</p>
-    </div>
+    <template v-if="state === 'password'">
+      <h1 id="auth-title">Activa tu taller</h1>
+      <p class="auth-subtitle">Por seguridad, escribe la contraseña que elegiste al registrarte.</p>
+      <form class="auth-form" novalidate @submit.prevent="verify">
+        <UiField id="verify-password" v-model="password" label="Tu contraseña" type="password" autocomplete="current-password" :error="passwordError" />
+        <UiButton type="submit" :loading="verifying">Activar mi taller</UiButton>
+        <p class="verify-hint">¿No la recuerdas o no fuiste tú quien se registró? <RouterLink to="/registro" class="verify-inline-link">Regístrate de nuevo con este correo</RouterLink> y te llegará un enlace nuevo.</p>
+      </form>
+    </template>
 
     <div v-else-if="state === 'failed'" class="verify-state">
       <h1 id="auth-title">No pudimos activar tu taller</h1>
@@ -89,11 +107,16 @@ onMounted(() => {
   text-align: center;
 }
 
-.verify-state__spinner {
-  width: 1.75rem;
-  height: 1.75rem;
-  border-color: var(--tf-primary-soft);
-  border-top-color: var(--tf-primary);
+.verify-hint {
+  margin: 0;
+  color: var(--tf-text-subtle);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.verify-inline-link {
+  color: var(--tf-primary);
+  font-weight: 600;
 }
 
 .verify-confirmation {

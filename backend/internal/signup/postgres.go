@@ -107,8 +107,9 @@ func (r *PostgresRepository) Register(ctx context.Context, account PendingAccoun
 }
 
 // replacePending lets a second registration of a never-verified address win,
-// so someone who signed up with another person's email cannot keep a
-// password the mailbox owner does not know.
+// so someone who signed up with another person's email cannot block the
+// mailbox owner. It cannot hand the account to whoever registered last: the
+// emailed link only activates it for someone who also knows that password.
 func (r *PostgresRepository) replacePending(ctx context.Context, userID uuid.UUID, account PendingAccount) (bool, error) {
 	workshopID, ok, err := r.workshopOf(ctx, userID)
 	if err != nil || !ok {
@@ -171,6 +172,45 @@ func (r *PostgresRepository) ReissueToken(ctx context.Context, email string, tok
 		return Recipient{}, false, fmt.Errorf("reissue verification token: %w", err)
 	}
 	return Recipient{Name: existing.Name}, issued, nil
+}
+
+func (r *PostgresRepository) PendingPasswordHash(ctx context.Context, tokenHash []byte) (string, error) {
+	var owner struct{ UserID uuid.UUID }
+	result := r.db.WithContext(ctx).Raw(`SELECT user_id FROM email_verification_tokens WHERE token_hash = ?`, tokenHash).Scan(&owner)
+	if result.Error != nil {
+		return "", fmt.Errorf("find verification token: %w", result.Error)
+	}
+	if result.RowsAffected != 1 {
+		return "", ErrTokenInvalid
+	}
+	workshopID, ok, err := r.workshopOf(ctx, owner.UserID)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", ErrTokenInvalid
+	}
+	var pending struct{ PasswordHash string }
+	err = r.tenants.WithinTenant(ctx, workshopID, func(tx *gorm.DB) error {
+		result := tx.Raw(`SELECT c.password_hash
+			FROM email_verification_tokens t
+			JOIN user_credentials c ON c.user_id = t.user_id
+			WHERE t.token_hash = ? AND t.used_at IS NULL AND t.expires_at > now()`, tokenHash).Scan(&pending)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return ErrTokenInvalid
+		}
+		return nil
+	})
+	if errors.Is(err, ErrTokenInvalid) {
+		return "", ErrTokenInvalid
+	}
+	if err != nil {
+		return "", fmt.Errorf("read pending password: %w", err)
+	}
+	return pending.PasswordHash, nil
 }
 
 func (r *PostgresRepository) ConsumeToken(ctx context.Context, tokenHash []byte) (uuid.UUID, error) {

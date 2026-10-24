@@ -22,6 +22,8 @@ type stubUseCases struct {
 	verifyErr   error
 	input       Input
 	verified    string
+
+	verifiedPassword string
 }
 
 func (s *stubUseCases) Register(_ context.Context, input Input) error {
@@ -31,8 +33,8 @@ func (s *stubUseCases) Register(_ context.Context, input Input) error {
 
 func (s *stubUseCases) Resend(context.Context, string) error { return s.resendErr }
 
-func (s *stubUseCases) Verify(_ context.Context, token string, _ auth.SessionMetadata) (auth.RawSession, error) {
-	s.verified = token
+func (s *stubUseCases) Verify(_ context.Context, token, password string, _ auth.SessionMetadata) (auth.RawSession, error) {
+	s.verified, s.verifiedPassword = token, password
 	if s.verifyErr != nil {
 		return auth.RawSession{}, s.verifyErr
 	}
@@ -136,9 +138,10 @@ func TestSignupValidationErrorListsTheFields(t *testing.T) {
 
 func TestVerifySetsTheSessionCookieAndReturnsTheCSRFToken(t *testing.T) {
 	service := &stubUseCases{}
-	recorder := post(newTestRouter(t, service, nil), "/api/v1/auth/email-verifications/consume", testOrigin, `{"token":"`+strings.Repeat("a", 43)+`"}`)
+	recorder := post(newTestRouter(t, service, nil), "/api/v1/auth/email-verifications/consume", testOrigin, `{"token":"`+strings.Repeat("a", 43)+`","password":"Owner password 2026!"}`)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "Owner password 2026!", service.verifiedPassword)
 	require.JSONEq(t, `{"data":{"expires_at":"2026-10-22T20:00:00Z","csrf_token":"issued-csrf","must_change_password":false}}`, recorder.Body.String())
 	cookies := recorder.Result().Cookies()
 	require.Len(t, cookies, 1)
@@ -149,11 +152,21 @@ func TestVerifySetsTheSessionCookieAndReturnsTheCSRFToken(t *testing.T) {
 }
 
 func TestVerifyRefusals(t *testing.T) {
-	body := `{"token":"` + strings.Repeat("a", 43) + `"}`
+	body := `{"token":"` + strings.Repeat("a", 43) + `","password":"Owner password 2026!"}`
 	recorder := post(newTestRouter(t, &stubUseCases{verifyErr: ErrTokenInvalid}, nil), "/api/v1/auth/email-verifications/consume", testOrigin, body)
 	require.Equal(t, http.StatusUnprocessableEntity, recorder.Code)
 	require.Equal(t, "VERIFICATION_TOKEN_INVALID", errorCode(t, recorder))
 	require.Empty(t, recorder.Result().Cookies())
+
+	recorder = post(newTestRouter(t, &stubUseCases{verifyErr: ErrPasswordMismatch}, nil), "/api/v1/auth/email-verifications/consume", testOrigin, body)
+	require.Equal(t, http.StatusUnprocessableEntity, recorder.Code)
+	require.Equal(t, "VERIFICATION_PASSWORD_INVALID", errorCode(t, recorder))
+	require.Empty(t, recorder.Result().Cookies())
+
+	service := &stubUseCases{}
+	recorder = post(newTestRouter(t, service, nil), "/api/v1/auth/email-verifications/consume", testOrigin, `{"token":"`+strings.Repeat("a", 43)+`"}`)
+	require.Equal(t, http.StatusBadRequest, recorder.Code, "the link alone cannot activate an account")
+	require.Empty(t, service.verified)
 
 	recorder = post(newTestRouter(t, &stubUseCases{}, nil), "/api/v1/auth/email-verifications/consume", "https://evil.example", body)
 	require.Equal(t, http.StatusForbidden, recorder.Code)

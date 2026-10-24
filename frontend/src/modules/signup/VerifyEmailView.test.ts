@@ -31,24 +31,42 @@ async function renderVerify(path: string, beforeMount?: (store: ReturnType<typeo
 afterEach(() => vi.restoreAllMocks())
 
 describe('VerifyEmailView', () => {
-  it('verifies the token, accepts the session and opens the dashboard', async () => {
+  it('verifies the token with the registration password and opens the dashboard', async () => {
     const verify = vi.spyOn(signupApi, 'verify').mockResolvedValue(session)
     let accept!: ReturnType<typeof vi.fn>
     const { router } = await renderVerify(`/verificar-correo?token=${token}`, (store) => {
       accept = vi.spyOn(store, 'acceptSession').mockResolvedValue() as unknown as ReturnType<typeof vi.fn>
     })
 
+    expect(verify).not.toHaveBeenCalled()
+    await fireEvent.update(await screen.findByLabelText('Tu contraseña'), 'Owner password 2026!')
+    await fireEvent.click(screen.getByRole('button', { name: 'Activar mi taller' }))
     await waitFor(() => expect(router.currentRoute.value.path).toBe('/app'))
 
-    expect(verify).toHaveBeenCalledWith(token)
+    expect(verify).toHaveBeenCalledWith(token, 'Owner password 2026!')
     expect(accept).toHaveBeenCalledWith(session)
     expect(window.location.search).not.toContain(token)
+  })
+
+  it('keeps the link usable when the password is not the registered one', async () => {
+    const verify = vi.spyOn(signupApi, 'verify').mockRejectedValue(new ApiError(422, 'VERIFICATION_PASSWORD_INVALID'))
+    const { router } = await renderVerify(`/verificar-correo?token=${token}`)
+
+    await fireEvent.update(await screen.findByLabelText('Tu contraseña'), 'Not my password')
+    await fireEvent.click(screen.getByRole('button', { name: 'Activar mi taller' }))
+
+    expect(await screen.findByText('Esa no es la contraseña con la que se registró este taller.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Regístrate de nuevo con este correo' })).toBeTruthy()
+    expect(router.currentRoute.value.path).toBe('/verificar-correo')
+    expect(verify).toHaveBeenCalledTimes(1)
   })
 
   it('offers a new link when the token is expired or used', async () => {
     vi.spyOn(signupApi, 'verify').mockRejectedValue(new ApiError(422, 'VERIFICATION_TOKEN_INVALID'))
     const resend = vi.spyOn(signupApi, 'resend').mockResolvedValue({ data: {} })
     await renderVerify(`/verificar-correo?token=${token}`)
+    await fireEvent.update(await screen.findByLabelText('Tu contraseña'), 'Owner password 2026!')
+    await fireEvent.click(screen.getByRole('button', { name: 'Activar mi taller' }))
 
     expect(await screen.findByRole('heading', { name: 'Este enlace ya no sirve' })).toBeTruthy()
     await fireEvent.update(screen.getByLabelText('Correo con el que te registraste'), 'lucho@taller.pe')

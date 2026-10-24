@@ -24,6 +24,7 @@ type fakeRepository struct {
 	consumed      [][]byte
 	consumeUser   uuid.UUID
 	consumeErr    error
+	pendingHash   string
 }
 
 func (r *fakeRepository) Register(_ context.Context, account PendingAccount) (bool, error) {
@@ -36,6 +37,13 @@ func (r *fakeRepository) ReissueToken(_ context.Context, email string, tokenHash
 	return Recipient{Name: "Lucho"}, r.reissueIssue, nil
 }
 
+func (r *fakeRepository) PendingPasswordHash(context.Context, []byte) (string, error) {
+	if r.consumeErr != nil {
+		return "", r.consumeErr
+	}
+	return r.pendingHash, nil
+}
+
 func (r *fakeRepository) ConsumeToken(_ context.Context, tokenHash []byte) (uuid.UUID, error) {
 	r.consumed = append(r.consumed, tokenHash)
 	return r.consumeUser, r.consumeErr
@@ -46,6 +54,10 @@ type fakeHasher struct{ calls int }
 func (h *fakeHasher) Hash(password string) (string, error) {
 	h.calls++
 	return "hashed:" + password, nil
+}
+
+func (h *fakeHasher) Verify(encoded, password string) (bool, error) {
+	return encoded == "hashed:"+password, nil
 }
 
 type fakeSessions struct {
@@ -155,7 +167,7 @@ func TestVerifyRejectsMalformedTokensBeforeTheDatabase(t *testing.T) {
 	service, _, _, _ := newTestService(t, repo, true)
 
 	for _, raw := range []string{"", "short", strings.Repeat("a", 42), strings.Repeat("a", 44), strings.Repeat("a", 42) + "="} {
-		_, err := service.Verify(context.Background(), raw, auth.SessionMetadata{})
+		_, err := service.Verify(context.Background(), raw, "any password", auth.SessionMetadata{})
 		require.ErrorIs(t, err, ErrTokenInvalid, raw)
 	}
 	require.Empty(t, repo.consumed)
@@ -163,12 +175,12 @@ func TestVerifyRejectsMalformedTokensBeforeTheDatabase(t *testing.T) {
 
 func TestVerifyOpensABrowserSessionForTheOwner(t *testing.T) {
 	userID := uuid.New()
-	repo := &fakeRepository{consumeUser: userID}
+	repo := &fakeRepository{consumeUser: userID, pendingHash: "hashed:Owner password 2026!"}
 	service, _, sessions, _ := newTestService(t, repo, true)
 	raw, digest, err := GenerateToken()
 	require.NoError(t, err)
 
-	session, err := service.Verify(context.Background(), raw, auth.SessionMetadata{IPPrefix: "203.0.113.0/24", Kind: auth.SessionKindMobile})
+	session, err := service.Verify(context.Background(), raw, "Owner password 2026!", auth.SessionMetadata{IPPrefix: "203.0.113.0/24", Kind: auth.SessionKindMobile})
 
 	require.NoError(t, err)
 	require.Equal(t, "session-token", session.Token)
@@ -183,9 +195,24 @@ func TestVerifyPassesThroughInvalidTokens(t *testing.T) {
 	raw, _, err := GenerateToken()
 	require.NoError(t, err)
 
-	_, err = service.Verify(context.Background(), raw, auth.SessionMetadata{})
+	_, err = service.Verify(context.Background(), raw, "any password", auth.SessionMetadata{})
 
 	require.True(t, errors.Is(err, ErrTokenInvalid))
+	require.Equal(t, uuid.Nil, sessions.userID)
+}
+
+func TestVerifyNeedsThePasswordTheAccountWasRegisteredWith(t *testing.T) {
+	// Someone registered this address with their own password; the mailbox
+	// owner opening the link must not activate an account they do not control.
+	repo := &fakeRepository{consumeUser: uuid.New(), pendingHash: "hashed:Stranger password 2026!"}
+	service, _, sessions, _ := newTestService(t, repo, true)
+	raw, _, err := GenerateToken()
+	require.NoError(t, err)
+
+	_, err = service.Verify(context.Background(), raw, "Owner password 2026!", auth.SessionMetadata{})
+
+	require.ErrorIs(t, err, ErrPasswordMismatch)
+	require.Empty(t, repo.consumed, "a wrong password leaves the link usable")
 	require.Equal(t, uuid.Nil, sessions.userID)
 }
 

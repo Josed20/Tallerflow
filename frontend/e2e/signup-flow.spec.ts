@@ -48,12 +48,21 @@ test.describe('open signup', () => {
 
     const link = await verificationLink(request, email)
     await page.goto(new URL(link).pathname + new URL(link).search)
+    // The link alone does not activate the workshop: a wrong password is
+    // refused and leaves the link usable.
+    await page.getByLabel('Tu contraseña').fill('Not the registration password')
+    await page.getByRole('button', { name: 'Activar mi taller' }).click()
+    await expect(page.getByText('Esa no es la contraseña con la que se registró este taller.')).toBeVisible()
+    await page.getByLabel('Tu contraseña').fill(password)
+    await page.getByRole('button', { name: 'Activar mi taller' }).click()
     await expect(page).toHaveURL(/\/app$/)
     await expect(page.getByRole('heading', { name: workshop })).toBeVisible()
 
     // The same link cannot be used twice.
     await page.context().clearCookies()
     await page.goto(new URL(link).pathname + new URL(link).search)
+    await page.getByLabel('Tu contraseña').fill(password)
+    await page.getByRole('button', { name: 'Activar mi taller' }).click()
     await expect(page.getByRole('heading', { name: 'Este enlace ya no sirve' })).toBeVisible()
     expect(await page.evaluate(() => window.location.search)).toBe('')
 

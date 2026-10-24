@@ -217,8 +217,12 @@ paths:
       summary: Verify the email with the emailed token and start a browser session
       description: >-
         Marks the token as used, sets the user's email as verified and creates
-        a browser session, so the OWNER lands on the dashboard. Expired, used,
-        unknown and tampered tokens all return the same error.
+        a browser session, so the OWNER lands on the dashboard. The link alone
+        is not enough: the request must also carry the password the account
+        was registered with, so nobody can activate an account someone else
+        registered with their address. A wrong password leaves the token
+        usable. Expired, used, unknown and tampered tokens all return the same
+        error.
       security: []
       requestBody:
         required: true
@@ -243,7 +247,10 @@ paths:
         '403':
           $ref: '#/components/responses/CSRFInvalid'
         '422':
-          description: The token is expired, already used, unknown or malformed.
+          description: >-
+            The token is expired, already used, unknown or malformed
+            (`VERIFICATION_TOKEN_INVALID`), or the password is not the one the
+            account was registered with (`VERIFICATION_PASSWORD_INVALID`).
           headers:
             X-Request-ID:
               $ref: '#/components/headers/RequestID'
@@ -257,6 +264,13 @@ paths:
                     error:
                       code: VERIFICATION_TOKEN_INVALID
                       message: The verification link is invalid or has expired.
+                      details: {}
+                      request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
+                wrongPassword:
+                  value:
+                    error:
+                      code: VERIFICATION_PASSWORD_INVALID
+                      message: The password does not match the registration.
                       details: {}
                       request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
         '429':
@@ -1015,7 +1029,7 @@ components:
     EmailVerificationConsumeInput:
       type: object
       additionalProperties: false
-      required: [token]
+      required: [token, password]
       properties:
         token:
           type: string
@@ -1023,6 +1037,12 @@ components:
           maxLength: 43
           writeOnly: true
           description: Raw token from the emailed link (`/verificar-correo?token=...`).
+        password:
+          type: string
+          minLength: 1
+          writeOnly: true
+          format: password
+          description: The password chosen at signup.
     EmailVerificationResendInput:
       type: object
       additionalProperties: false

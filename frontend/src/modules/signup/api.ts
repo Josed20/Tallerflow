@@ -11,6 +11,6 @@ export interface SignupInput {
 
 export const signupApi = {
   register: (input: SignupInput) => api.post<{ data: Record<string, never> }>('/api/v1/signup', input),
-  verify: (token: string) => api.post<AuthSessionPayload>('/api/v1/auth/email-verifications/consume', { token }),
+  verify: (token: string, password: string) => api.post<AuthSessionPayload>('/api/v1/auth/email-verifications/consume', { token, password }),
   resend: (email: string) => api.post<{ data: Record<string, never> }>('/api/v1/auth/email-verifications/resend', { email }),
 }

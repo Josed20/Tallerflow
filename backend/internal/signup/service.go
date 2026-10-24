@@ -16,6 +16,7 @@ import (
 
 type PasswordHasher interface {
 	Hash(string) (string, error)
+	Verify(encoded, password string) (bool, error)
 }
 
 type SessionCreator interface {
@@ -135,10 +136,26 @@ func (s *Service) Resend(ctx context.Context, email string) error {
 }
 
 // Verify consumes the emailed token and opens a browser session for the owner.
-func (s *Service) Verify(ctx context.Context, rawToken string, metadata auth.SessionMetadata) (auth.RawSession, error) {
+// The link alone is not enough: whoever opens it must also know the password
+// the account was registered with. Otherwise a stranger who registered
+// someone else's address, or re-registered it before it was verified, would
+// get a working account the moment the mailbox owner clicks the link. A wrong
+// password leaves the token usable.
+func (s *Service) Verify(ctx context.Context, rawToken, password string, metadata auth.SessionMetadata) (auth.RawSession, error) {
 	tokenHash, ok := HashToken(strings.TrimSpace(rawToken))
 	if !ok {
 		return auth.RawSession{}, ErrTokenInvalid
+	}
+	passwordHash, err := s.repo.PendingPasswordHash(ctx, tokenHash)
+	if err != nil {
+		return auth.RawSession{}, err
+	}
+	matches, err := s.hasher.Verify(passwordHash, password)
+	if err != nil {
+		return auth.RawSession{}, fmt.Errorf("check signup password: %w", err)
+	}
+	if !matches {
+		return auth.RawSession{}, ErrPasswordMismatch
 	}
 	userID, err := s.repo.ConsumeToken(ctx, tokenHash)
 	if err != nil {

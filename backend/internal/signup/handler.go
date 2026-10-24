@@ -21,7 +21,7 @@ import (
 type UseCases interface {
 	Register(context.Context, Input) error
 	Resend(context.Context, string) error
-	Verify(context.Context, string, auth.SessionMetadata) (auth.RawSession, error)
+	Verify(ctx context.Context, token, password string, metadata auth.SessionMetadata) (auth.RawSession, error)
 }
 
 type RequestLimiter interface {
@@ -74,8 +74,9 @@ type registerInput struct {
 	AcceptTerms  bool   `json:"accept_terms"`
 }
 
-type tokenInput struct {
-	Token string `json:"token"`
+type verifyInput struct {
+	Token    string `json:"token"`
+	Password string `json:"password"`
 }
 
 type emailInput struct {
@@ -145,17 +146,20 @@ func (h *Handler) Verify(c *gin.Context) {
 	if !h.allow(c, h.config.VerifyLimiter) {
 		return
 	}
-	var body tokenInput
-	if err := decodeJSON(c, &body, 4096); err != nil {
+	var body verifyInput
+	if err := decodeJSON(c, &body, 4096); err != nil || body.Password == "" {
 		h.fail(c, http.StatusBadRequest, "INVALID_REQUEST", "The request is invalid.", gin.H{})
 		return
 	}
-	session, err := h.service.Verify(c.Request.Context(), body.Token, auth.SessionMetadata{
+	session, err := h.service.Verify(c.Request.Context(), body.Token, body.Password, auth.SessionMetadata{
 		IPPrefix: strings.TrimSpace(c.ClientIP()), UserAgent: truncate(c.GetHeader("User-Agent"), 512),
 	})
 	switch {
 	case errors.Is(err, ErrTokenInvalid):
 		h.fail(c, http.StatusUnprocessableEntity, "VERIFICATION_TOKEN_INVALID", "The verification link is invalid or has expired.", gin.H{})
+		return
+	case errors.Is(err, ErrPasswordMismatch):
+		h.fail(c, http.StatusUnprocessableEntity, "VERIFICATION_PASSWORD_INVALID", "The password does not match the registration.", gin.H{})
 		return
 	case err != nil:
 		h.fail(c, http.StatusInternalServerError, "INTERNAL_ERROR", "An unexpected error occurred.", gin.H{})

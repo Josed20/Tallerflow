@@ -65,12 +65,18 @@ func TestPostgresIntegrationSignupVerifiesOnceAndUnlocksLogin(t *testing.T) {
 	require.True(t, credential.PendingEmailVerification, "a new signup cannot sign in before verifying")
 	require.False(t, credential.MustChangePassword)
 
+	pendingHash, err := repository.PendingPasswordHash(ctx, digestOf(t, raw))
+	require.NoError(t, err)
+	require.Equal(t, "argon-hash-1", pendingHash, "reading the password hash does not use the link")
+
 	userID, err := repository.ConsumeToken(ctx, digestOf(t, raw))
 	require.NoError(t, err)
 	require.Equal(t, credential.UserID, userID)
 
 	_, err = repository.ConsumeToken(ctx, digestOf(t, raw))
 	require.ErrorIs(t, err, ErrTokenInvalid, "a used link cannot verify again")
+	_, err = repository.PendingPasswordHash(ctx, digestOf(t, raw))
+	require.ErrorIs(t, err, ErrTokenInvalid)
 
 	credential, err = credentials.FindByEmail(ctx, email)
 	require.NoError(t, err)
