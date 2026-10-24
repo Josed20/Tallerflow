@@ -127,6 +127,21 @@ describe('same-origin API client', () => {
     expect(onUnauthorized).toHaveBeenCalledWith('suspended')
   })
 
+  it('downloads files through the same transport and sign-out rules', async () => {
+    const onUnauthorized = vi.fn()
+    configureApiTransport({ kind: 'web', onUnauthorized })
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response('Código,Cliente', { status: 200, headers: { 'Content-Type': 'text/csv' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'WORKSHOP_SUSPENDED', request_id: 'suspended-csv' } }), { status: 403 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const blob = await api.getBlob('/api/v1/exports/orders.csv')
+    expect(blob.size).toBe(new TextEncoder().encode('Código,Cliente').length)
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: 'GET', credentials: 'include' })
+
+    await expect(api.getBlob('/api/v1/exports/orders.csv')).rejects.toMatchObject({ status: 403, code: 'WORKSHOP_SUSPENDED' })
+    expect(onUnauthorized).toHaveBeenCalledWith('suspended')
+  })
+
   it('leaves an expired browser session to the router guard', async () => {
     const onUnauthorized = vi.fn()
     configureApiTransport({ kind: 'web', onUnauthorized })
