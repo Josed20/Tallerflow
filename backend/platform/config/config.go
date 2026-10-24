@@ -26,19 +26,22 @@ type Config struct {
 	MobileOrigins        []string
 	TrustedProxies       []string
 	PasswordResetBaseURL string
-	SMTPHost             string
-	SMTPPort             string
-	SMTPUsername         string
-	SMTPPassword         string
-	SMTPFromAddress      string
-	SMTPRequireTLS       bool
-	R2Endpoint           string
-	R2BucketPhotos       string
-	R2AccessKeyID        string
-	R2SecretAccessKey    string
-	ConsoleDatabaseURL   string
-	ConsoleOrigin        string
-	ConsoleTOTPKey       string
+	// SignupEnabled turns open workshop registration on. It defaults to on in
+	// development and off everywhere else, so a deploy never opens it by accident.
+	SignupEnabled      bool
+	SMTPHost           string
+	SMTPPort           string
+	SMTPUsername       string
+	SMTPPassword       string
+	SMTPFromAddress    string
+	SMTPRequireTLS     bool
+	R2Endpoint         string
+	R2BucketPhotos     string
+	R2AccessKeyID      string
+	R2SecretAccessKey  string
+	ConsoleDatabaseURL string
+	ConsoleOrigin      string
+	ConsoleTOTPKey     string
 }
 
 // Load reads and validates the API process configuration.
@@ -54,7 +57,7 @@ func Load() (Config, error) {
 		SMTPPort:             valueOrDefault("TF_SMTP_PORT", "1025"),
 		SMTPUsername:         strings.TrimSpace(os.Getenv("TF_SMTP_USER")),
 		SMTPPassword:         os.Getenv("TF_SMTP_PASSWORD"),
-		SMTPFromAddress:      valueOrDefault("TF_SMTP_FROM", "soporte@tallerflow.pe"),
+		SMTPFromAddress:      valueOrDefault("TF_SMTP_FROM", "soporte@tallerflowpe.com"),
 		R2Endpoint:           strings.TrimSpace(os.Getenv("TF_R2_ENDPOINT")),
 		R2BucketPhotos:       strings.TrimSpace(os.Getenv("TF_R2_BUCKET_PHOTOS")),
 		R2AccessKeyID:        strings.TrimSpace(os.Getenv("TF_R2_ACCESS_KEY_ID")),
@@ -120,6 +123,13 @@ func Load() (Config, error) {
 		cfg.SMTPRequireTLS, err = strconv.ParseBool(configuredTLS)
 		if err != nil {
 			return Config{}, fmt.Errorf("TF_SMTP_REQUIRE_TLS is invalid")
+		}
+	}
+	cfg.SignupEnabled = cfg.Environment == "development"
+	if configuredSignup := strings.TrimSpace(os.Getenv("TF_SIGNUP_ENABLED")); configuredSignup != "" {
+		cfg.SignupEnabled, err = strconv.ParseBool(configuredSignup)
+		if err != nil {
+			return Config{}, fmt.Errorf("TF_SIGNUP_ENABLED is invalid")
 		}
 	}
 	if cfg.Environment == "production" && !cfg.SMTPRequireTLS {
@@ -211,11 +221,16 @@ func validateProductionDatabaseURL(name, rawURL, expectedUser string) error {
 	if parsed.User.Username() != expectedUser || !hasPassword || len(password) < 16 || strings.Contains(password, "change-me") {
 		return fmt.Errorf("%s is insecure for production", name)
 	}
-	if strings.EqualFold(parsed.Query().Get("sslmode"), "disable") {
+	// The Compose "postgres" service is reachable only on the private Docker
+	// network (compose.production.yaml unpublishes its port) and has no TLS
+	// certificate, so plaintext is expected there. Any other host must use TLS.
+	if strings.EqualFold(parsed.Query().Get("sslmode"), "disable") && parsed.Hostname() != composeDatabaseHost {
 		return fmt.Errorf("%s must not disable TLS in production", name)
 	}
 	return nil
 }
+
+const composeDatabaseHost = "postgres"
 
 func validEnvironment(environment string) bool {
 	switch environment {

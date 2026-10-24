@@ -37,9 +37,11 @@ jobs:
         working-directory: frontend/android
         run: bash ./gradlew assembleDebug --no-daemon
 
+  # The job keeps its sprint-2 id so a required status check stays the same;
+  # it runs the Sprint 4 suite, which includes the Sprint 1 and 2 ones.
   sprint-2:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     env:
       CI: "true"
     steps:
@@ -57,8 +59,8 @@ jobs:
         run: npm --prefix frontend ci --no-audit
       - name: Install Playwright Chromium
         run: npm --prefix frontend exec playwright install --with-deps chromium
-      - name: Verify Sprint 2 from empty isolated volumes
-        run: ./scripts/verify-sprint2.sh
+      - name: Verify Sprint 4 from empty isolated volumes
+        run: ./scripts/verify-sprint4.sh
       - name: Upload Compose logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -67,6 +69,7 @@ jobs:
           path: |
             sprint1-compose.log
             sprint2-compose.log
+            sprint4-compose.log
           if-no-files-found: ignore
       - name: Upload Playwright evidence on failure
         if: failure()

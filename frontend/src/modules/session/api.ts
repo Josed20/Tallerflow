@@ -1,11 +1,13 @@
 import type { APIErrorEnvelope } from './types'
 
+type UnauthorizedHandler = (reason: 'expired' | 'suspended') => void | Promise<void>
+
 type ApiTransport =
-  | { kind: 'web' }
+  | { kind: 'web'; onUnauthorized?: UnauthorizedHandler }
   | {
       kind: 'mobile'
       getToken: () => string | null | Promise<string | null>
-      onUnauthorized?: (reason: 'expired' | 'suspended') => void | Promise<void>
+      onUnauthorized?: UnauthorizedHandler
     }
 
 let transport: ApiTransport = { kind: 'web' }
@@ -32,7 +34,9 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init: RequestInit): Promise<T> {
+// send applies the active transport and its sign-out rules to every request,
+// whatever the body type of a successful response.
+async function send(path: string, init: RequestInit): Promise<Response> {
   const activeTransport = transport
   const headers: Record<string, string> = {
     Accept: 'application/json',
@@ -52,20 +56,28 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as APIErrorEnvelope | null
-    if (activeTransport.kind === 'mobile' && path !== '/api/v1/auth/login') {
-      const suspended = payload?.error?.code === 'WORKSHOP_SUSPENDED'
-      if (response.status === 401 || (response.status === 403 && suspended)) {
+    if (path !== '/api/v1/auth/login') {
+      const suspended = response.status === 403 && payload?.error?.code === 'WORKSHOP_SUSPENDED'
+      // A suspended workshop signs out both clients. An expired web session is
+      // left to the router guard, which already sends it to the login.
+      if (suspended || (activeTransport.kind === 'mobile' && response.status === 401)) {
         await activeTransport.onUnauthorized?.(suspended ? 'suspended' : 'expired')
       }
     }
     throw new ApiError(response.status, payload?.error?.code, payload?.error?.request_id)
   }
+  return response
+}
+
+async function request<T>(path: string, init: RequestInit): Promise<T> {
+  const response = await send(path, init)
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
 }
 
 export const api = {
   get: <T>(path: string) => request<T>(path, { method: 'GET' }),
+  getBlob: async (path: string): Promise<Blob> => (await send(path, { method: 'GET' })).blob(),
   post: <T>(path: string, body?: unknown, csrfToken?: string, headers?: Record<string, string>) =>
     request<T>(path, {
       method: 'POST',

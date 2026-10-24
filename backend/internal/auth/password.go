@@ -23,7 +23,25 @@ const (
 	minDecodedKeyBytes  = 16
 	maxDecodedKeyBytes  = 64
 	defaultArgonVersion = argon2.Version
+	// Each Argon2id derivation holds up to 64 MiB. Capping how many run at
+	// once bounds the process at about 256 MiB however many logins and
+	// signups arrive together; the rest wait their turn instead of
+	// exhausting the server's memory.
+	maxConcurrentArgon = 4
 )
+
+var (
+	argonSlots = make(chan struct{}, maxConcurrentArgon)
+	// deriveKey is swapped in tests to observe concurrency.
+	deriveKey = argon2.IDKey
+)
+
+// boundedIDKey runs one Argon2id derivation inside the process-wide budget.
+func boundedIDKey(password, salt []byte, iterations, memory uint32, parallelism uint8, keyLength uint32) []byte {
+	argonSlots <- struct{}{}
+	defer func() { <-argonSlots }()
+	return deriveKey(password, salt, iterations, memory, parallelism, keyLength)
+}
 
 var (
 	ErrPasswordTooLong       = errors.New("password exceeds 1 MiB")
@@ -69,7 +87,7 @@ func (h PasswordHasher) Hash(password string) (string, error) {
 	if _, err := rand.Read(salt); err != nil {
 		return "", fmt.Errorf("generate password salt: %w", err)
 	}
-	key := argon2.IDKey(
+	key := boundedIDKey(
 		[]byte(password),
 		salt,
 		h.params.Iterations,
@@ -100,7 +118,7 @@ func (h PasswordHasher) Verify(encoded, password string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	actual := argon2.IDKey(
+	actual := boundedIDKey(
 		[]byte(password),
 		salt,
 		params.Iterations,

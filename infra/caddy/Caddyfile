@@ -11,8 +11,40 @@
 	}
 }
 
+http://admin.tallerflowpe.com {
+	encode zstd gzip
+
+	handle /api/v1/console/* {
+		reverse_proxy backend:8080
+	}
+
+	handle /api/* {
+		respond 404
+	}
+
+	handle {
+		reverse_proxy frontend:8080
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Robots-Tag noindex
+		-Server
+	}
+}
+
 :80 {
 	encode zstd gzip
+
+	handle /consola* {
+		respond 404
+	}
+
+	handle /api/v1/console/* {
+		respond 404
+	}
 
 	handle /api/* {
 		reverse_proxy backend:8080

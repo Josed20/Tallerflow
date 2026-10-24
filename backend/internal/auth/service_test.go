@@ -271,3 +271,135 @@ func (r *failingPasswordCredentialRepo) FindByEmail(_ context.Context, _ string)
 func (r *failingPasswordCredentialRepo) FindByUserID(_ context.Context, _ uuid.UUID) (*Credential, error) {
 	return &r.credential, nil
 }
+
+func TestLoginRefusesSuspendedWorkshopOnlyAfterTheCorrectPassword(t *testing.T) {
+	hasher := NewPasswordHasher(DefaultPasswordParams())
+	hash, err := hasher.Hash("Correct horse battery staple 7!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workshopID := uuid.New()
+	credential := &Credential{UserID: uuid.New(), PasswordHash: hash, Active: true}
+	gate := &fakeWorkshopGate{suspended: map[uuid.UUID]bool{workshopID: true}}
+	newService := func(limiter *loginLimiter, sessions *fakeSessionRepository) *AuthService {
+		service := NewAuthService(&loginCredentialRepo{credential: credential},
+			&loginMemberships{count: 1, membership: ActiveMembership{WorkshopID: workshopID, Role: "OPERATOR"}},
+			NewSessionService(sessions, testPepper, fixedClock(testNow), bytes.NewReader(make([]byte, 32))), hasher, limiter)
+		service.UseWorkshopGate(gate)
+		return service
+	}
+
+	sessions := &fakeSessionRepository{}
+	limiter := &loginLimiter{attempts: make(map[string]int)}
+	_, err = newService(limiter, sessions).Login(context.Background(), "operator@example.com", "Correct horse battery staple 7!", "192.0.2.10", SessionKindMobile)
+	if !errors.Is(err, ErrWorkshopSuspended) {
+		t.Fatalf("Login() error = %v, want ErrWorkshopSuspended", err)
+	}
+	if sessions.inserted != nil {
+		t.Fatal("a member of a suspended workshop received a session")
+	}
+	if len(limiter.attempts) != 0 {
+		t.Fatal("a correct password on a suspended workshop was recorded as a failed login")
+	}
+
+	_, err = newService(&loginLimiter{attempts: make(map[string]int)}, &fakeSessionRepository{}).Login(context.Background(), "operator@example.com", "wrong", "192.0.2.10", SessionKindMobile)
+	if !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("wrong password error = %v, want ErrInvalidCredentials", err)
+	}
+
+	delete(gate.suspended, workshopID)
+	if _, err := newService(&loginLimiter{attempts: make(map[string]int)}, &fakeSessionRepository{}).Login(context.Background(), "operator@example.com", "Correct horse battery staple 7!", "192.0.2.10", SessionKindMobile); err != nil {
+		t.Fatalf("reactivated workshop login error = %v", err)
+	}
+}
+
+func TestLoginRecordsTheSignInAndItsClient(t *testing.T) {
+	hasher := NewPasswordHasher(DefaultPasswordParams())
+	hash, err := hasher.Hash("Correct horse battery staple 7!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workshopID := uuid.New()
+	credential := &Credential{UserID: uuid.New(), PasswordHash: hash, Active: true}
+	newService := func(audit *fakeSignInAudit) *AuthService {
+		service := NewAuthService(&loginCredentialRepo{credential: credential},
+			&loginMemberships{count: 1, membership: ActiveMembership{WorkshopID: workshopID, Role: "OPERATOR"}},
+			NewSessionService(&fakeSessionRepository{}, testPepper, fixedClock(testNow), bytes.NewReader(make([]byte, 64))), hasher,
+			&loginLimiter{attempts: make(map[string]int)})
+		service.UseSignInAudit(audit)
+		return service
+	}
+
+	audit := &fakeSignInAudit{}
+	if _, err := newService(audit).Login(context.Background(), "operator@example.com", "Correct horse battery staple 7!", "192.0.2.10", SessionKindMobile); err != nil {
+		t.Fatal(err)
+	}
+	if len(audit.recorded) != 1 || audit.recorded[0] != (signIn{workshopID, credential.UserID, SessionKindMobile}) {
+		t.Fatalf("recorded sign-ins = %+v", audit.recorded)
+	}
+
+	if _, err := newService(&fakeSignInAudit{}).Login(context.Background(), "operator@example.com", "wrong", "192.0.2.10", SessionKindMobile); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("wrong password error = %v", err)
+	}
+
+	failing := &fakeSignInAudit{err: errors.New("audit insert failed")}
+	if _, err := newService(failing).Login(context.Background(), "operator@example.com", "Correct horse battery staple 7!", "192.0.2.10", SessionKindWeb); err != nil {
+		t.Fatalf("a failed audit write turned into a failed login: %v", err)
+	}
+}
+
+type signIn struct {
+	workshopID, userID uuid.UUID
+	kind               SessionKind
+}
+
+type fakeSignInAudit struct {
+	recorded []signIn
+	err      error
+}
+
+func (a *fakeSignInAudit) RecordSignIn(_ context.Context, workshopID, userID uuid.UUID, kind SessionKind) error {
+	a.recorded = append(a.recorded, signIn{workshopID, userID, kind})
+	return a.err
+}
+
+type fakeWorkshopGate struct{ suspended map[uuid.UUID]bool }
+
+func (g *fakeWorkshopGate) EnsureActive(_ context.Context, workshopID uuid.UUID) error {
+	if g.suspended[workshopID] {
+		return ErrWorkshopSuspended
+	}
+	return nil
+}
+
+func TestLoginRejectsUnverifiedEmailOnlyAfterTheCorrectPassword(t *testing.T) {
+	hasher := NewPasswordHasher(DefaultPasswordParams())
+	hash, err := hasher.Hash("Correct horse battery staple 7!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	credential := &Credential{UserID: uuid.New(), PasswordHash: hash, Active: true, PendingEmailVerification: true}
+	newService := func(limiter *loginLimiter, sessions *fakeSessionRepository) *AuthService {
+		return NewAuthService(&loginCredentialRepo{credential: credential}, &loginMemberships{count: 1},
+			NewSessionService(sessions, testPepper, fixedClock(testNow), bytes.NewReader(make([]byte, 32))), hasher, limiter)
+	}
+
+	sessions := &fakeSessionRepository{}
+	limiter := &loginLimiter{attempts: make(map[string]int)}
+	_, err = newService(limiter, sessions).Login(context.Background(), "owner@example.com", "Correct horse battery staple 7!", "192.0.2.10", SessionKindWeb)
+	if !errors.Is(err, ErrEmailNotVerified) {
+		t.Fatalf("Login() error = %v, want ErrEmailNotVerified", err)
+	}
+	if sessions.inserted != nil {
+		t.Fatal("an unverified account received a session")
+	}
+	if len(limiter.attempts) != 0 {
+		t.Fatal("a correct password on an unverified account was recorded as a failed login")
+	}
+
+	// A wrong password must not reveal that the account exists but is unverified.
+	_, err = newService(&loginLimiter{attempts: make(map[string]int)}, &fakeSessionRepository{}).Login(context.Background(), "owner@example.com", "wrong", "192.0.2.10", SessionKindWeb)
+	if !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("wrong password error = %v, want ErrInvalidCredentials", err)
+	}
+}

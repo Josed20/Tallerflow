@@ -149,7 +149,7 @@ func TestLoadDefaultsPasswordResetDeliveryForDevelopment(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "localhost", cfg.SMTPHost)
 	require.Equal(t, "1025", cfg.SMTPPort)
-	require.Equal(t, "soporte@tallerflow.pe", cfg.SMTPFromAddress)
+	require.Equal(t, "soporte@tallerflowpe.com", cfg.SMTPFromAddress)
 	require.False(t, cfg.SMTPRequireTLS)
 	require.Equal(t, cfg.AllowedOrigin, cfg.PasswordResetBaseURL)
 }
@@ -207,6 +207,18 @@ func TestLoadAcceptsHardenedProductionConfiguration(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "production", cfg.Environment)
+}
+
+func TestLoadAcceptsPlaintextToComposeDatabaseInProduction(t *testing.T) {
+	// Same shape as the VPS .env in docs/runbooks/vps.md.
+	setValidProductionEnvironment(t)
+	t.Setenv("TF_DATABASE_URL", "postgres://tallerflow_app:runtime-database-secret-123@postgres:5432/tallerflow?sslmode=disable")
+	t.Setenv("TF_BOOTSTRAP_DATABASE_URL", "postgres://tallerflow_bootstrap:bootstrap-database-secret-123@postgres:5432/tallerflow?sslmode=disable")
+	t.Setenv("TF_CONSOLE_DATABASE_URL", "postgres://tallerflow_console:console-database-secret-123@postgres:5432/tallerflow?sslmode=disable")
+
+	_, err := Load()
+
+	require.NoError(t, err)
 }
 
 func TestLoadRejectsInvalidTrustedProxyWithoutLeakingValue(t *testing.T) {
@@ -327,4 +339,25 @@ func setValidProductionEnvironment(t *testing.T) {
 	t.Setenv("TF_CONSOLE_DATABASE_URL", "postgres://tallerflow_console:console-database-secret-123@db:5432/tallerflow?sslmode=require")
 	t.Setenv("TF_CONSOLE_ORIGIN", "https://admin.tallerflow.test")
 	t.Setenv("TF_CONSOLE_TOTP_KEY", "production-console-totp-key-at-least-32-bytes")
+}
+
+func TestLoadOpensSignupOnlyInDevelopmentUnlessConfigured(t *testing.T) {
+	setValidEnvironment(t)
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.True(t, cfg.SignupEnabled, "development keeps open signup on for local testing")
+
+	setValidProductionEnvironment(t)
+	cfg, err = Load()
+	require.NoError(t, err)
+	require.False(t, cfg.SignupEnabled, "production stays closed until TF_SIGNUP_ENABLED is set")
+
+	t.Setenv("TF_SIGNUP_ENABLED", "true")
+	cfg, err = Load()
+	require.NoError(t, err)
+	require.True(t, cfg.SignupEnabled)
+
+	t.Setenv("TF_SIGNUP_ENABLED", "maybe")
+	_, err = Load()
+	require.ErrorContains(t, err, "TF_SIGNUP_ENABLED is invalid")
 }

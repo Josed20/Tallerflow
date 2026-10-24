@@ -35,8 +35,9 @@ const late = computed(() => props.state === 'LATE')
 </template>
 
 <style scoped>
-.ticket { display: block; min-width: 0; padding: 1px; border-radius: var(--tf-radius-sm); background: var(--tf-border-soft); color: var(--tf-ink); text-decoration: none; clip-path: polygon(0 0, calc(100% - var(--tf-notch)) 0, 100% var(--tf-notch), 100% 100%, 0 100%); }
-.ticket__in { display: grid; gap: .3rem; padding: .7rem .75rem .65rem; border-radius: calc(var(--tf-radius-sm) - 1px); background: var(--tf-surface); clip-path: polygon(0 0, calc(100% - var(--tf-notch) + .5px) 0, 100% calc(var(--tf-notch) - .5px), 100% 100%, 0 100%); }
+/* Flex column so the inner face fills a ticket stretched by a grid row; otherwise the border fill shows below it. */
+.ticket { display: flex; flex-direction: column; min-width: 0; padding: 1px; border-radius: var(--tf-radius-sm); background: var(--tf-border-soft); color: var(--tf-ink); text-decoration: none; clip-path: polygon(0 0, calc(100% - var(--tf-notch)) 0, 100% var(--tf-notch), 100% 100%, 0 100%); }
+.ticket__in { flex: 1; display: grid; align-content: start; gap: .3rem; padding: .7rem .75rem .65rem; border-radius: calc(var(--tf-radius-sm) - 1px); background: var(--tf-surface); clip-path: polygon(0 0, calc(100% - var(--tf-notch) + .5px) 0, 100% calc(var(--tf-notch) - .5px), 100% 100%, 0 100%); }
 .ticket--late { background: var(--tf-late); }
 .ticket--late .ticket__in { background: var(--tf-late-soft); }
 a.ticket:hover { background: var(--tf-primary); }

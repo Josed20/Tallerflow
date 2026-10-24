@@ -49,25 +49,25 @@ describe('same-origin API client', () => {
   })
 
   it('prefixes API paths when an external base URL is configured', async () => {
-    vi.stubEnv('VITE_API_BASE_URL', 'https://tallerflow.pe/')
+    vi.stubEnv('VITE_API_BASE_URL', 'https://tallerflowpe.com/')
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
     vi.stubGlobal('fetch', fetchMock)
 
     await api.get('/api/v1/me')
 
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://tallerflow.pe/api/v1/me')
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://tallerflowpe.com/api/v1/me')
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ credentials: 'include' })
   })
 
   it('uses bearer without cookies or CSRF in mobile mode', async () => {
-    vi.stubEnv('VITE_API_BASE_URL', 'https://tallerflow.pe')
+    vi.stubEnv('VITE_API_BASE_URL', 'https://tallerflowpe.com')
     configureApiTransport({ kind: 'mobile', getToken: async () => 'mobile-session' })
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
     vi.stubGlobal('fetch', fetchMock)
 
     await api.post('/api/v1/orders', { product: 'Polo' }, 'web-csrf', { 'Idempotency-Key': 'order-1' })
 
-    expect(fetchMock).toHaveBeenCalledWith('https://tallerflow.pe/api/v1/orders', {
+    expect(fetchMock).toHaveBeenCalledWith('https://tallerflowpe.com/api/v1/orders', {
       method: 'POST',
       credentials: 'omit',
       headers: {
@@ -81,7 +81,7 @@ describe('same-origin API client', () => {
   })
 
   it('allows mobile login without a token and handles a revoked token', async () => {
-    vi.stubEnv('VITE_API_BASE_URL', 'https://tallerflow.pe')
+    vi.stubEnv('VITE_API_BASE_URL', 'https://tallerflowpe.com')
     let token: string | null = 'stale-session'
     const onUnauthorized = vi.fn(() => { token = null })
     configureApiTransport({ kind: 'mobile', getToken: () => token, onUnauthorized })
@@ -101,7 +101,7 @@ describe('same-origin API client', () => {
   })
 
   it('revokes a mobile token when the workshop is suspended', async () => {
-    vi.stubEnv('VITE_API_BASE_URL', 'https://tallerflow.pe')
+    vi.stubEnv('VITE_API_BASE_URL', 'https://tallerflowpe.com')
     const onUnauthorized = vi.fn()
     configureApiTransport({ kind: 'mobile', getToken: () => 'active-token', onUnauthorized })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
@@ -110,6 +110,47 @@ describe('same-origin API client', () => {
 
     await expect(api.get('/api/v1/me')).rejects.toMatchObject({ status: 403, code: 'WORKSHOP_SUSPENDED' })
     expect(onUnauthorized).toHaveBeenCalledWith('suspended')
+  })
+
+  it('signs the browser out when the workshop is suspended, but not on a login attempt', async () => {
+    const onUnauthorized = vi.fn()
+    configureApiTransport({ kind: 'web', onUnauthorized })
+    const suspended = () => new Response(JSON.stringify({
+      error: { code: 'WORKSHOP_SUSPENDED', request_id: 'suspended-web' },
+    }), { status: 403 })
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(suspended())))
+
+    await expect(api.post('/api/v1/auth/login', { email: 'a@b.pe', password: 'x' })).rejects.toMatchObject({ code: 'WORKSHOP_SUSPENDED' })
+    expect(onUnauthorized).not.toHaveBeenCalled()
+
+    await expect(api.get('/api/v1/orders')).rejects.toMatchObject({ status: 403, code: 'WORKSHOP_SUSPENDED' })
+    expect(onUnauthorized).toHaveBeenCalledWith('suspended')
+  })
+
+  it('downloads files through the same transport and sign-out rules', async () => {
+    const onUnauthorized = vi.fn()
+    configureApiTransport({ kind: 'web', onUnauthorized })
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response('Código,Cliente', { status: 200, headers: { 'Content-Type': 'text/csv' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'WORKSHOP_SUSPENDED', request_id: 'suspended-csv' } }), { status: 403 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const blob = await api.getBlob('/api/v1/exports/orders.csv')
+    expect(blob.size).toBe(new TextEncoder().encode('Código,Cliente').length)
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: 'GET', credentials: 'include' })
+
+    await expect(api.getBlob('/api/v1/exports/orders.csv')).rejects.toMatchObject({ status: 403, code: 'WORKSHOP_SUSPENDED' })
+    expect(onUnauthorized).toHaveBeenCalledWith('suspended')
+  })
+
+  it('leaves an expired browser session to the router guard', async () => {
+    const onUnauthorized = vi.fn()
+    configureApiTransport({ kind: 'web', onUnauthorized })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: { code: 'SESSION_INVALID', request_id: 'expired-web' },
+    }), { status: 401 })))
+
+    await expect(api.get('/api/v1/orders')).rejects.toMatchObject({ status: 401 })
+    expect(onUnauthorized).not.toHaveBeenCalled()
   })
 
   it('rejects mobile requests without a configured API origin', async () => {

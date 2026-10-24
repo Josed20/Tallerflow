@@ -21,6 +21,9 @@ import TermsView from '../modules/legal/TermsView.vue'
 import PrivacyView from '../modules/legal/PrivacyView.vue'
 // Sprint 4 - Michael
 import ConsoleView from '../modules/console/ConsoleView.vue'
+// Sprint 4 - José
+import SignupView from '../modules/signup/SignupView.vue'
+import VerifyEmailView from '../modules/signup/VerifyEmailView.vue'
 import { useOnboardingStore } from '../modules/onboarding/onboarding.store'
 import { useSessionStore } from '../modules/session/session.store'
 
@@ -42,6 +45,9 @@ export const routes = [
   { path: '/change-password', name: 'change-password', component: ChangePasswordView },
   { path: '/seguimiento/:token', name: 'tracking', component: TrackingView, meta: { public: true, allowAuthenticated: true } },
   { path: '/consola', name: 'console', component: ConsoleView, meta: { public: true, allowAuthenticated: true } },
+  // Sprint 4 - José
+  { path: '/registro', name: 'signup', component: SignupView, meta: { public: true } },
+  { path: '/verificar-correo', name: 'verify-email', component: VerifyEmailView, meta: { public: true, allowAuthenticated: true } },
   { path: '/app', name: 'app', component: SessionHomeView },
   { path: '/app/production', redirect: '/app/orders' },
   { path: '/app/clients', name: 'clients', component: ClientsView, meta: { roles: ['OWNER', 'ADMIN'] } },
@@ -52,8 +58,42 @@ export const routes = [
   { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundView, meta: { public: true } },
 ]
 
+const defaultTitle = 'TallerFlow — Trazabilidad para talleres de confección'
+
+// Keyed by route name, so adding a route never touches this map's lines.
+const pageTitles: Record<string, string> = {
+  terms: 'Términos de servicio',
+  privacy: 'Política de privacidad',
+  login: 'Iniciar sesión',
+  join: 'Unirte al taller',
+  onboarding: 'Crear mi taller',
+  signup: 'Crear la cuenta de tu taller',
+  'verify-email': 'Activar tu taller',
+  console: 'Consola de plataforma',
+  'forgot-password': 'Recuperar contraseña',
+  'reset-password': 'Nueva contraseña',
+  'change-password': 'Cambiar contraseña',
+  tracking: 'Seguimiento de tu pedido',
+  app: 'Panel',
+  clients: 'Clientes',
+  orders: 'Órdenes',
+  'orders-new': 'Nueva orden',
+  'orders-detail': 'Detalle de la orden',
+  team: 'Equipo',
+  'not-found': 'Página no encontrada',
+}
+
+export function pageTitle(routeName: unknown): string {
+  const title = typeof routeName === 'string' ? pageTitles[routeName] : undefined
+  return title ? `${title} · TallerFlow` : defaultTitle
+}
+
 export function createAppRouter({ pinia, history }: AppRouterOptions) {
   const router = createRouter({ history, routes })
+
+  router.afterEach((to) => {
+    document.title = pageTitle(to.name)
+  })
 
   router.beforeEach(async (to) => {
     const session = useSessionStore(pinia)
@@ -75,7 +115,8 @@ export function createAppRouter({ pinia, history }: AppRouterOptions) {
       try {
         const available = await useOnboardingStore(pinia).loadStatus()
         if (available && to.name === 'login') return { name: 'onboarding' }
-        if (!available && to.name === 'onboarding') return { name: 'login' }
+        // Once the first workshop exists, "register" means open signup.
+        if (!available && to.name === 'onboarding') return { name: 'signup' }
       } catch {
         // Keep the requested public screen usable when the availability probe is offline.
       }

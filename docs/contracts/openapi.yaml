@@ -23,6 +23,8 @@ tags:
     description: Access to the workshop bound to the current session.
   - name: Orders
     description: Tenant-scoped workshop orders and production evidence.
+  - name: Exports
+    description: Workshop data export in CSV format for managers.
 paths:
   /api/v1/orders/{id}:
     patch:
@@ -215,8 +217,12 @@ paths:
       summary: Verify the email with the emailed token and start a browser session
       description: >-
         Marks the token as used, sets the user's email as verified and creates
-        a browser session, so the OWNER lands on the dashboard. Expired, used,
-        unknown and tampered tokens all return the same error.
+        a browser session, so the OWNER lands on the dashboard. The link alone
+        is not enough: the request must also carry the password the account
+        was registered with, so nobody can activate an account someone else
+        registered with their address. A wrong password leaves the token
+        usable. Expired, used, unknown and tampered tokens all return the same
+        error.
       security: []
       requestBody:
         required: true
@@ -241,7 +247,10 @@ paths:
         '403':
           $ref: '#/components/responses/CSRFInvalid'
         '422':
-          description: The token is expired, already used, unknown or malformed.
+          description: >-
+            The token is expired, already used, unknown or malformed
+            (`VERIFICATION_TOKEN_INVALID`), or the password is not the one the
+            account was registered with (`VERIFICATION_PASSWORD_INVALID`).
           headers:
             X-Request-ID:
               $ref: '#/components/headers/RequestID'
@@ -255,6 +264,13 @@ paths:
                     error:
                       code: VERIFICATION_TOKEN_INVALID
                       message: The verification link is invalid or has expired.
+                      details: {}
+                      request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
+                wrongPassword:
+                  value:
+                    error:
+                      code: VERIFICATION_PASSWORD_INVALID
+                      message: The password does not match the registration.
                       details: {}
                       request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
         '429':
@@ -363,7 +379,11 @@ paths:
         `session_token`, to be stored in the Android Keystore and sent as
         `Authorization: Bearer`. Mobile sessions last 30 days, renew with use,
         and need no CSRF token. A correct password on an unverified account
-        returns 403 EMAIL_NOT_VERIFIED.
+        returns 403 EMAIL_NOT_VERIFIED, and on a workshop that the platform
+        console suspended or scheduled for deletion, 403 WORKSHOP_SUSPENDED.
+        Neither creates a session. Every private route answers the same 403
+        WORKSHOP_SUSPENDED while the workshop is not ACTIVE; logout and the
+        password change keep working.
       security: []
       requestBody:
         required: true
@@ -422,7 +442,8 @@ paths:
         '403':
           description: >-
             Request origin is not allowed for the requested client, or the
-            password is correct but the email has not been verified yet.
+            password is correct but the email has not been verified yet or the
+            workshop is suspended.
           headers:
             X-Request-ID:
               $ref: '#/components/headers/RequestID'
@@ -443,6 +464,13 @@ paths:
                     error:
                       code: EMAIL_NOT_VERIFIED
                       message: Verify your email before signing in.
+                      details: {}
+                      request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
+                workshopSuspended:
+                  value:
+                    error:
+                      code: WORKSHOP_SUSPENDED
+                      message: The workshop is suspended.
                       details: {}
                       request_id: 3c0d522d-ec6d-4d83-aac5-40fef2e2c004
         '429':
@@ -522,6 +550,15 @@ paths:
                   - $ref: '#/components/schemas/MobileSessionResponse'
         '401':
           $ref: '#/components/responses/SessionInvalid'
+        '403':
+          description: WORKSHOP_SUSPENDED while the workshop is not ACTIVE.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
   /api/v1/auth/change-password:
@@ -719,6 +756,72 @@ paths:
           $ref: '#/components/responses/SessionInvalid'
         '404':
           description: The order is not available in this workshop.
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/exports/orders.csv:
+    get:
+      tags: [Exports]
+      operationId: exportOrdersCSV
+      summary: Export workshop orders in CSV format
+      description: >-
+        OWNER and ADMIN only. Generates and downloads a CSV of all orders
+        belonging to the active workshop, with localized columns and sanitized values.
+      security:
+        - sessionCookie: []
+        - bearerSession: []
+      responses:
+        '200':
+          description: CSV file containing the workshop's orders.
+          headers:
+            Content-Type:
+              schema:
+                type: string
+                example: text/csv; charset=utf-8
+            Content-Disposition:
+              schema:
+                type: string
+                example: attachment; filename="ordenes.csv"
+          content:
+            text/csv:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/SessionInvalid'
+        '403':
+          description: ROLE_FORBIDDEN for roles other than OWNER or ADMIN.
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/exports/clients.csv:
+    get:
+      tags: [Exports]
+      operationId: exportClientsCSV
+      summary: Export workshop clients in CSV format
+      description: >-
+        OWNER and ADMIN only. Generates and downloads a CSV of all clients
+        belonging to the active workshop, with sanitized values.
+      security:
+        - sessionCookie: []
+        - bearerSession: []
+      responses:
+        '200':
+          description: CSV file containing the workshop's clients.
+          headers:
+            Content-Type:
+              schema:
+                type: string
+                example: text/csv; charset=utf-8
+            Content-Disposition:
+              schema:
+                type: string
+                example: attachment; filename="clientes.csv"
+          content:
+            text/csv:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/SessionInvalid'
+        '403':
+          description: ROLE_FORBIDDEN for roles other than OWNER or ADMIN.
         '500':
           $ref: '#/components/responses/InternalError'
 components:
@@ -926,7 +1029,7 @@ components:
     EmailVerificationConsumeInput:
       type: object
       additionalProperties: false
-      required: [token]
+      required: [token, password]
       properties:
         token:
           type: string
@@ -934,6 +1037,12 @@ components:
           maxLength: 43
           writeOnly: true
           description: Raw token from the emailed link (`/verificar-correo?token=...`).
+        password:
+          type: string
+          minLength: 1
+          writeOnly: true
+          format: password
+          description: The password chosen at signup.
     EmailVerificationResendInput:
       type: object
       additionalProperties: false

@@ -4,6 +4,8 @@ tunnel: fe78febd-fd73-45e1-bd16-c37c68745285
 credentials-file: /etc/cloudflared/credentials.json
 
 ingress:
+  - hostname: admin.tallerflowpe.com
+    service: http://gateway:80
   - hostname: tallerflowpe.com
     service: http://gateway:80
   - service: http_status:404

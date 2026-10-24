@@ -90,14 +90,14 @@ func TestRenderTemplates(t *testing.T) {
 			data: map[string]string{
 				"Name":         "Carlos",
 				"WorkshopName": "Taller Gamarra",
-				"URL":          "https://tallerflow.pe/verificar?token=xyz",
+				"URL":          "https://tallerflowpe.com/verificar?token=xyz",
 				"ExpiresIn":    "24 horas",
 			},
 			expectSubj: "Verifica tu correo — TallerFlow",
 			containsText: []string{
 				"Carlos",
 				"«Taller Gamarra»",
-				"https://tallerflow.pe/verificar?token=xyz",
+				"https://tallerflowpe.com/verificar?token=xyz",
 				"24 horas",
 			},
 		},
@@ -108,7 +108,7 @@ func TestRenderTemplates(t *testing.T) {
 				"WorkshopName": "Taller Gamarra",
 				"InviterName":  "Lucho",
 				"Role":         "OPERATOR",
-				"URL":          "https://tallerflow.pe/join?token=abc",
+				"URL":          "https://tallerflowpe.com/join?token=abc",
 				"ExpiresIn":    "7 días",
 			},
 			expectSubj: "Invitación para unirte a Taller Gamarra en TallerFlow",
@@ -116,7 +116,7 @@ func TestRenderTemplates(t *testing.T) {
 				"Lucho",
 				"«Taller Gamarra»",
 				"OPERATOR",
-				"https://tallerflow.pe/join?token=abc",
+				"https://tallerflowpe.com/join?token=abc",
 				"7 días",
 			},
 		},
@@ -124,12 +124,12 @@ func TestRenderTemplates(t *testing.T) {
 			name:         "password-reset",
 			templateName: "password-reset",
 			data: map[string]string{
-				"URL":       "https://tallerflow.pe/reset-password?token=123",
+				"URL":       "https://tallerflowpe.com/reset-password?token=123",
 				"ExpiresIn": "1 hora",
 			},
 			expectSubj: "Restablecimiento de contraseña — TallerFlow",
 			containsText: []string{
-				"https://tallerflow.pe/reset-password?token=123",
+				"https://tallerflowpe.com/reset-password?token=123",
 				"1 hora",
 			},
 		},
@@ -139,13 +139,13 @@ func TestRenderTemplates(t *testing.T) {
 			data: map[string]string{
 				"WorkshopName": "Taller Gamarra",
 				"Reason":       "Falta de pago",
-				"SupportEmail": "soporte@tallerflow.pe",
+				"SupportEmail": "soporte@tallerflowpe.com",
 			},
 			expectSubj: "Tu taller ha sido suspendido — TallerFlow",
 			containsText: []string{
 				"«Taller Gamarra»",
 				"Falta de pago",
-				"soporte@tallerflow.pe",
+				"soporte@tallerflowpe.com",
 			},
 		},
 		{
@@ -154,13 +154,13 @@ func TestRenderTemplates(t *testing.T) {
 			data: map[string]string{
 				"WorkshopName": "Taller Gamarra",
 				"DeletionDate": "2026-11-20",
-				"SupportEmail": "soporte@tallerflow.pe",
+				"SupportEmail": "soporte@tallerflowpe.com",
 			},
 			expectSubj: "Eliminación programada de taller — TallerFlow",
 			containsText: []string{
 				"«Taller Gamarra»",
 				"2026-11-20",
-				"soporte@tallerflow.pe",
+				"soporte@tallerflowpe.com",
 				"30 días",
 			},
 		},
@@ -173,7 +173,8 @@ func TestRenderTemplates(t *testing.T) {
 			require.Equal(t, tt.expectSubj, msg.Subject)
 			require.NotEmpty(t, msg.Text)
 			require.NotEmpty(t, msg.HTML)
-			require.Contains(t, msg.HTML, "#1F3A68")
+			require.Contains(t, msg.HTML, "#0A346F")
+			require.Contains(t, msg.HTML, "#00BFB2")
 			require.Contains(t, msg.HTML, "TallerFlow")
 			for _, expectedStr := range tt.containsText {
 				require.Contains(t, msg.Text, expectedStr)
@@ -222,7 +223,7 @@ func TestNewSMTPSenderValidatesFromAndPort(t *testing.T) {
 	_, err := NewSMTPSender(SMTPConfig{
 		Host:        "localhost",
 		Port:        "invalid",
-		FromAddress: "soporte@tallerflow.pe",
+		FromAddress: "soporte@tallerflowpe.com",
 	})
 	require.Error(t, err)
 

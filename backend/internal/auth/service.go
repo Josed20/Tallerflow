@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +20,12 @@ var (
 	ErrPasswordPolicy     = errors.New("new password violates policy")
 	ErrPasswordReuse      = errors.New("new password must differ from current password")
 	ErrCredentialNotFound = errors.New("credential not found")
+	// ErrEmailNotVerified is returned only after the password matched, so it
+	// never tells a stranger that an address is registered.
+	ErrEmailNotVerified = errors.New("email is not verified")
+	// ErrWorkshopSuspended keeps members of a suspended or deleting workshop
+	// out. Like ErrEmailNotVerified, login returns it only after the password.
+	ErrWorkshopSuspended = errors.New("workshop is suspended")
 )
 
 var nonexistentCredentialHash struct {
@@ -34,6 +41,9 @@ type Credential struct {
 	PasswordHash       string
 	Active             bool
 	MustChangePassword bool
+	// PendingEmailVerification is true for an open-signup owner who has not
+	// opened the emailed link yet. The zero value is a verified account.
+	PendingEmailVerification bool
 }
 
 type CredentialRepository interface {
@@ -49,6 +59,20 @@ type PasswordCredentialRepository interface {
 
 type MembershipResolver interface {
 	ResolveActive(context.Context, uuid.UUID) (ActiveMembership, error)
+}
+
+// WorkshopGate reports whether the member's workshop may be used. Login and
+// every private route check it, so a suspension from the platform console
+// stops web and mobile sessions alike, not only the ones it revoked. Logout
+// and the password change skip it, like the bootstrap password gate.
+type WorkshopGate interface {
+	EnsureActive(ctx context.Context, workshopID uuid.UUID) error
+}
+
+// SignInAudit records a successful login, web or mobile, in the workshop's
+// audit trail.
+type SignInAudit interface {
+	RecordSignIn(ctx context.Context, workshopID, userID uuid.UUID, kind SessionKind) error
 }
 
 type LoginLimiter interface {
@@ -76,7 +100,28 @@ type AuthService struct {
 	sessions    *SessionService
 	hasher      PasswordHashing
 	limiter     LoginLimiter
+	workshops   WorkshopGate
+	audit       SignInAudit
 	csrfSecret  []byte
+}
+
+func (s *AuthService) UseSignInAudit(audit SignInAudit) { s.audit = audit }
+
+// UseWorkshopGate turns on the workshop status check. Without a gate, as in
+// unit tests, every resolved membership is treated as active.
+func (s *AuthService) UseWorkshopGate(gate WorkshopGate) { s.workshops = gate }
+
+// EnsureWorkshopActive returns ErrWorkshopSuspended when the workshop of an
+// authenticated principal may not be used.
+func (s *AuthService) EnsureWorkshopActive(ctx context.Context, workshopID uuid.UUID) error {
+	return s.ensureWorkshopActive(ctx, workshopID)
+}
+
+func (s *AuthService) ensureWorkshopActive(ctx context.Context, workshopID uuid.UUID) error {
+	if s.workshops == nil {
+		return nil
+	}
+	return s.workshops.EnsureActive(ctx, workshopID)
 }
 
 // A purpose label in DeriveCSRFToken separates CSRF values from session-token
@@ -130,12 +175,18 @@ func (s *AuthService) Login(ctx context.Context, email, password, clientIP strin
 	if !valid {
 		return AuthSession{}, s.recordInvalidLogin(ctx, email, clientIP)
 	}
+	if credential.PendingEmailVerification {
+		return AuthSession{}, ErrEmailNotVerified
+	}
 	membership, err := s.memberships.ResolveActive(ctx, credential.UserID)
 	if err != nil {
 		if !errors.Is(err, ErrInvalidCredentials) {
 			return AuthSession{}, err
 		}
 		return AuthSession{}, s.recordInvalidLogin(ctx, email, clientIP)
+	}
+	if err := s.ensureWorkshopActive(ctx, membership.WorkshopID); err != nil {
+		return AuthSession{}, err
 	}
 	if len(s.csrfSecret) == 0 {
 		return AuthSession{}, errors.New("CSRF secret is not configured")
@@ -146,6 +197,13 @@ func (s *AuthService) Login(ctx context.Context, email, password, clientIP strin
 			return AuthSession{}, s.recordInvalidLogin(ctx, email, clientIP)
 		}
 		return AuthSession{}, err
+	}
+	if s.audit != nil {
+		// The session already exists: a failed audit write is logged rather
+		// than turned into a failed login.
+		if err := s.audit.RecordSignIn(ctx, membership.WorkshopID, credential.UserID, kind); err != nil {
+			log.Printf("record sign-in audit: %v", err)
+		}
 	}
 	return s.authSession(raw.Token, kind, raw.ExpiresAt, s.principal(credential, membership), credential.MustChangePassword), nil
 }

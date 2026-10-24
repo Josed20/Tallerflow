@@ -25,6 +25,7 @@ type AuthUseCases interface {
 	Restore(context.Context, string) (AuthSession, error)
 	Logout(context.Context, string) error
 	ChangePassword(context.Context, string, string, string) (AuthSession, error)
+	EnsureWorkshopActive(context.Context, uuid.UUID) error
 }
 
 // HandlerConfig separates the two transports: the browser (cookie + CSRF)
@@ -110,6 +111,10 @@ func (h *Handler) Login(c *gin.Context) {
 		switch {
 		case errors.Is(err, ErrInvalidCredentials):
 			h.fail(c, http.StatusUnauthorized, "AUTH_INVALID_CREDENTIALS", "Email or password is incorrect.")
+		case errors.Is(err, ErrEmailNotVerified):
+			h.fail(c, http.StatusForbidden, "EMAIL_NOT_VERIFIED", "Verify your email before signing in.")
+		case errors.Is(err, ErrWorkshopSuspended):
+			h.workshopSuspended(c)
 		case errors.Is(err, ErrTooManyAttempts):
 			c.Header("Retry-After", "900")
 			h.fail(c, http.StatusTooManyRequests, "AUTH_RATE_LIMITED", "Too many login attempts.")
@@ -123,7 +128,7 @@ func (h *Handler) Login(c *gin.Context) {
 
 func (h *Handler) Session(c *gin.Context) {
 	result, ok := h.restore(c)
-	if !ok {
+	if !ok || !h.workshopActive(c, result) {
 		return
 	}
 	h.respondSession(c, result, false)
@@ -200,12 +205,13 @@ func (h *Handler) respondSession(c *gin.Context, session AuthSession, issued boo
 	c.JSON(http.StatusOK, gin.H{"data": sessionData(session)})
 }
 
-// RequireSession protects private routes and enforces the bootstrap password
-// gate. The three auth recovery routes call restore directly and remain usable.
+// RequireSession protects private routes and enforces the suspended workshop
+// and bootstrap password gates. Logout and the password change call restore
+// directly and remain usable.
 func (h *Handler) RequireSession() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		result, ok := h.restore(c)
-		if !ok {
+		if !ok || !h.workshopActive(c, result) {
 			c.Abort()
 			return
 		}
@@ -304,6 +310,23 @@ func (h *Handler) requireCSRF(c *gin.Context, session AuthSession) bool {
 		return false
 	}
 	return true
+}
+
+func (h *Handler) workshopActive(c *gin.Context, session AuthSession) bool {
+	err := h.service.EnsureWorkshopActive(c.Request.Context(), session.Principal.WorkshopID)
+	switch {
+	case err == nil:
+		return true
+	case errors.Is(err, ErrWorkshopSuspended):
+		h.workshopSuspended(c)
+	default:
+		h.fail(c, http.StatusInternalServerError, "INTERNAL_ERROR", "An unexpected error occurred.")
+	}
+	return false
+}
+
+func (h *Handler) workshopSuspended(c *gin.Context) {
+	h.fail(c, http.StatusForbidden, "WORKSHOP_SUSPENDED", "The workshop is suspended.")
 }
 
 func (h *Handler) invalidSession(c *gin.Context) {

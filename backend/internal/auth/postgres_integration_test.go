@@ -52,7 +52,7 @@ func TestPostgresIntegrationAuthenticationAndTenantIsolation(t *testing.T) {
 	email := "integration-" + userID.String() + "@example.com"
 	oldHash, replacementHash := "integration-old-hash", "integration-new-hash"
 	require.NoError(t, db.WithContext(ctx).Exec(
-		`INSERT INTO users (id, email, name, status) VALUES (?, ?, ?, 'ACTIVE')`, userID, email, "Integration Owner",
+		`INSERT INTO users (id, email, name, status, email_verified_at) VALUES (?, ?, ?, 'ACTIVE', now())`, userID, email, "Integration Owner",
 	).Error)
 	require.NoError(t, db.WithContext(ctx).Exec(
 		`INSERT INTO user_credentials (user_id, password_hash, must_change_password) VALUES (?, ?, true)`, userID, oldHash,

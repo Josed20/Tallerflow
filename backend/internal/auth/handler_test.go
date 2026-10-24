@@ -100,6 +100,8 @@ func TestLoginMapsCredentialFailureAndThrottleWithoutSettingCookie(t *testing.T)
 	}{
 		{name: "invalid credentials", err: ErrInvalidCredentials, status: http.StatusUnauthorized, code: "AUTH_INVALID_CREDENTIALS"},
 		{name: "rate limited", err: ErrTooManyAttempts, status: http.StatusTooManyRequests, code: "AUTH_RATE_LIMITED", retryAfter: true},
+		{name: "email not verified", err: ErrEmailNotVerified, status: http.StatusForbidden, code: "EMAIL_NOT_VERIFIED"},
+		{name: "workshop suspended", err: ErrWorkshopSuspended, status: http.StatusForbidden, code: "WORKSHOP_SUSPENDED"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fixture := newHandlerFixture(t, false)
@@ -146,6 +148,33 @@ func TestLogoutEnforcesCSRFAndOriginBeforeRevokingSession(t *testing.T) {
 	restore := fixture.request(http.MethodGet, "/api/v1/auth/session", "", "", "", handlerToken)
 	if restore.Code != http.StatusUnauthorized || responseErrorCode(t, restore) != "SESSION_INVALID" {
 		t.Fatalf("logged-out session remained valid: %d %s", restore.Code, restore.Body.String())
+	}
+}
+
+func TestSuspendedWorkshopClosesPrivateRoutesButNotLogout(t *testing.T) {
+	fixture := newHandlerFixture(t, false)
+	fixture.useCases.suspended = true
+
+	for _, res := range []*httptest.ResponseRecorder{
+		fixture.request(http.MethodGet, "/api/v1/private", "", "", "", handlerToken),
+		fixture.request(http.MethodGet, "/api/v1/auth/session", "", "", "", handlerToken),
+	} {
+		if res.Code != http.StatusForbidden || responseErrorCode(t, res) != "WORKSHOP_SUSPENDED" {
+			t.Fatalf("suspended workshop response = %d %s, want 403 WORKSHOP_SUSPENDED", res.Code, res.Body.String())
+		}
+	}
+
+	fixture.useCases.kind = SessionKindMobile
+	mobile := fixture.bearerRequest(http.MethodGet, "/api/v1/private", "", mobileHandlerOrigin, handlerToken)
+	if mobile.Code != http.StatusForbidden || responseErrorCode(t, mobile) != "WORKSHOP_SUSPENDED" {
+		t.Fatalf("suspended mobile response = %d %s, want 403 WORKSHOP_SUSPENDED", mobile.Code, mobile.Body.String())
+	}
+
+	// A suspended member can still end the session.
+	fixture.useCases.kind = SessionKindWeb
+	logout := fixture.request(http.MethodPost, "/api/v1/auth/logout", "", handlerOrigin, handlerCSRF, handlerToken)
+	if logout.Code != http.StatusOK {
+		t.Fatalf("suspended logout response = %d %s", logout.Code, logout.Body.String())
 	}
 }
 
@@ -335,7 +364,15 @@ type handlerUseCases struct {
 	kind       SessionKind
 	loginKind  SessionKind
 	loginErr   error
+	suspended  bool
 	principal  httpx.Principal
+}
+
+func (u *handlerUseCases) EnsureWorkshopActive(context.Context, uuid.UUID) error {
+	if u.suspended {
+		return ErrWorkshopSuspended
+	}
+	return nil
 }
 
 func (u *handlerUseCases) session() AuthSession {

@@ -5,14 +5,19 @@ import { pinia } from './app/pinia'
 import { router } from './app/router'
 import './styles/main.css'
 import { configureMobileTransport } from './native/mobile-transport'
+import { configureApiTransport } from './modules/session/api'
 import { useSessionStore } from './modules/session/session.store'
 import { App as NativeApp } from '@capacitor/app'
-import { isNativeApp } from './native/platform'
+import { isNativeApp, usesNativeToken } from './native/platform'
 
-configureMobileTransport((reason) => {
+function signOut(reason: 'expired' | 'suspended') {
   useSessionStore(pinia).clearSession()
   void router.replace(`/login?session=${reason}`)
-})
+}
+
+// Sprint 4 - José: the web leaves a suspended workshop the same way the app does.
+if (usesNativeToken()) configureMobileTransport(signOut)
+else configureApiTransport({ kind: 'web', onUnauthorized: signOut })
 
 if (isNativeApp()) {
   void NativeApp.addListener('backButton', ({ canGoBack }) => {

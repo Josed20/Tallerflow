@@ -62,7 +62,7 @@ import BrandLogo from '../../components/BrandLogo.vue'
         <section>
           <h2>5. Cancelación y Periodo de Gracia</h2>
           <p>
-            Si solicitas la eliminación de tu taller, se aplicará un <strong>periodo de gracia de treinta (30) días calendario</strong> en estado de eliminación programada. Durante este tiempo puedes reactivar la cuenta comunicándote a <a href="mailto:soporte@tallerflow.pe">soporte@tallerflow.pe</a>. Vencido el plazo, la supresión de la base de datos es definitiva.
+            Si solicitas la eliminación de tu taller, se aplicará un <strong>periodo de gracia de treinta (30) días calendario</strong> en estado de eliminación programada. Durante este tiempo puedes reactivar la cuenta comunicándote a <a href="mailto:soporte@tallerflowpe.com">soporte@tallerflowpe.com</a>. Vencido el plazo, la supresión de la base de datos es definitiva.
           </p>
         </section>
 
@@ -77,7 +77,7 @@ import BrandLogo from '../../components/BrandLogo.vue'
 
     <footer class="legal-footer">
       <div class="legal-container">
-        <p>© 2026 TallerFlow · <RouterLink to="/privacidad">Política de privacidad</RouterLink> · Contacto: soporte@tallerflow.pe</p>
+        <p>© 2026 TallerFlow · <RouterLink to="/privacidad">Política de privacidad</RouterLink> · Contacto: soporte@tallerflowpe.com</p>
       </div>
     </footer>
   </div>
@@ -110,7 +110,7 @@ import BrandLogo from '../../components/BrandLogo.vue'
 }
 
 .legal-back-link {
-  color: var(--tf-primary, #1F3A68);
+  color: var(--tf-primary, #0A346F);
   text-decoration: none;
   font-weight: 700;
   font-size: 0.9375rem;
@@ -145,8 +145,8 @@ import BrandLogo from '../../components/BrandLogo.vue'
 
 .legal-badge {
   display: inline-block;
-  background-color: var(--tf-primary-soft, #E4EBF6);
-  color: var(--tf-primary, #1F3A68);
+  background-color: var(--tf-primary-soft, #E7EEF8);
+  color: var(--tf-primary, #0A346F);
   font-size: 0.75rem;
   font-weight: 700;
   padding: 0.25rem 0.6rem;
@@ -160,7 +160,7 @@ import BrandLogo from '../../components/BrandLogo.vue'
   font-family: var(--tf-font-headline, Archivo, sans-serif);
   font-weight: 800;
   font-size: clamp(1.5rem, 4vw, 2.2rem);
-  color: var(--tf-primary, #1F3A68);
+  color: var(--tf-primary, #0A346F);
   margin-bottom: 0.5rem;
   line-height: 1.2;
 }
@@ -198,7 +198,7 @@ import BrandLogo from '../../components/BrandLogo.vue'
 }
 
 .legal-article a {
-  color: var(--tf-primary, #1F3A68);
+  color: var(--tf-primary, #0A346F);
   font-weight: 700;
 }
 
@@ -212,7 +212,7 @@ import BrandLogo from '../../components/BrandLogo.vue'
 }
 
 .legal-footer a {
-  color: var(--tf-primary, #1F3A68);
+  color: var(--tf-primary, #0A346F);
   text-decoration: none;
 }
 </style>

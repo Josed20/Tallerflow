@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 146.11 106.51" role="img" aria-label="TallerFlow">
+  <g transform="translate(73.054 53.255) scale(1.0000) rotate(-45) translate(-54.0 -54.0)">
+    <path fill="#00BFB2" d="M8 0H44A8 8 0 0 1 52 8V24H0V8A8 8 0 0 1 8 0Z"/>
+    <path fill="#FFFFFF" d="M64 0H72A8 8 0 0 1 80 8V44A8 8 0 0 1 72 52H56V8A8 8 0 0 1 64 0Z"/>
+    <path fill="#FFFFFF" d="M8 28H24V80H8A8 8 0 0 1 0 72V36A8 8 0 0 1 8 28Z"/>
+    <path fill="#00BFB2" d="M28 28H52V52H28V28Z"/>
+    <path fill="#00BFB2" d="M28 56H52V80H28V56Z"/>
+    <path fill="#FFFFFF" d="M56 56H80V72A8 8 0 0 1 72 80H56V56Z"/>
+    <path fill="#00BFB2" d="M84 28H100A8 8 0 0 1 108 36V100A8 8 0 0 1 100 108H36A8 8 0 0 1 28 100V84H84Z"/>
+  </g>
+</svg>

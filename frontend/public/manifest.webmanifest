@@ -4,8 +4,8 @@
   "description": "Plataforma de trazabilidad para talleres de confección",
   "start_url": "/app",
   "display": "standalone",
-  "background_color": "#16294A",
-  "theme_color": "#1F3A68",
+  "background_color": "#062550",
+  "theme_color": "#0A346F",
   "icons": [
     {
       "src": "/favicon-16x16.png",
