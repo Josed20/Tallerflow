@@ -1,0 +1,11 @@
+[Unit]
+Description=Hourly TallerFlow disk usage check
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=5min
+Persistent=true
+Unit=tallerflow-disk-alert.service
+
+[Install]
+WantedBy=timers.target
