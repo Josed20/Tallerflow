@@ -51,8 +51,13 @@ printf 'La particion de %s esta al %s%% (umbral %s%%).\r\n\r\n%s\r\n\r\nRevisa c
 port=${TF_SMTP_PORT:-587}
 scheme=smtp
 [[ "$port" == 465 ]] && scheme=smtps
+# Inside a quoted curl config value, backslashes and double quotes are escapes.
+curl_quote() {
+  local value=${1//\\/\\\\}
+  printf '%s' "${value//\"/\\\"}"
+}
 # The credentials go through stdin so they never appear in the process list.
-printf 'user = "%s:%s"\n' "$TF_SMTP_USER" "$TF_SMTP_PASSWORD" |
+printf 'user = "%s:%s"\n' "$(curl_quote "$TF_SMTP_USER")" "$(curl_quote "$TF_SMTP_PASSWORD")" |
   curl --config - --silent --show-error --fail --ssl-reqd \
     --url "$scheme://$TF_SMTP_HOST:$port" \
     --mail-from "$TF_SMTP_FROM" --mail-rcpt "$DISK_ALERT_TO" \
