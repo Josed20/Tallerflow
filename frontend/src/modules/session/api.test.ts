@@ -112,6 +112,32 @@ describe('same-origin API client', () => {
     expect(onUnauthorized).toHaveBeenCalledWith('suspended')
   })
 
+  it('signs the browser out when the workshop is suspended, but not on a login attempt', async () => {
+    const onUnauthorized = vi.fn()
+    configureApiTransport({ kind: 'web', onUnauthorized })
+    const suspended = () => new Response(JSON.stringify({
+      error: { code: 'WORKSHOP_SUSPENDED', request_id: 'suspended-web' },
+    }), { status: 403 })
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(suspended())))
+
+    await expect(api.post('/api/v1/auth/login', { email: 'a@b.pe', password: 'x' })).rejects.toMatchObject({ code: 'WORKSHOP_SUSPENDED' })
+    expect(onUnauthorized).not.toHaveBeenCalled()
+
+    await expect(api.get('/api/v1/orders')).rejects.toMatchObject({ status: 403, code: 'WORKSHOP_SUSPENDED' })
+    expect(onUnauthorized).toHaveBeenCalledWith('suspended')
+  })
+
+  it('leaves an expired browser session to the router guard', async () => {
+    const onUnauthorized = vi.fn()
+    configureApiTransport({ kind: 'web', onUnauthorized })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: { code: 'SESSION_INVALID', request_id: 'expired-web' },
+    }), { status: 401 })))
+
+    await expect(api.get('/api/v1/orders')).rejects.toMatchObject({ status: 401 })
+    expect(onUnauthorized).not.toHaveBeenCalled()
+  })
+
   it('rejects mobile requests without a configured API origin', async () => {
     vi.stubEnv('VITE_API_BASE_URL', '')
     configureApiTransport({ kind: 'mobile', getToken: () => null })

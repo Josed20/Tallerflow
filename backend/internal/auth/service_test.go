@@ -272,6 +272,56 @@ func (r *failingPasswordCredentialRepo) FindByUserID(_ context.Context, _ uuid.U
 	return &r.credential, nil
 }
 
+func TestLoginRefusesSuspendedWorkshopOnlyAfterTheCorrectPassword(t *testing.T) {
+	hasher := NewPasswordHasher(DefaultPasswordParams())
+	hash, err := hasher.Hash("Correct horse battery staple 7!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workshopID := uuid.New()
+	credential := &Credential{UserID: uuid.New(), PasswordHash: hash, Active: true}
+	gate := &fakeWorkshopGate{suspended: map[uuid.UUID]bool{workshopID: true}}
+	newService := func(limiter *loginLimiter, sessions *fakeSessionRepository) *AuthService {
+		service := NewAuthService(&loginCredentialRepo{credential: credential},
+			&loginMemberships{count: 1, membership: ActiveMembership{WorkshopID: workshopID, Role: "OPERATOR"}},
+			NewSessionService(sessions, testPepper, fixedClock(testNow), bytes.NewReader(make([]byte, 32))), hasher, limiter)
+		service.UseWorkshopGate(gate)
+		return service
+	}
+
+	sessions := &fakeSessionRepository{}
+	limiter := &loginLimiter{attempts: make(map[string]int)}
+	_, err = newService(limiter, sessions).Login(context.Background(), "operator@example.com", "Correct horse battery staple 7!", "192.0.2.10", SessionKindMobile)
+	if !errors.Is(err, ErrWorkshopSuspended) {
+		t.Fatalf("Login() error = %v, want ErrWorkshopSuspended", err)
+	}
+	if sessions.inserted != nil {
+		t.Fatal("a member of a suspended workshop received a session")
+	}
+	if len(limiter.attempts) != 0 {
+		t.Fatal("a correct password on a suspended workshop was recorded as a failed login")
+	}
+
+	_, err = newService(&loginLimiter{attempts: make(map[string]int)}, &fakeSessionRepository{}).Login(context.Background(), "operator@example.com", "wrong", "192.0.2.10", SessionKindMobile)
+	if !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("wrong password error = %v, want ErrInvalidCredentials", err)
+	}
+
+	delete(gate.suspended, workshopID)
+	if _, err := newService(&loginLimiter{attempts: make(map[string]int)}, &fakeSessionRepository{}).Login(context.Background(), "operator@example.com", "Correct horse battery staple 7!", "192.0.2.10", SessionKindMobile); err != nil {
+		t.Fatalf("reactivated workshop login error = %v", err)
+	}
+}
+
+type fakeWorkshopGate struct{ suspended map[uuid.UUID]bool }
+
+func (g *fakeWorkshopGate) EnsureActive(_ context.Context, workshopID uuid.UUID) error {
+	if g.suspended[workshopID] {
+		return ErrWorkshopSuspended
+	}
+	return nil
+}
+
 func TestLoginRejectsUnverifiedEmailOnlyAfterTheCorrectPassword(t *testing.T) {
 	hasher := NewPasswordHasher(DefaultPasswordParams())
 	hash, err := hasher.Hash("Correct horse battery staple 7!")

@@ -1,11 +1,13 @@
 import type { APIErrorEnvelope } from './types'
 
+type UnauthorizedHandler = (reason: 'expired' | 'suspended') => void | Promise<void>
+
 type ApiTransport =
-  | { kind: 'web' }
+  | { kind: 'web'; onUnauthorized?: UnauthorizedHandler }
   | {
       kind: 'mobile'
       getToken: () => string | null | Promise<string | null>
-      onUnauthorized?: (reason: 'expired' | 'suspended') => void | Promise<void>
+      onUnauthorized?: UnauthorizedHandler
     }
 
 let transport: ApiTransport = { kind: 'web' }
@@ -52,9 +54,11 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as APIErrorEnvelope | null
-    if (activeTransport.kind === 'mobile' && path !== '/api/v1/auth/login') {
-      const suspended = payload?.error?.code === 'WORKSHOP_SUSPENDED'
-      if (response.status === 401 || (response.status === 403 && suspended)) {
+    if (path !== '/api/v1/auth/login') {
+      const suspended = response.status === 403 && payload?.error?.code === 'WORKSHOP_SUSPENDED'
+      // A suspended workshop signs out both clients. An expired web session is
+      // left to the router guard, which already sends it to the login.
+      if (suspended || (activeTransport.kind === 'mobile' && response.status === 401)) {
         await activeTransport.onUnauthorized?.(suspended ? 'suspended' : 'expired')
       }
     }
