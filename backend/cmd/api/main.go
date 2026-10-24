@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Josed20/Tallerflow/backend/platform/config"
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -20,11 +21,21 @@ func main() {
 	}
 }
 
+// ginMode keeps production logs free of Gin's debug banner and route list,
+// which it prints in its default mode.
+func ginMode(environment string) string {
+	if environment == "production" {
+		return gin.ReleaseMode
+	}
+	return gin.DebugMode
+}
+
 func run() error {
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load configuration: %w", err)
 	}
+	gin.SetMode(ginMode(cfg.Environment))
 	app, err := buildApplication(cfg)
 	if err != nil {
 		return fmt.Errorf("build application: %w", err)

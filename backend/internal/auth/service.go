@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -68,6 +69,12 @@ type WorkshopGate interface {
 	EnsureActive(ctx context.Context, workshopID uuid.UUID) error
 }
 
+// SignInAudit records a successful login, web or mobile, in the workshop's
+// audit trail.
+type SignInAudit interface {
+	RecordSignIn(ctx context.Context, workshopID, userID uuid.UUID, kind SessionKind) error
+}
+
 type LoginLimiter interface {
 	Allow(context.Context, string, string) (bool, error)
 	RecordFailure(context.Context, string, string) error
@@ -94,8 +101,11 @@ type AuthService struct {
 	hasher      PasswordHashing
 	limiter     LoginLimiter
 	workshops   WorkshopGate
+	audit       SignInAudit
 	csrfSecret  []byte
 }
+
+func (s *AuthService) UseSignInAudit(audit SignInAudit) { s.audit = audit }
 
 // UseWorkshopGate turns on the workshop status check. Without a gate, as in
 // unit tests, every resolved membership is treated as active.
@@ -187,6 +197,13 @@ func (s *AuthService) Login(ctx context.Context, email, password, clientIP strin
 			return AuthSession{}, s.recordInvalidLogin(ctx, email, clientIP)
 		}
 		return AuthSession{}, err
+	}
+	if s.audit != nil {
+		// The session already exists: a failed audit write is logged rather
+		// than turned into a failed login.
+		if err := s.audit.RecordSignIn(ctx, membership.WorkshopID, credential.UserID, kind); err != nil {
+			log.Printf("record sign-in audit: %v", err)
+		}
 	}
 	return s.authSession(raw.Token, kind, raw.ExpiresAt, s.principal(credential, membership), credential.MustChangePassword), nil
 }

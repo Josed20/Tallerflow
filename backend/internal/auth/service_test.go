@@ -313,6 +313,56 @@ func TestLoginRefusesSuspendedWorkshopOnlyAfterTheCorrectPassword(t *testing.T) 
 	}
 }
 
+func TestLoginRecordsTheSignInAndItsClient(t *testing.T) {
+	hasher := NewPasswordHasher(DefaultPasswordParams())
+	hash, err := hasher.Hash("Correct horse battery staple 7!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workshopID := uuid.New()
+	credential := &Credential{UserID: uuid.New(), PasswordHash: hash, Active: true}
+	newService := func(audit *fakeSignInAudit) *AuthService {
+		service := NewAuthService(&loginCredentialRepo{credential: credential},
+			&loginMemberships{count: 1, membership: ActiveMembership{WorkshopID: workshopID, Role: "OPERATOR"}},
+			NewSessionService(&fakeSessionRepository{}, testPepper, fixedClock(testNow), bytes.NewReader(make([]byte, 64))), hasher,
+			&loginLimiter{attempts: make(map[string]int)})
+		service.UseSignInAudit(audit)
+		return service
+	}
+
+	audit := &fakeSignInAudit{}
+	if _, err := newService(audit).Login(context.Background(), "operator@example.com", "Correct horse battery staple 7!", "192.0.2.10", SessionKindMobile); err != nil {
+		t.Fatal(err)
+	}
+	if len(audit.recorded) != 1 || audit.recorded[0] != (signIn{workshopID, credential.UserID, SessionKindMobile}) {
+		t.Fatalf("recorded sign-ins = %+v", audit.recorded)
+	}
+
+	if _, err := newService(&fakeSignInAudit{}).Login(context.Background(), "operator@example.com", "wrong", "192.0.2.10", SessionKindMobile); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("wrong password error = %v", err)
+	}
+
+	failing := &fakeSignInAudit{err: errors.New("audit insert failed")}
+	if _, err := newService(failing).Login(context.Background(), "operator@example.com", "Correct horse battery staple 7!", "192.0.2.10", SessionKindWeb); err != nil {
+		t.Fatalf("a failed audit write turned into a failed login: %v", err)
+	}
+}
+
+type signIn struct {
+	workshopID, userID uuid.UUID
+	kind               SessionKind
+}
+
+type fakeSignInAudit struct {
+	recorded []signIn
+	err      error
+}
+
+func (a *fakeSignInAudit) RecordSignIn(_ context.Context, workshopID, userID uuid.UUID, kind SessionKind) error {
+	a.recorded = append(a.recorded, signIn{workshopID, userID, kind})
+	return a.err
+}
+
 type fakeWorkshopGate struct{ suspended map[uuid.UUID]bool }
 
 func (g *fakeWorkshopGate) EnsureActive(_ context.Context, workshopID uuid.UUID) error {

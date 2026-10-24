@@ -140,6 +140,11 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 		return nil, fmt.Errorf("create workshop gate: %w", err)
 	}
 	authService.UseWorkshopGate(workshopGate)
+	signInAudit, err := auth.NewTenantSignInAudit(tenantRunner)
+	if err != nil {
+		return nil, fmt.Errorf("create sign-in audit: %w", err)
+	}
+	authService.UseSignInAudit(signInAudit)
 	passwordResetRepository, err := passwordreset.NewPostgresRepository(db, time.Now)
 	if err != nil {
 		return nil, fmt.Errorf("create password reset repository: %w", err)
