@@ -10,6 +10,7 @@ import (
 
 	"github.com/Josed20/Tallerflow/backend/internal/auth"
 	"github.com/Josed20/Tallerflow/backend/internal/clients"
+	"github.com/Josed20/Tallerflow/backend/internal/exports"
 	platformconsole "github.com/Josed20/Tallerflow/backend/internal/console"
 	"github.com/Josed20/Tallerflow/backend/internal/onboarding"
 	"github.com/Josed20/Tallerflow/backend/internal/orders"
@@ -250,6 +251,7 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 	}
 	ordersService := orders.NewService(ordersRepo, photoStore)
 	ordersHandler := orders.NewHandler(ordersService)
+	exportsHandler := exports.NewHandler(ordersRepo, clientsRepo)
 	trackingRepo, err := orders.NewPostgresTrackingRepository(db, tenantRunner)
 	if err != nil {
 		return nil, fmt.Errorf("create tracking repository: %w", err)
@@ -281,6 +283,9 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 			},
 			func(routes gin.IRouter) {
 				orders.RegisterRoutes(routes, ordersHandler, authHandler.RequireSession())
+			},
+			func(routes gin.IRouter) {
+				exports.RegisterRoutes(routes, exportsHandler, authHandler.RequireSession())
 			},
 			func(routes gin.IRouter) {
 				orders.RegisterTrackingRoutes(routes, trackingHandler, authHandler.RequireSession())

@@ -70,6 +70,32 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
 
 export const api = {
   get: <T>(path: string) => request<T>(path, { method: 'GET' }),
+  getBlob: async (path: string): Promise<Blob> => {
+    const activeTransport = transport
+    const headers: Record<string, string> = {}
+    if (activeTransport.kind === 'mobile') {
+      const token = await activeTransport.getToken()
+      if (token) headers.Authorization = `Bearer ${token}`
+    }
+
+    const response = await fetch(apiUrl(path, activeTransport.kind), {
+      method: 'GET',
+      credentials: activeTransport.kind === 'mobile' ? 'omit' : 'include',
+      headers,
+    })
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null) as APIErrorEnvelope | null
+      if (activeTransport.kind === 'mobile') {
+        const suspended = payload?.error?.code === 'WORKSHOP_SUSPENDED'
+        if (response.status === 401 || (response.status === 403 && suspended)) {
+          await activeTransport.onUnauthorized?.(suspended ? 'suspended' : 'expired')
+        }
+      }
+      throw new ApiError(response.status, payload?.error?.code, payload?.error?.request_id)
+    }
+    return response.blob()
+  },
   post: <T>(path: string, body?: unknown, csrfToken?: string, headers?: Record<string, string>) =>
     request<T>(path, {
       method: 'POST',

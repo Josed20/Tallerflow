@@ -126,7 +126,7 @@ const isAuthenticated = computed(() => session.isAuthenticated)
           <div>
             <h4>Soporte</h4>
             <ul>
-              <li><a href="mailto:soporte@tallerflow.pe">soporte@tallerflow.pe</a></li>
+              <li><a href="mailto:soporte@tallerflowpe.com">soporte@tallerflowpe.com</a></li>
               <li><span>Lima, Perú</span></li>
             </ul>
           </div>

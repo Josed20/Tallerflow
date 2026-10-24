@@ -57,7 +57,7 @@ func Load() (Config, error) {
 		SMTPPort:             valueOrDefault("TF_SMTP_PORT", "1025"),
 		SMTPUsername:         strings.TrimSpace(os.Getenv("TF_SMTP_USER")),
 		SMTPPassword:         os.Getenv("TF_SMTP_PASSWORD"),
-		SMTPFromAddress:      valueOrDefault("TF_SMTP_FROM", "soporte@tallerflow.pe"),
+		SMTPFromAddress:      valueOrDefault("TF_SMTP_FROM", "soporte@tallerflowpe.com"),
 		R2Endpoint:           strings.TrimSpace(os.Getenv("TF_R2_ENDPOINT")),
 		R2BucketPhotos:       strings.TrimSpace(os.Getenv("TF_R2_BUCKET_PHOTOS")),
 		R2AccessKeyID:        strings.TrimSpace(os.Getenv("TF_R2_ACCESS_KEY_ID")),

@@ -149,7 +149,7 @@ func TestLoadDefaultsPasswordResetDeliveryForDevelopment(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "localhost", cfg.SMTPHost)
 	require.Equal(t, "1025", cfg.SMTPPort)
-	require.Equal(t, "soporte@tallerflow.pe", cfg.SMTPFromAddress)
+	require.Equal(t, "soporte@tallerflowpe.com", cfg.SMTPFromAddress)
 	require.False(t, cfg.SMTPRequireTLS)
 	require.Equal(t, cfg.AllowedOrigin, cfg.PasswordResetBaseURL)
 }

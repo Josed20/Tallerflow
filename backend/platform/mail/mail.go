@@ -137,7 +137,7 @@ Si no solicitaste este cambio, puedes ignorar este correo de forma segura.
 
 El taller «{{.WorkshopName}}» ha sido suspendido temporalmente{{if .Reason}}: {{.Reason}}{{end}}.
 
-Si crees que se trata de un error o deseas reactivar tu cuenta, contáctanos a {{if .SupportEmail}}{{.SupportEmail}}{{else}}soporte@tallerflow.pe{{end}}.
+Si crees que se trata de un error o deseas reactivar tu cuenta, contáctanos a {{if .SupportEmail}}{{.SupportEmail}}{{else}}soporte@tallerflowpe.com{{end}}.
 
 — Equipo TallerFlow`,
 	},
@@ -147,7 +147,7 @@ Si crees que se trata de un error o deseas reactivar tu cuenta, contáctanos a {
 
 Se ha programado la eliminación definitiva del taller «{{.WorkshopName}}» para el {{.DeletionDate}}.
 
-Durante los próximos 30 días puedes solicitar la cancelación de este proceso comunicándote a {{if .SupportEmail}}{{.SupportEmail}}{{else}}soporte@tallerflow.pe{{end}}.
+Durante los próximos 30 días puedes solicitar la cancelación de este proceso comunicándote a {{if .SupportEmail}}{{.SupportEmail}}{{else}}soporte@tallerflowpe.com{{end}}.
 
 Pasado ese plazo, todos los datos del taller serán borrados de manera irreversible.
 
