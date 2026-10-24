@@ -206,9 +206,10 @@ func (r *PostgresRepository) ConsumeInvitation(ctx context.Context, tokenHash []
 		}
 		if userID == uuid.Nil {
 			var returnedUserID string
+			// Opening the emailed invitation already proves the address.
 			if err := tx.Raw(`
-				INSERT INTO users (email, name, status)
-				VALUES (?, ?, 'ACTIVE')
+				INSERT INTO users (email, name, status, email_verified_at)
+				VALUES (?, ?, 'ACTIVE', now())
 				RETURNING id
 			`, invitation.Email, name).Scan(&returnedUserID).Error; err != nil {
 				return mapConstraint(err)

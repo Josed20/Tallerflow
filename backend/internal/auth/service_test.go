@@ -271,3 +271,35 @@ func (r *failingPasswordCredentialRepo) FindByEmail(_ context.Context, _ string)
 func (r *failingPasswordCredentialRepo) FindByUserID(_ context.Context, _ uuid.UUID) (*Credential, error) {
 	return &r.credential, nil
 }
+
+func TestLoginRejectsUnverifiedEmailOnlyAfterTheCorrectPassword(t *testing.T) {
+	hasher := NewPasswordHasher(DefaultPasswordParams())
+	hash, err := hasher.Hash("Correct horse battery staple 7!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	credential := &Credential{UserID: uuid.New(), PasswordHash: hash, Active: true, PendingEmailVerification: true}
+	newService := func(limiter *loginLimiter, sessions *fakeSessionRepository) *AuthService {
+		return NewAuthService(&loginCredentialRepo{credential: credential}, &loginMemberships{count: 1},
+			NewSessionService(sessions, testPepper, fixedClock(testNow), bytes.NewReader(make([]byte, 32))), hasher, limiter)
+	}
+
+	sessions := &fakeSessionRepository{}
+	limiter := &loginLimiter{attempts: make(map[string]int)}
+	_, err = newService(limiter, sessions).Login(context.Background(), "owner@example.com", "Correct horse battery staple 7!", "192.0.2.10", SessionKindWeb)
+	if !errors.Is(err, ErrEmailNotVerified) {
+		t.Fatalf("Login() error = %v, want ErrEmailNotVerified", err)
+	}
+	if sessions.inserted != nil {
+		t.Fatal("an unverified account received a session")
+	}
+	if len(limiter.attempts) != 0 {
+		t.Fatal("a correct password on an unverified account was recorded as a failed login")
+	}
+
+	// A wrong password must not reveal that the account exists but is unverified.
+	_, err = newService(&loginLimiter{attempts: make(map[string]int)}, &fakeSessionRepository{}).Login(context.Background(), "owner@example.com", "wrong", "192.0.2.10", SessionKindWeb)
+	if !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("wrong password error = %v, want ErrInvalidCredentials", err)
+	}
+}

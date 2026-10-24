@@ -4,7 +4,10 @@ import (
 	"encoding/base64"
 	"errors"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 const testPassword = "Correct horse battery staple 7!"
@@ -114,5 +117,47 @@ func TestPasswordHasherRejectsResourceExhaustingPHCParameters(t *testing.T) {
 				t.Fatal("Verify() = true, want false for resource-exhausting PHC input")
 			}
 		})
+	}
+}
+
+func TestPasswordHashingNeverRunsMoreThanTheMemoryBudgetAtOnce(t *testing.T) {
+	var running, peak atomic.Int32
+	original := deriveKey
+	deriveKey = func(_, _ []byte, _, _ uint32, _ uint8, keyLen uint32) []byte {
+		now := running.Add(1)
+		for {
+			seen := peak.Load()
+			if now <= seen || peak.CompareAndSwap(seen, now) {
+				break
+			}
+		}
+		defer running.Add(-1)
+		timer := time.NewTimer(20 * time.Millisecond)
+		<-timer.C
+		return make([]byte, keyLen)
+	}
+	t.Cleanup(func() { deriveKey = original })
+
+	hasher := NewPasswordHasher(DefaultPasswordParams())
+	encoded, err := hasher.Hash("Correct horse battery staple 7!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var group sync.WaitGroup
+	for i := 0; i < 3*maxConcurrentArgon; i++ {
+		group.Add(1)
+		go func(i int) {
+			defer group.Done()
+			if i%2 == 0 {
+				_, _ = hasher.Hash("Correct horse battery staple 7!")
+			} else {
+				_, _ = hasher.Verify(encoded, "Correct horse battery staple 7!")
+			}
+		}(i)
+	}
+	group.Wait()
+
+	if got := peak.Load(); got > maxConcurrentArgon {
+		t.Fatalf("%d Argon2id derivations ran at once, want at most %d", got, maxConcurrentArgon)
 	}
 }

@@ -110,6 +110,8 @@ func (h *Handler) Login(c *gin.Context) {
 		switch {
 		case errors.Is(err, ErrInvalidCredentials):
 			h.fail(c, http.StatusUnauthorized, "AUTH_INVALID_CREDENTIALS", "Email or password is incorrect.")
+		case errors.Is(err, ErrEmailNotVerified):
+			h.fail(c, http.StatusForbidden, "EMAIL_NOT_VERIFIED", "Verify your email before signing in.")
 		case errors.Is(err, ErrTooManyAttempts):
 			c.Header("Retry-After", "900")
 			h.fail(c, http.StatusTooManyRequests, "AUTH_RATE_LIMITED", "Too many login attempts.")

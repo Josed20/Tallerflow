@@ -14,6 +14,7 @@ import (
 	"github.com/Josed20/Tallerflow/backend/internal/onboarding"
 	"github.com/Josed20/Tallerflow/backend/internal/orders"
 	"github.com/Josed20/Tallerflow/backend/internal/passwordreset"
+	"github.com/Josed20/Tallerflow/backend/internal/signup"
 	"github.com/Josed20/Tallerflow/backend/internal/team"
 	"github.com/Josed20/Tallerflow/backend/internal/workshops"
 	"github.com/Josed20/Tallerflow/backend/platform/blob"
@@ -195,6 +196,26 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 		return nil, fmt.Errorf("create team handler: %w", err)
 	}
 	passwordResetHandler := passwordreset.NewHandler(passwordResetService)
+	// Sprint 4 - José: open signup with email verification.
+	signupRepository, err := signup.NewPostgresRepository(db, tenantRunner)
+	if err != nil {
+		return nil, fmt.Errorf("create signup repository: %w", err)
+	}
+	signupService, err := signup.NewService(signupRepository, auth.NewPasswordHasher(auth.DefaultPasswordParams()), sessions, mailSender,
+		signup.Config{Enabled: cfg.SignupEnabled, BaseURL: cfg.AllowedOrigin}, time.Now)
+	if err != nil {
+		return nil, fmt.Errorf("create signup service: %w", err)
+	}
+	signupLimiter := func(scope string, limit int) *security.MemoryRateLimiter {
+		return security.NewMemoryRateLimiter([]byte("signup-"+scope+"-rate-limit:"+cfg.SessionPepper), time.Now, 15*time.Minute, limit, 10000)
+	}
+	signupHandler, err := signup.NewHandler(signupService, signup.HandlerConfig{
+		AllowedOrigin: cfg.AllowedOrigin, Environment: cfg.Environment, Secure: cfg.Environment != "development",
+		RegisterLimiter: signupLimiter("register", 5), ResendLimiter: signupLimiter("resend", 5), VerifyLimiter: signupLimiter("verify", 10),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create signup handler: %w", err)
+	}
 	clientsRepo, err := clients.NewPostgresRepository(tenantRunner)
 	if err != nil {
 		return nil, fmt.Errorf("create clients repository: %w", err)
@@ -237,6 +258,7 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 			func(routes gin.IRouter) { onboarding.RegisterRoutes(routes, onboardingHandler) },
 			func(routes gin.IRouter) { auth.RegisterRoutes(routes, authHandler) },
 			func(routes gin.IRouter) { passwordreset.RegisterRoutes(routes, passwordResetHandler) },
+			func(routes gin.IRouter) { signup.RegisterRoutes(routes, signupHandler) },
 			func(routes gin.IRouter) {
 				workshops.RegisterRoutes(routes, workshopHandler, authHandler.RequireSession())
 			},
