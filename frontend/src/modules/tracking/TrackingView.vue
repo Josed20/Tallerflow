@@ -125,7 +125,7 @@ onUnmounted(() => {
 
     <template v-else-if="order">
       <header class="tracking__header">
-        <p class="tracking__workshop">{{ order.workshop_name }}</p>
+        <p class="tracking__workshop"><span>Hecho en</span> <strong>{{ order.workshop_name }}</strong></p>
         <div class="tracking__title">
           <span class="tracking__code">{{ order.code }}</span>
           <h1>{{ order.product }}</h1>
@@ -175,10 +175,12 @@ onUnmounted(() => {
         <span><Clock :size="14" aria-hidden="true" /> Actualizado {{ formatShort(order.updated_at) }}</span>
         <button type="button" @click="load()"><RefreshCw :size="14" aria-hidden="true" /> Actualizar</button>
       </footer>
-      <p class="tracking__brand"><span>Seguimiento con</span> <BrandLogo :size="18" /></p>
     </template>
 
     <p v-else-if="error" class="tracking__state">{{ error }}</p>
+
+    <!-- Shown on dead links too, so a customer always knows which service sent them. -->
+    <p v-if="!loading" class="tracking__brand"><span>Seguimiento con</span> <BrandLogo :size="16" /></p>
 
     <div v-if="previewPhoto" class="tracking__lightbox" role="dialog" aria-modal="true" aria-label="Foto de evidencia" @click.self="closePhoto">
       <button ref="photoCloseButton" type="button" class="tracking__lightbox-close" @click="closePhoto"><X :size="18" aria-hidden="true" /> Cerrar</button>
@@ -195,7 +197,9 @@ onUnmounted(() => {
 .tracking__state--empty h1 { margin: 0; color: var(--tf-ink); font-size: 1.35rem; }
 .tracking__state--empty p { margin: 0; }
 .tracking__header { display: grid; gap: .6rem; }
-.tracking__workshop { margin: 0; color: var(--tf-text-subtle); font-family: var(--tf-font-display); font-size: .74rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.tracking__workshop { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; margin: 0; color: var(--tf-text-subtle); font-size: .8rem; }
+/* The workshop's woven label (DESIGN.md, Components). */
+.tracking__workshop strong { padding: .2rem .6rem .15rem; border-bottom: 2px solid var(--tf-accent); border-radius: var(--tf-radius-sm); color: var(--tf-on-primary); background: var(--tf-primary); font-family: var(--tf-font-display); font-size: .72rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; overflow-wrap: anywhere; }
 .tracking__title { display: grid; gap: .25rem; }
 .tracking__code { width: fit-content; padding: .2rem .55rem; border-radius: var(--tf-radius-sm); color: var(--tf-on-primary); background: var(--tf-primary); font-family: var(--tf-font-mono); font-size: .8rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .tracking__title h1 { margin: 0; font-size: var(--tf-page-title-size); line-height: 1.2; text-wrap: balance; }
@@ -231,7 +235,6 @@ onUnmounted(() => {
 .tracking__footer span { display: inline-flex; align-items: center; gap: .35rem; }
 .tracking__footer button { display: inline-flex; align-items: center; gap: .35rem; min-height: 44px; padding: .4rem .8rem; border: 1px solid var(--tf-primary); border-radius: var(--tf-radius); color: var(--tf-primary); background: var(--tf-surface); font: inherit; font-weight: 700; cursor: pointer; }
 .tracking__brand { display: flex; align-items: center; justify-content: center; gap: .4rem; margin: 0; color: var(--tf-text-subtle); font-size: .78rem; }
-.tracking__brand :deep(.brand-logo) { color: var(--tf-primary); font-size: .85rem; }
 .tracking__lightbox { position: fixed; inset: 0; z-index: 100; display: grid; place-content: center; gap: .6rem; padding: 1rem; background: rgb(22 35 61 / 82%); cursor: zoom-out; }
 .tracking__lightbox-close { display: inline-flex; align-items: center; gap: .35rem; justify-self: end; min-height: 44px; padding: .5rem .8rem; border: 1px solid var(--tf-on-primary); border-radius: var(--tf-radius); color: var(--tf-on-primary); background: transparent; font: inherit; font-weight: 700; cursor: pointer; }
 .tracking__lightbox-close:focus-visible { outline: 3px solid var(--tf-shell-accent); outline-offset: 2px; }

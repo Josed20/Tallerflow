@@ -1,9 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
-  <path d="M9 6h22l9 9v27H9z" fill="#ffffff" stroke="#1f3a68" stroke-width="3.2" stroke-linejoin="round"/>
-  <circle cx="17" cy="14" r="3.2" fill="none" stroke="#1f3a68" stroke-width="2.6"/>
-  <g fill="#1f3a68">
-    <rect x="12" y="30" width="2.6" height="2.8" rx="1"/><rect x="15.9" y="30" width="2.6" height="2.8" rx="1"/><rect x="19.8" y="30" width="2.6" height="2.8" rx="1"/>
-    <rect x="23.7" y="30" width="2.6" height="2.8" rx="1"/><rect x="27.6" y="30" width="2.6" height="2.8" rx="1"/><rect x="31.5" y="30" width="2.6" height="2.8" rx="1"/>
-    <circle cx="36" cy="31.4" r="2.1"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="TallerFlow">
+  <rect width="512" height="512" rx="112.6" fill="#0A346F"/>
+  <g transform="translate(256.000 256.000) scale(2.3829) rotate(-45) translate(-54.0 -54.0)">
+    <path fill="#00BFB2" d="M8 0H44A8 8 0 0 1 52 8V24H0V8A8 8 0 0 1 8 0Z"/>
+    <path fill="#FFFFFF" d="M64 0H72A8 8 0 0 1 80 8V44A8 8 0 0 1 72 52H56V8A8 8 0 0 1 64 0Z"/>
+    <path fill="#FFFFFF" d="M8 28H24V80H8A8 8 0 0 1 0 72V36A8 8 0 0 1 8 28Z"/>
+    <path fill="#00BFB2" d="M28 28H52V52H28V28Z"/>
+    <path fill="#00BFB2" d="M28 56H52V80H28V56Z"/>
+    <path fill="#FFFFFF" d="M56 56H80V72A8 8 0 0 1 72 80H56V56Z"/>
+    <path fill="#00BFB2" d="M84 28H100A8 8 0 0 1 108 36V100A8 8 0 0 1 100 108H36A8 8 0 0 1 28 100V84H84Z"/>
   </g>
 </svg>

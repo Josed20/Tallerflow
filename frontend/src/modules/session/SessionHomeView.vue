@@ -374,7 +374,7 @@ onMounted(() => {
 .first-steps {
   background: var(--tf-surface);
   border: 1px solid var(--tf-border-soft);
-  border-left: 4px solid var(--tf-accent, #1F3A68);
+  border-left: 4px solid var(--tf-primary);
   border-radius: var(--tf-radius-sm);
   padding: 1.25rem;
   display: grid;
@@ -430,7 +430,7 @@ onMounted(() => {
   transition: border-color 0.15s, background-color 0.15s;
 }
 .first-step:hover {
-  border-color: var(--tf-accent, #1F3A68);
+  border-color: var(--tf-primary);
   background: var(--tf-surface);
 }
 .first-step--clickable {
@@ -480,7 +480,7 @@ onMounted(() => {
   flex-shrink: 0;
 }
 .first-step:hover .first-step__arrow {
-  color: var(--tf-accent, #1F3A68);
+  color: var(--tf-primary);
 }
 
 /* Modal de Exportación (Sprint 4 - Lucero) */

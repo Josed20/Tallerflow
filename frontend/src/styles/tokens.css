@@ -1,5 +1,6 @@
-/* Sistema "Ficha viajera". Fuente de verdad: DESIGN.md en la raíz del repo.
-   La marca calla en azul mezclilla; el único relleno saturado es "Atrasada". */
+/* Sistema "Etiqueta tejida". Fuente de verdad: DESIGN.md en la raíz del repo.
+   La marca calla en el marino del logo, con el turquesa como hilo de firma;
+   el único relleno saturado es "Atrasada". */
 :root {
   --tf-font-display: "Archivo", "Arial Black", system-ui, sans-serif;
   --tf-font-body: "Atkinson Hyperlegible Next", "Segoe UI", system-ui, sans-serif;
@@ -8,22 +9,28 @@
   color: #16233d;
   background: #f3f5f9;
 
-  /* Marca: azul mezclilla */
-  --tf-primary: #1f3a68;
-  --tf-primary-hover: #2a4c85;
-  --tf-primary-strong: #16294a;
-  --tf-primary-soft: #e4ebf6;
-  --tf-primary-border: #afc0dc;
+  /* Marca: marino del logo */
+  --tf-primary: #0a346f;
+  --tf-primary-hover: #154a8f;
+  --tf-primary-strong: #072756;
+  --tf-primary-soft: #e7eef8;
+  --tf-primary-border: #a9bcd9;
   --tf-on-primary: #ffffff;
 
+  /* Hilo turquesa: firma de marca, nunca estado ni texto sobre blanco (2.3:1) */
+  --tf-accent: #00bfb2;
+  --tf-on-accent: #04121f;
+  --tf-accent-text: #006b64;
+
   /* Barra lateral */
-  --tf-shell: #16294a;
-  --tf-shell-raised: #2a4c85;
+  --tf-shell: #062550;
+  --tf-shell-raised: #0d3f85;
   --tf-shell-line: rgb(228 235 246 / 18%);
   --tf-shell-hover: rgb(228 235 246 / 14%);
   --tf-on-shell: #ffffff;
-  --tf-on-shell-muted: #c9d5ea;
-  --tf-shell-accent: #8fb0e8;
+  --tf-on-shell-muted: #b8c7dc;
+  --tf-shell-accent: #7fa8e8; /* foco y detalles sobre la barra; nunca turquesa */
+  --tf-shell-thread: var(--tf-accent); /* orillo, ítem activo y etiqueta del taller */
 
   /* Superficies y texto */
   --tf-surface: #ffffff;
@@ -37,7 +44,7 @@
   --tf-border: #7f8ba2; /* bordes de campos y controles: 3:1 sobre blanco y fondos */
   --tf-border-soft: #d5dce6;
   --tf-neutral-soft: #eceff4;
-  --tf-focus: #1f3a68;
+  --tf-focus: #0a346f;
   --tf-overlay: rgb(22 35 61 / 55%);
 
   /* Semáforo de entrega: palabra + forma + color */
@@ -64,9 +71,9 @@
   --tf-error: #c8102e;
   --tf-error-bg: #fce6e9;
 
-  --tf-info: #2a4c85;
-  --tf-info-soft: #e4ebf6;
-  --tf-info-border: #afc0dc;
+  --tf-info: #154a8f;
+  --tf-info-soft: #e7eef8;
+  --tf-info-border: #a9bcd9;
 
   --tf-radius-sm: 4px;
   --tf-radius: 6px;
