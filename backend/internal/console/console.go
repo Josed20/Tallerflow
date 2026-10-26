@@ -222,8 +222,10 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Session, erro
 }
 
 func (s *Service) ValidateCSRF(ctx context.Context, sessionID uuid.UUID, raw string) bool {
+	// Row().Scan reads the bytea as one value; GORM's Scan(&[]byte) would
+	// treat it as a list of rows and always fail.
 	var stored []byte
-	if s.db.WithContext(ctx).Raw("SELECT csrf_token_hash FROM console_sessions WHERE id = ?", sessionID).Scan(&stored).Error != nil {
+	if s.db.WithContext(ctx).Raw("SELECT csrf_token_hash FROM console_sessions WHERE id = ?", sessionID).Row().Scan(&stored) != nil {
 		return false
 	}
 	digest := sha256.Sum256([]byte(raw))
