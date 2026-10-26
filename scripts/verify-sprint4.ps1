@@ -59,6 +59,7 @@ try {
     $env:TF_TEST_DATABASE_URL = 'postgres://tallerflow_app:local-app-change-me@127.0.0.1:55435/tallerflow?sslmode=disable'
     $env:TF_TEST_BOOTSTRAP_DATABASE_URL = 'postgres://tallerflow_bootstrap:local-bootstrap-change-me@127.0.0.1:55435/tallerflow?sslmode=disable'
     $env:TF_TEST_ADMIN_DATABASE_URL = 'postgres://postgres:local-postgres-change-me@127.0.0.1:55435/tallerflow?sslmode=disable'
+    $env:TF_TEST_CONSOLE_DATABASE_URL = 'postgres://tallerflow_console:local-console-change-me@127.0.0.1:55435/tallerflow?sslmode=disable'
     # Onboarding's test needs an unclaimed installation, so verify-sprint2 runs it
     # on its own database. The other packages share this one, one at a time.
     $packages = go -C backend list ./... | Where-Object { $_ -notmatch '/internal/onboarding$' }
