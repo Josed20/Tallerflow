@@ -14,7 +14,6 @@ describe('JoinView invitation completion', () => {
   it('confirms the account email and carries it to login', async () => {
     // Regression: ISSUE-001 — successful registration did not tell the invited user how to continue.
     // Found by /qa on 2026-09-29
-    // Report: .gstack/qa-reports/qa-report-localhost-2026-09-29.md
     vi.mocked(teamApi.consume).mockResolvedValue({
       data: { email: 'new.member@example.test', role: 'OPERATOR' },
     })

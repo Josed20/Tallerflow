@@ -8,7 +8,6 @@ describe('LoginView invited email', () => {
   it('prefills the email passed by the completed invitation flow', async () => {
     // Regression: ISSUE-001 — login discarded the email of the newly registered member.
     // Found by /qa on 2026-09-29
-    // Report: .gstack/qa-reports/qa-report-localhost-2026-09-29.md
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [
