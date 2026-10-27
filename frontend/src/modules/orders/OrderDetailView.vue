@@ -1353,7 +1353,6 @@ h1 {
 .photo-lightbox-card {
   max-width: 90vw;
   max-height: calc(100vh - 2rem);
-  width: min(90vw, 72rem);
   background: var(--tf-surface);
   border-radius: 12px;
   padding: 0.75rem;
