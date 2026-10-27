@@ -44,7 +44,7 @@ type StagePhoto struct {
 	OrderID       uuid.UUID `json:"order_id" gorm:"type:uuid;not null"`
 	StagePosition int       `json:"stage_position" gorm:"not null"`
 	PhotoData     string    `json:"photo_data"`
-	ObjectKey     string    `json:"-" gorm:"-"`
+	ObjectKey     string    `json:"-" gorm:"column:object_key"`
 	Caption       string    `json:"caption"`
 	CreatedAt     time.Time `json:"created_at"`
 }

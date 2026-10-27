@@ -15,6 +15,22 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+func TestStagePhotoScanPreservesR2ObjectKey(t *testing.T) {
+	repository, mock := newOrderRepositoryFixture(t)
+	photoID := uuid.New()
+	objectKey := "workshops/test/orders/test/photos/photo.jpg"
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT object_key FROM stage_photos WHERE id = $1")).WithArgs(photoID).
+		WillReturnRows(sqlmock.NewRows([]string{"object_key"}).AddRow(objectKey))
+
+	var photo StagePhoto
+	err := repository.tenant.WithinTenant(context.Background(), uuid.New(), func(tx *gorm.DB) error {
+		return tx.Raw("SELECT object_key FROM stage_photos WHERE id = ?", photoID).Scan(&photo).Error
+	})
+	require.NoError(t, err)
+	require.Equal(t, objectKey, photo.ObjectKey)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestUpdateStageRejectsCompletingPendingStage(t *testing.T) {
 	repository, mock := newOrderRepositoryFixture(t)
 	workshopID, orderID, stageID := uuid.New(), uuid.New(), uuid.New()
