@@ -1189,6 +1189,7 @@ h1 {
   background: var(--tf-neutral-soft);
   font: inherit;
   cursor: zoom-in;
+  touch-action: manipulation;
 }
 
 .photo-thumb-wrapper:focus-visible, .photo-lightbox-close:focus-visible {
@@ -1225,9 +1226,14 @@ h1 {
   right: 0;
   background: rgba(0, 0, 0, 0.65);
   color: var(--tf-on-primary);
-  font-size: .75rem;
+  font-family: inherit;
+  font-size: .68rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
   text-align: center;
-  padding: 0.1rem 0;
+  padding: 0.16rem 0.12rem;
+  white-space: nowrap;
+  letter-spacing: 0;
 }
 
 /* Modales */
@@ -1240,6 +1246,7 @@ h1 {
   justify-content: center;
   z-index: 100;
   padding: 1rem;
+  overscroll-behavior: contain;
 }
 
 .ticket-card {
@@ -1345,26 +1352,40 @@ h1 {
 
 .photo-lightbox-card {
   max-width: 90vw;
-  max-height: 85vh;
+  max-height: calc(100vh - 2rem);
+  width: min(90vw, 72rem);
   background: var(--tf-surface);
   border-radius: 12px;
   padding: 0.75rem;
   display: flex;
   flex-direction: column;
   align-items: center;
+  overflow: auto;
 }
 
 .photo-large {
   max-width: 100%;
-  max-height: 75vh;
+  max-height: calc(100vh - 7.5rem);
   object-fit: contain;
   border-radius: 8px;
+  display: block;
 }
 
 .photo-caption {
-  margin: 0.5rem 0 0 0;
-  font-size: 0.8rem;
+  flex: none;
+  width: 100%;
+  margin: 0.65rem 0 0;
+  padding: 0.25rem 0.5rem 0;
+  text-align: center;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
   color: var(--tf-text-subtle);
+}
+
+@media (max-width: 480px) {
+  .photo-lightbox-card { max-width: calc(100vw - 1rem); padding: 0.5rem; }
+  .photo-large { max-height: calc(100vh - 7rem); }
 }
 
 .order-detail-page { max-width: 82rem; padding: clamp(1rem, 2.5vw, 2rem); }
