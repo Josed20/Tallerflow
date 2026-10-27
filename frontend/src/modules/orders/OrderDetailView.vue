@@ -378,6 +378,14 @@ function formatShortTime(iso: string | null) {
   return d.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
 }
 
+function formatPhotoTime(iso: string) {
+  return new Date(iso).toLocaleTimeString('es-PE', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+}
+
 const whatsappUrl = computed(() => order.value && trackingUrl.value
   ? `https://wa.me/?text=${encodeURIComponent(`Hola, puedes ver el avance de tu pedido ${order.value.code} (${order.value.product}) aquí: ${trackingUrl.value}`)}`
   : '')
@@ -632,7 +640,7 @@ onUnmounted(() => {
                   @click="openPhoto(photo, $event)"
                 >
                   <img :src="photo.photo_data" alt="" class="photo-thumb" />
-                  <span class="photo-time" aria-hidden="true">{{ formatShortTime(photo.created_at) }}</span>
+                  <span class="photo-time" aria-hidden="true">{{ formatPhotoTime(photo.created_at) }}</span>
                 </button>
               </div>
             </div>
@@ -1228,6 +1236,7 @@ h1 {
   font-size: .75rem;
   text-align: center;
   padding: 0.1rem 0;
+  white-space: nowrap;
 }
 
 /* Modales */
