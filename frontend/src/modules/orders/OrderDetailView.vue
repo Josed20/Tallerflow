@@ -652,7 +652,7 @@ onUnmounted(() => {
             <h2>{{ order.code }}</h2>
             <p>{{ order.product }}</p>
           </div>
-          <button class="btn-close-modal" type="button" aria-label="Cerrar ficha" @click="showTicketModal = false"><X :size="18" /></button>
+          <button class="btn-close-modal no-print" type="button" aria-label="Cerrar ficha" @click="showTicketModal = false"><X :size="18" /></button>
         </div>
 
         <div class="ticket-body">
@@ -1436,18 +1436,61 @@ h1 {
 @media (max-width: 580px) { .stage-top-row { align-items: stretch; flex-direction: column; } .stage-actions { justify-content: flex-start; } .btn-complete-stage { width: 100%; } .summary-grid { grid-template-columns: 1fr; } }
 
 @media print {
-  .no-print, .page-header, .stages-section, .order-delivery-line {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  :global(html), :global(body) {
+    background: #fff !important;
+  }
+
+  :global(body) * {
+    visibility: hidden !important;
+  }
+
+  .printable-ticket, .printable-ticket * {
+    visibility: visible !important;
+  }
+
+  .no-print, .page-header, .stages-section, .order-delivery-line,
+  .order-summary-card, .detail-notice {
     display: none !important;
   }
+
   .modal-backdrop {
-    position: static;
+    position: absolute;
+    inset: 0;
+    display: block;
     background: none;
     padding: 0;
   }
+
   .printable-ticket {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: none;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: 1px solid #172b4d;
+    border-radius: 0;
     box-shadow: none;
-    border: 1px solid var(--tf-ink);
-    max-width: 100%;
+    color: #172b4d;
+    background: #fff;
+  }
+
+  .ticket-header {
+    border-bottom-color: #172b4d;
+  }
+
+  .ticket-reference {
+    border-color: #b8c5d6;
+    background: #f4f7fb;
+  }
+
+  .ticket-actions {
+    display: none !important;
   }
 }
 </style>
