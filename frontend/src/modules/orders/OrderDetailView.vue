@@ -652,7 +652,7 @@ onUnmounted(() => {
             <h2>{{ order.code }}</h2>
             <p>{{ order.product }}</p>
           </div>
-          <button class="btn-close-modal" type="button" aria-label="Cerrar ficha" @click="showTicketModal = false"><X :size="18" /></button>
+          <button class="btn-close-modal no-print" type="button" aria-label="Cerrar ficha" @click="showTicketModal = false"><X :size="18" /></button>
         </div>
 
         <div class="ticket-body">
@@ -667,6 +667,10 @@ onUnmounted(() => {
             <span class="ticket-reference__label">Código de referencia</span>
             <strong>{{ order.code }}</strong>
             <p>Ingresa este código en la cola de producción para abrir la orden.</p>
+          </div>
+          <div class="ticket-route">
+            <h3>Recorrido de producción</h3>
+            <p>Corte → Costura → Acabado → Control de calidad → Planchado → Empaque → Entrega</p>
           </div>
         </div>
 
@@ -1436,18 +1440,64 @@ h1 {
 @media (max-width: 580px) { .stage-top-row { align-items: stretch; flex-direction: column; } .stage-actions { justify-content: flex-start; } .btn-complete-stage { width: 100%; } .summary-grid { grid-template-columns: 1fr; } }
 
 @media print {
-  .no-print, .page-header, .stages-section, .order-delivery-line {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  :global(html), :global(body) {
+    background: #fff !important;
+  }
+
+  :global(body) * {
+    visibility: hidden !important;
+  }
+
+  .printable-ticket, .printable-ticket * {
+    visibility: visible !important;
+  }
+
+  .no-print, .page-header, .stages-section, .order-delivery-line,
+  .order-summary-card, .detail-notice {
     display: none !important;
   }
+
   .modal-backdrop {
-    position: static;
+    position: absolute;
+    inset: 0;
+    display: block;
     background: none;
     padding: 0;
   }
+
   .printable-ticket {
-    box-shadow: none;
-    border: 1px solid var(--tf-ink);
+    box-sizing: border-box;
+    width: 170mm;
     max-width: 100%;
+    min-height: 0;
+    margin: 0 auto;
+    padding: 10mm;
+    border: 1px solid #172b4d;
+    border-radius: 0;
+    box-shadow: none;
+    color: #172b4d;
+    background: #fff;
+  }
+
+  .ticket-header {
+    border-bottom-color: #172b4d;
+  }
+
+  .ticket-reference {
+    border-color: #b8c5d6;
+    background: #f4f7fb;
+  }
+
+  .ticket-actions {
+    display: none !important;
   }
 }
+.ticket-route { width: 100%; border-top: 1px solid var(--tf-border-soft); padding-top: 1rem; font-size: .82rem; }
+.ticket-route h3 { margin: 0 0 .35rem; font-size: .85rem; }
+.ticket-route p { margin: 0; line-height: 1.5; }
 </style>
