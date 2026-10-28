@@ -668,6 +668,10 @@ onUnmounted(() => {
             <strong>{{ order.code }}</strong>
             <p>Ingresa este código en la cola de producción para abrir la orden.</p>
           </div>
+          <div class="ticket-route">
+            <h3>Recorrido de producción</h3>
+            <p>Corte → Costura → Acabado → Control de calidad → Planchado → Empaque → Entrega</p>
+          </div>
         </div>
 
         <div class="ticket-actions no-print">
@@ -1468,11 +1472,11 @@ h1 {
 
   .printable-ticket {
     box-sizing: border-box;
-    width: 100%;
-    max-width: none;
+    width: 170mm;
+    max-width: 100%;
     min-height: 0;
-    margin: 0;
-    padding: 0;
+    margin: 0 auto;
+    padding: 10mm;
     border: 1px solid #172b4d;
     border-radius: 0;
     box-shadow: none;
@@ -1493,4 +1497,7 @@ h1 {
     display: none !important;
   }
 }
+.ticket-route { width: 100%; border-top: 1px solid var(--tf-border-soft); padding-top: 1rem; font-size: .82rem; }
+.ticket-route h3 { margin: 0 0 .35rem; font-size: .85rem; }
+.ticket-route p { margin: 0; line-height: 1.5; }
 </style>
