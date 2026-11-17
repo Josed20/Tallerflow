@@ -1,8 +1,11 @@
-import { fireEvent, render, screen } from '@testing-library/vue'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ResetPasswordView from './ResetPasswordView.vue'
+import { createAppRouter } from '../../app/router'
+import { useOnboardingStore } from '../onboarding/onboarding.store'
+import { useSessionStore } from '../session/session.store'
 
 describe('ResetPasswordView', () => {
   beforeEach(() => {
@@ -67,7 +70,7 @@ describe('ResetPasswordView', () => {
     expect(screen.getByText('Las contraseñas no coinciden.')).toBeTruthy()
   })
 
-  it('successfully submits and displays success state', async () => {
+  it('returns an authenticated user to login after a successful reset', async () => {
     let callCount = 0
     const fetchMock = vi.fn().mockImplementation(async () => {
       callCount++
@@ -77,23 +80,32 @@ describe('ResetPasswordView', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes: [
-        { path: '/reset-password', component: ResetPasswordView },
-        { path: '/login', component: { template: '<div />' } },
-        { path: '/forgot-password', component: { template: '<div />' } },
-      ],
-    })
+    const pinia = createPinia()
+    const session = useSessionStore(pinia)
+    session.restored = true
+    session.csrfToken = 'previous-session'
+    const onboarding = useOnboardingStore(pinia)
+    onboarding.loaded = true
+    onboarding.availability = 'claimed'
+    const router = createAppRouter({ pinia, history: createMemoryHistory() })
     await router.push('/reset-password?token=valid-token-sample-1234567890123456')
     await router.isReady()
 
-    render(ResetPasswordView, { global: { plugins: [router] } })
+    render(ResetPasswordView, { global: { plugins: [pinia, router] } })
 
     const newPassInput = screen.getByLabelText('Nueva contraseña', { selector: 'input' })
     const confirmPassInput = screen.getByLabelText('Confirmar nueva contraseña', { selector: 'input' })
     await fireEvent.update(newPassInput, 'NewPassSecure2026!')
     await fireEvent.update(confirmPassInput, 'NewPassSecure2026!')
+
+    const newPassField = within(newPassInput.closest('.ui-field') as HTMLElement)
+    expect(newPassInput.getAttribute('type')).toBe('password')
+    await fireEvent.click(newPassField.getByRole('button', { name: 'Mostrar contraseña' }))
+    expect(newPassInput.getAttribute('type')).toBe('text')
+    expect(confirmPassInput.getAttribute('type')).toBe('password')
+    await fireEvent.click(newPassField.getByRole('button', { name: 'Ocultar contraseña' }))
+    expect(newPassInput.getAttribute('type')).toBe('password')
+    expect(callCount).toBe(0)
 
     const submitBtn = screen.getByRole('button', { name: 'Restablecer contraseña' })
     // Double click
@@ -102,7 +114,9 @@ describe('ResetPasswordView', () => {
     const successHeading = await screen.findByRole('heading', { level: 1, name: 'Contraseña restablecida' })
     expect(successHeading).toBeTruthy()
     expect(callCount).toBe(1)
-    expect(screen.getByRole('button', { name: 'Iniciar sesión' })).toBeTruthy()
+    expect(session.isAuthenticated).toBe(false)
+    await fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
+    await waitFor(() => expect(router.currentRoute.value.name).toBe('login'))
   })
 
   it.each([

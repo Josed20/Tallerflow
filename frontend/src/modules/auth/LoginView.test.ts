@@ -42,7 +42,15 @@ describe('LoginView', () => {
     render(LoginView, { global: { plugins: [pinia, router] } })
 
     await fireEvent.update(screen.getByLabelText('Correo electrónico'), 'owner@example.com')
-    await fireEvent.update(screen.getByLabelText('Contraseña'), 'secret')
+    const passwordInput = screen.getByLabelText<HTMLInputElement>('Contraseña')
+    await fireEvent.update(passwordInput, 'secret')
+    expect(passwordInput.type).toBe('password')
+    await fireEvent.click(screen.getByRole('button', { name: 'Mostrar contraseña' }))
+    expect(passwordInput.type).toBe('text')
+    expect(passwordInput.value).toBe('secret')
+    await fireEvent.click(screen.getByRole('button', { name: 'Ocultar contraseña' }))
+    expect(passwordInput.type).toBe('password')
+    expect(login).not.toHaveBeenCalled()
     const button = screen.getByRole('button', { name: 'Iniciar sesión' })
     const form = button.closest('form') as HTMLFormElement
     await fireEvent.submit(form)

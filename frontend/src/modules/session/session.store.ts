@@ -62,6 +62,16 @@ export const useSessionStore = defineStore('session', () => {
     if (!mustChangePassword.value) await loadPrincipal()
   }
 
+  async function resetPassword(token: string, newPassword: string) {
+    await api.post('/api/v1/auth/password-resets/consume', { token, new_password: newPassword })
+    clearSession()
+    restored.value = true
+    if (usesNativeToken()) {
+      // The server has already revoked this token even if local removal fails.
+      await clearMobileToken().catch(() => undefined)
+    }
+  }
+
   async function acceptSession(session: AuthSessionPayload) {
     await acceptToken(session)
     applySession(session)
@@ -126,5 +136,5 @@ export const useSessionStore = defineStore('session', () => {
     status.value = 'anonymous'
   }
 
-  return { principal, status, restored, csrfToken, isAuthenticated, requiresPasswordChange, restore, login, changePassword, acceptSession, logout, clearSession }
+  return { principal, status, restored, csrfToken, isAuthenticated, requiresPasswordChange, restore, login, changePassword, resetPassword, acceptSession, logout, clearSession }
 })

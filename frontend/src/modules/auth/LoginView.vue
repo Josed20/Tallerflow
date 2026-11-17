@@ -70,7 +70,7 @@ async function submit() {
         </UiButton>
       </div>
       <UiField id="email" v-model="email" label="Correo electrónico" type="email" autocomplete="email" placeholder="ejemplo@taller.pe" :error="emailError" />
-      <UiField id="password" v-model="password" label="Contraseña" type="password" autocomplete="current-password" placeholder="••••••••" :error="passwordError" />
+      <UiField id="password" v-model="password" label="Contraseña" type="password" toggle-password autocomplete="current-password" placeholder="••••••••" :error="passwordError" />
       <div class="auth-recovery-link">
         <RouterLink to="/forgot-password" class="auth-link">
           ¿Olvidaste tu contraseña?
