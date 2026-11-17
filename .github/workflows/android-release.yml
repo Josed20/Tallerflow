@@ -49,16 +49,25 @@ jobs:
         run: |
           printf '%s' "$TF_ANDROID_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/tallerflow-release.jks"
           echo "TF_ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/tallerflow-release.jks" >> "$GITHUB_ENV"
-      - name: Build signed APK
+      - name: Build signed APK and Android App Bundle
         working-directory: frontend/android
-        run: bash ./gradlew assembleRelease --no-daemon
-      - name: Verify APK signature and checksum
+        run: bash ./gradlew assembleRelease bundleRelease --no-daemon
+      - name: Verify release signatures and checksums
         run: |
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs frontend/android/app/build/outputs/apk/release/app-release.apk
+          jarsigner -verify frontend/android/app/build/outputs/bundle/release/app-release.aab | tee "$RUNNER_TEMP/bundle-signature.txt"
+          grep -Fx 'jar verified.' "$RUNNER_TEMP/bundle-signature.txt"
           sha256sum frontend/android/app/build/outputs/apk/release/app-release.apk
+          sha256sum frontend/android/app/build/outputs/bundle/release/app-release.aab
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
           name: TallerFlow-${{ github.ref_name }}-android
           path: frontend/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+      - name: Upload signed Android App Bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: TallerFlow-android-play-bundle
+          path: frontend/android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
