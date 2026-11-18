@@ -39,8 +39,8 @@ async function submit() {
     <p class="auth-subtitle">Por seguridad, necesitas crear una contraseña nueva antes de continuar.</p>
     <form class="auth-form" novalidate @submit.prevent="submit">
       <UiAlert v-if="serverError" :message="serverError" />
-      <UiField id="current-password" v-model="currentPassword" label="Contraseña actual" type="password" autocomplete="current-password" :error="attempted && !currentPassword ? 'La contraseña actual es obligatoria.' : ''" />
-      <UiField id="new-password" v-model="newPassword" label="Nueva contraseña" type="password" autocomplete="new-password" description="Usa al menos 12 caracteres." :error="newPasswordError" />
+      <UiField id="current-password" v-model="currentPassword" label="Contraseña actual" type="password" toggle-password autocomplete="current-password" :error="attempted && !currentPassword ? 'La contraseña actual es obligatoria.' : ''" />
+      <UiField id="new-password" v-model="newPassword" label="Nueva contraseña" type="password" toggle-password autocomplete="new-password" description="Usa al menos 12 caracteres." :error="newPasswordError" />
       <UiButton type="submit" :loading="submitting">Actualizar contraseña</UiButton>
     </form>
   </AuthLayout>

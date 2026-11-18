@@ -5,12 +5,14 @@ import AuthLayout from '../../layouts/AuthLayout.vue'
 import UiAlert from '../../components/UiAlert.vue'
 import UiButton from '../../components/UiButton.vue'
 import UiField from '../../components/UiField.vue'
-import { api, ApiError } from '../session/api'
+import { ApiError } from '../session/api'
+import { useSessionStore } from '../session/session.store'
 
 type ViewState = 'ready' | 'invalid' | 'expired' | 'used' | 'success'
 
 const route = useRoute()
 const router = useRouter()
+const session = useSessionStore()
 
 const rawToken = computed(() => {
   const q = route.query.token
@@ -73,10 +75,7 @@ async function submit() {
 
   submitting.value = true
   try {
-    await api.post('/api/v1/auth/password-resets/consume', {
-      token: rawToken.value,
-      new_password: newPassword.value,
-    })
+    await session.resetPassword(rawToken.value, newPassword.value)
     state.value = 'success'
   } catch (err: unknown) {
     if (err instanceof ApiError) {
@@ -100,7 +99,7 @@ async function submit() {
 }
 
 function goToLogin() {
-  router.push('/login')
+  router.replace('/login')
 }
 </script>
 
@@ -175,6 +174,7 @@ function goToLogin() {
           v-model="newPassword"
           label="Nueva contraseña"
           type="password"
+          toggle-password
           autocomplete="new-password"
           placeholder="Mínimo 12 caracteres"
           :error="newPasswordError"
@@ -185,6 +185,7 @@ function goToLogin() {
           v-model="confirmPassword"
           label="Confirmar nueva contraseña"
           type="password"
+          toggle-password
           autocomplete="new-password"
           placeholder="Repite tu nueva contraseña"
           :error="confirmPasswordError"
