@@ -54,3 +54,9 @@ The Android app uses encrypted storage backed by Android Keystore for the opaque
 The `Android APK` workflow runs manually or on a `v*` tag and targets `https://tallerflowpe.com`. Set GitHub Actions secrets `TF_ANDROID_KEYSTORE_B64`, `TF_ANDROID_KEYSTORE_PASSWORD`, `TF_ANDROID_KEY_ALIAS`, and `TF_ANDROID_KEY_PASSWORD`. The keystore must also be stored securely outside GitHub by José; losing it prevents signing future updates with the same identity. The workflow verifies the APK signature and prints its SHA-256 digest. Download the signed artifact and test it on an older and a current Android phone before distributing it. A GitHub Actions artifact is for the team and is not a permanent public download URL for the landing page; choose an approved release host before Lucero links it.
 
 Never commit a `.jks`, `.keystore`, APK, password, or `.env`. The Android project ignores them. Check the installed icon and splash on both test phones before release.
+
+## Inicio y marca móvil
+
+Android abre el inicio de sesión al arrancar sin sesión; con sesión vigente abre el panel correspondiente a su rol. La web conserva la landing. La ruta pública `/eliminar-cuenta` explica cómo solicitar el borrado por `tallerflow.pe@gmail.com` sin iniciar sesión; está enlazada desde la política de privacidad y el pie del área interna. El correo debe ser atendido por el equipo: esta página no ejecuta una purga automática.
+
+Los íconos adaptativos, tradicionales y el splash usan `public/logo-symbol-on-dark.svg`. Para regenerarlos: `python scripts/generate_android_brand.py` desde la raíz (requiere Inkscape en PATH o la variable `INKSCAPE`). El generador Go antiguo no se debe usar para los recursos Android. Después ejecutar `android:sync`. La versión 1.0.1 usa versionCode 2; reemplaza el AAB 1.0 antes del envío a revisión.

@@ -152,7 +152,7 @@ onMounted(() => {
         <nav class="landing-footer__links" aria-label="Legal y contacto">
           <RouterLink to="/terminos">Términos de servicio</RouterLink>
           <RouterLink to="/privacidad">Política de privacidad</RouterLink>
-          <a href="mailto:soporte@tallerflowpe.com">soporte@tallerflowpe.com</a>
+          <a href="mailto:tallerflow.pe@gmail.com">tallerflow.pe@gmail.com</a>
         </nav>
         <p>Lima, Perú · © 2026 TallerFlow</p>
       </div>

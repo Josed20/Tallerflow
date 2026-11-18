@@ -34,11 +34,13 @@ async function signOut() {
         <button class="app-shell__logout" type="button" title="Cerrar sesión" @click="signOut"><LogOut :size="17" aria-hidden="true" /> Cerrar sesión</button>
       </div>
     </aside>
-    <div class="app-shell__main"><header v-if="$slots.header" class="app-shell__header"><slot name="header" /></header><div class="app-shell__content"><slot /></div></div>
+    <div class="app-shell__main"><header v-if="$slots.header" class="app-shell__header"><slot name="header" /></header><div class="app-shell__content"><slot /><footer class="account-help"><RouterLink to="/eliminar-cuenta">Solicitar eliminación de cuenta</RouterLink></footer></div></div>
   </div>
 </template>
 
 <style scoped>
+.account-help { margin-top: 2rem; padding: 1rem 0; font-size: .875rem; }
+.account-help a { color: var(--tf-primary); display: inline-flex; align-items: center; min-height: 44px; }
 .app-shell { min-height: 100vh; background: var(--tf-page); color: var(--tf-ink); }
 .app-shell__sidebar { position: relative; display: flex; flex-direction: column; gap: 1rem; padding: 1.2rem; color: var(--tf-on-shell-muted); background: var(--tf-shell); border-bottom: 3px solid var(--tf-shell-thread); }
 .app-shell__brand { display: inline-flex; width: fit-content; min-height: 44px; align-items: center; color: var(--tf-on-shell); font-size: 1.05rem; text-decoration: none; }
