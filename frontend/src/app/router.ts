@@ -19,6 +19,8 @@ import TrackingView from '../modules/tracking/TrackingView.vue'
 import LandingView from '../modules/landing/LandingView.vue'
 import TermsView from '../modules/legal/TermsView.vue'
 import PrivacyView from '../modules/legal/PrivacyView.vue'
+import DeleteAccountView from '../modules/legal/DeleteAccountView.vue'
+import { isNativeApp } from '../native/platform'
 // Sprint 4 - Michael
 import ConsoleView from '../modules/console/ConsoleView.vue'
 // Sprint 4 - José
@@ -37,6 +39,7 @@ export const routes = [
   { path: '/', name: 'landing', component: LandingView, meta: { public: true } },
   { path: '/terminos', name: 'terms', component: TermsView, meta: { public: true, allowAuthenticated: true } },
   { path: '/privacidad', name: 'privacy', component: PrivacyView, meta: { public: true, allowAuthenticated: true } },
+  { path: '/eliminar-cuenta', name: 'delete-account', component: DeleteAccountView, meta: { public: true, allowAuthenticated: true } },
   { path: '/login', name: 'login', component: LoginView, meta: { public: true } },
   { path: '/join', name: 'join', component: JoinView, meta: { public: true } },
   { path: '/onboarding', name: 'onboarding', component: OnboardingView, meta: { public: true } },
@@ -64,6 +67,7 @@ const defaultTitle = 'TallerFlow — Trazabilidad para talleres de confección'
 const pageTitles: Record<string, string> = {
   terms: 'Términos de servicio',
   privacy: 'Política de privacidad',
+  'delete-account': 'Eliminar cuenta',
   login: 'Iniciar sesión',
   join: 'Unirte al taller',
   onboarding: 'Crear mi taller',
@@ -99,6 +103,12 @@ export function createAppRouter({ pinia, history }: AppRouterOptions) {
     const session = useSessionStore(pinia)
     await session.restore()
 
+    if (to.name === 'landing' && isNativeApp()) {
+      return session.isAuthenticated
+        ? (session.requiresPasswordChange ? '/change-password' : '/app')
+        : '/login'
+    }
+
     if (to.name === 'not-found' || to.meta.allowAuthenticated) {
       return
     }
@@ -114,7 +124,7 @@ export function createAppRouter({ pinia, history }: AppRouterOptions) {
     if (!session.isAuthenticated && (to.name === 'login' || to.name === 'onboarding')) {
       try {
         const available = await useOnboardingStore(pinia).loadStatus()
-        if (available && to.name === 'login') return { name: 'onboarding' }
+        if (available && to.name === 'login' && !isNativeApp()) return { name: 'onboarding' }
         // Once the first workshop exists, "register" means open signup.
         if (!available && to.name === 'onboarding') return { name: 'signup' }
       } catch {

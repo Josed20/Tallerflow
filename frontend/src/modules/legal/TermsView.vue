@@ -62,7 +62,7 @@ import BrandLogo from '../../components/BrandLogo.vue'
         <section>
           <h2>5. Cancelación y Periodo de Gracia</h2>
           <p>
-            Si solicitas la eliminación de tu taller, se aplicará un <strong>periodo de gracia de treinta (30) días calendario</strong> en estado de eliminación programada. Durante este tiempo puedes reactivar la cuenta comunicándote a <a href="mailto:soporte@tallerflowpe.com">soporte@tallerflowpe.com</a>. Vencido el plazo, la supresión de la base de datos es definitiva.
+            Si solicitas la eliminación de tu taller, se aplicará un <strong>periodo de gracia de treinta (30) días calendario</strong> en estado de eliminación programada. Durante este tiempo puedes reactivar la cuenta comunicándote a <a href="mailto:tallerflow.pe@gmail.com">tallerflow.pe@gmail.com</a>. Vencido el plazo, la supresión de la base de datos es definitiva.
           </p>
         </section>
 
@@ -77,7 +77,7 @@ import BrandLogo from '../../components/BrandLogo.vue'
 
     <footer class="legal-footer">
       <div class="legal-container">
-        <p>© 2026 TallerFlow · <RouterLink to="/privacidad">Política de privacidad</RouterLink> · Contacto: soporte@tallerflowpe.com</p>
+        <p>© 2026 TallerFlow · <RouterLink to="/privacidad">Política de privacidad</RouterLink> · Contacto: tallerflow.pe@gmail.com</p>
       </div>
     </footer>
   </div>

@@ -1,6 +1,8 @@
 import { createPinia } from 'pinia'
 import { createMemoryHistory } from 'vue-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { isNativeApp } from '../native/platform'
+vi.mock('../native/platform', () => ({ isNativeApp: vi.fn(() => false), usesNativeToken: vi.fn(() => false) }))
 import { createAppRouter } from './router'
 import { useOnboardingStore } from '../modules/onboarding/onboarding.store'
 import { useSessionStore } from '../modules/session/session.store'
@@ -8,7 +10,41 @@ import { useSessionStore } from '../modules/session/session.store'
 describe('application router guards', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    vi.mocked(isNativeApp).mockReturnValue(false)
     vi.unstubAllGlobals()
+  })
+
+  it('opens native cold starts at login even when onboarding is available', async () => {
+    vi.mocked(isNativeApp).mockReturnValue(true)
+    const { router, onboarding } = buildAnonymousRouter()
+    vi.spyOn(onboarding, 'loadStatus').mockResolvedValue(true)
+    await router.push('/')
+    await router.isReady()
+    expect(router.currentRoute.value.name).toBe('login')
+  })
+
+  it('restores a native session into the panel and keeps deletion reachable', async () => {
+    vi.mocked(isNativeApp).mockReturnValue(true)
+    const pinia = createPinia()
+    const session = useSessionStore(pinia)
+    vi.spyOn(session, 'restore').mockResolvedValue()
+    session.csrfToken = 'existing-session'
+    session.principal = { id: 'u1', email: 'owner@example.com', displayName: 'Owner', role: 'OWNER', workshop: { id: 'w1', name: 'Taller' }, mustChangePassword: false }
+    const router = createAppRouter({ pinia, history: createMemoryHistory() })
+    await router.push('/')
+    await router.isReady()
+    expect(router.currentRoute.value.path).toBe('/app')
+    await router.push('/eliminar-cuenta')
+    expect(router.currentRoute.value.name).toBe('delete-account')
+  })
+
+  it('keeps the web landing page and public deletion instructions accessible', async () => {
+    const { router } = buildAnonymousRouter()
+    await router.push('/')
+    await router.isReady()
+    expect(router.currentRoute.value.name).toBe('landing')
+    await router.push('/eliminar-cuenta')
+    expect(router.currentRoute.value.name).toBe('delete-account')
   })
 
   it('sends an anonymous visitor from login to onboarding while the install is available', async () => {

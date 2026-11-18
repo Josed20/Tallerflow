@@ -65,8 +65,9 @@ import BrandLogo from '../../components/BrandLogo.vue'
 
         <section>
           <h2>6. Derechos ARCO y Contacto</h2>
+          <p>Para eliminar tu cuenta y los datos asociados, consulta los <RouterLink to="/eliminar-cuenta">pasos para solicitar la eliminación</RouterLink>.</p>
           <p>
-            Puedes ejercer en cualquier momento tus derechos de Acceso, Rectificación, Cancelación y Oposición (ARCO) enviando un mensaje a <a href="mailto:soporte@tallerflowpe.com">soporte@tallerflowpe.com</a> con el asunto "Derechos ARCO", indicando el correo de tu cuenta registrada.
+            Puedes ejercer en cualquier momento tus derechos de Acceso, Rectificación, Cancelación y Oposición (ARCO) enviando un mensaje a <a href="mailto:tallerflow.pe@gmail.com">tallerflow.pe@gmail.com</a> con el asunto "Derechos ARCO", indicando el correo de tu cuenta registrada.
           </p>
         </section>
       </article>
@@ -74,7 +75,7 @@ import BrandLogo from '../../components/BrandLogo.vue'
 
     <footer class="legal-footer">
       <div class="legal-container">
-        <p>© 2026 TallerFlow · <RouterLink to="/terminos">Términos de servicio</RouterLink> · Contacto: soporte@tallerflowpe.com</p>
+        <p>© 2026 TallerFlow · <RouterLink to="/terminos">Términos de servicio</RouterLink> · Contacto: tallerflow.pe@gmail.com</p>
       </div>
     </footer>
   </div>
