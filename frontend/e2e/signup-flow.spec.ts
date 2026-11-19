@@ -42,7 +42,7 @@ test.describe('open signup', () => {
     // Before verifying, the correct password is refused with a way forward.
     await page.goto('/login')
     await page.getByLabel('Correo electrónico').fill(email)
-    await page.getByLabel('Contraseña').fill(password)
+    await page.getByLabel('Contraseña', { exact: true }).fill(password)
     await page.getByRole('button', { name: 'Iniciar sesión' }).click()
     await expect(page.getByText('Activa tu taller primero.')).toBeVisible()
 
@@ -69,7 +69,7 @@ test.describe('open signup', () => {
     // And the owner can now sign in normally.
     await page.goto('/login')
     await page.getByLabel('Correo electrónico').fill(email)
-    await page.getByLabel('Contraseña').fill(password)
+    await page.getByLabel('Contraseña', { exact: true }).fill(password)
     await page.getByRole('button', { name: 'Iniciar sesión' }).click()
     await expect(page).toHaveURL(/\/app$/)
 

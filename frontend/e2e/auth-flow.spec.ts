@@ -7,12 +7,12 @@ const replacementPassword = process.env.E2E_NEW_PASSWORD ?? 'Replacement secure 
 test('owner completes the secure Sprint 1 authentication journey', async ({ page }) => {
   await page.goto('/login')
   await page.getByLabel('Correo electrónico').fill(ownerEmail)
-  await page.getByLabel('Contraseña').fill('definitely-wrong-password')
-  await page.getByLabel('Contraseña').press('Enter')
+  await page.getByLabel('Contraseña', { exact: true }).fill('definitely-wrong-password')
+  await page.getByLabel('Contraseña', { exact: true }).press('Enter')
   await expect(page.getByRole('alert')).toContainText('No pudimos iniciar sesión')
 
-  await page.getByLabel('Contraseña').fill(temporaryPassword)
-  await page.getByLabel('Contraseña').press('Enter')
+  await page.getByLabel('Contraseña', { exact: true }).fill(temporaryPassword)
+  await page.getByLabel('Contraseña', { exact: true }).press('Enter')
   await expect(page).toHaveURL(/\/change-password$/)
   await expect(page.getByText('Usa al menos 12 caracteres.')).toBeVisible()
 
