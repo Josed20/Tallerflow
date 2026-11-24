@@ -29,7 +29,15 @@ describe('JoinView invitation completion', () => {
     render(JoinView, { global: { plugins: [router] } })
 
     await fireEvent.update(screen.getByLabelText('Nombre'), 'Nuevo Miembro')
-    await fireEvent.update(screen.getByLabelText('Clave'), 'secure-password')
+    const password = screen.getByLabelText<HTMLInputElement>('Clave')
+    await fireEvent.update(password, 'secure-password')
+    expect(password.type).toBe('password')
+    await fireEvent.click(screen.getByRole('button', { name: 'Mostrar contraseña' }))
+    expect(password.type).toBe('text')
+    expect(password.value).toBe('secure-password')
+    await fireEvent.click(screen.getByRole('button', { name: 'Ocultar contraseña' }))
+    expect(password.type).toBe('password')
+    expect(teamApi.consume).not.toHaveBeenCalled()
     await fireEvent.click(screen.getByRole('button', { name: 'Aceptar invitación' }))
 
     expect(await screen.findByText('Cuenta creada correctamente')).toBeTruthy()

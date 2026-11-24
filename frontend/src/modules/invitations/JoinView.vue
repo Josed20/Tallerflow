@@ -68,7 +68,7 @@ async function join() {
 
         <form v-if="!done" class="auth-form" @submit.prevent="join">
           <UiField id="join-name" v-model="name" label="Nombre" autocomplete="name" />
-          <UiField id="join-password" v-model="password" label="Clave" type="password" autocomplete="new-password" />
+          <UiField id="join-password" v-model="password" label="Clave" type="password" autocomplete="new-password" toggle-password />
           <UiAlert v-if="error" :message="error" />
           <UiButton type="submit" :loading="loading">Aceptar invitación</UiButton>
         </form>
