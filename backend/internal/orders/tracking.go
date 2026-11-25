@@ -2,7 +2,6 @@ package orders
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -10,11 +9,11 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/Josed20/Tallerflow/backend/platform/database"
 	"github.com/Josed20/Tallerflow/backend/platform/httpx"
-	"github.com/Josed20/Tallerflow/backend/platform/security"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -23,31 +22,34 @@ import (
 const trackingTokenBytes = 32
 
 var (
-	ErrTrackingNotFound = errors.New("tracking link not found")
-	trackingTokenFormat = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
+	ErrTrackingNotFound            = errors.New("tracking link not found")
+	ErrTrackingRecoveryUnavailable = errors.New("tracking recovery secret changed")
+	trackingTokenFormat            = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
 )
 
 // TrackingOrder is the customer-facing view of an order: only what the
 // workshop's customer may see, without internal ids, clients or notes.
 type TrackingOrder struct {
-	WorkshopName string          `json:"workshop_name"`
-	Code         string          `json:"code"`
-	Product      string          `json:"product"`
-	Quantity     float64         `json:"quantity"`
-	Unit         string          `json:"unit"`
-	Status       string          `json:"status"`
-	TrafficLight TrafficLight    `json:"traffic_light"`
-	PromisedAt   time.Time       `json:"promised_at"`
-	UpdatedAt    time.Time       `json:"updated_at"`
-	Stages       []TrackingStage `json:"stages" gorm:"-"`
-	Photos       []TrackingPhoto `json:"photos" gorm:"-"`
+	Specification string          `json:"specification"`
+	WorkshopName  string          `json:"workshop_name"`
+	Code          string          `json:"code"`
+	Product       string          `json:"product"`
+	Quantity      float64         `json:"quantity"`
+	Unit          string          `json:"unit"`
+	Status        string          `json:"status"`
+	TrafficLight  TrafficLight    `json:"traffic_light"`
+	PromisedAt    time.Time       `json:"promised_at"`
+	UpdatedAt     time.Time       `json:"updated_at"`
+	Stages        []TrackingStage `json:"stages" gorm:"-"`
+	Photos        []TrackingPhoto `json:"photos" gorm:"-"`
 }
 
 type TrackingStage struct {
-	Position    int        `json:"position"`
-	Name        string     `json:"name"`
-	Status      string     `json:"status"`
-	CompletedAt *time.Time `json:"completed_at"`
+	ClientDescription string     `json:"client_description"`
+	Position          int        `json:"position"`
+	Name              string     `json:"name"`
+	Status            string     `json:"status"`
+	CompletedAt       *time.Time `json:"completed_at"`
 }
 
 type TrackingPhoto struct {
@@ -59,7 +61,7 @@ type TrackingPhoto struct {
 }
 
 type TrackingRepository interface {
-	CreateLink(ctx context.Context, workshopID, orderID, actorID uuid.UUID, tokenHash []byte) error
+	ManageLink(ctx context.Context, workshopID, orderID, actorID uuid.UUID, action string) (string, error)
 	FindByToken(ctx context.Context, tokenHash []byte) (*TrackingOrder, error)
 }
 
@@ -67,34 +69,17 @@ type PostgresTrackingRepository struct {
 	db     *gorm.DB
 	tenant database.TenantRunner
 	now    func() time.Time
+	secret []byte
 }
 
-func NewPostgresTrackingRepository(db *gorm.DB, tenant database.TenantRunner) (*PostgresTrackingRepository, error) {
+func NewPostgresTrackingRepository(db *gorm.DB, tenant database.TenantRunner, sessionPepper string) (*PostgresTrackingRepository, error) {
 	if db == nil || tenant == nil {
 		return nil, errors.New("database and tenant runner are required")
 	}
-	return &PostgresTrackingRepository{db: db, tenant: tenant, now: time.Now}, nil
-}
-
-// CreateLink revokes the order's active link, if any, and stores the new one.
-func (r *PostgresTrackingRepository) CreateLink(ctx context.Context, workshopID, orderID, actorID uuid.UUID, tokenHash []byte) error {
-	now := r.now().UTC()
-	return r.tenant.WithinTenant(ctx, workshopID, func(tx *gorm.DB) error {
-		var exists int64
-		if err := tx.Raw("SELECT count(*) FROM orders WHERE id = ?", orderID).Scan(&exists).Error; err != nil {
-			return err
-		}
-		if exists == 0 {
-			return ErrOrderNotFound
-		}
-		if err := tx.Exec("UPDATE order_tracking_links SET revoked_at = ? WHERE order_id = ? AND revoked_at IS NULL", now, orderID).Error; err != nil {
-			return err
-		}
-		if err := tx.Exec("INSERT INTO order_tracking_links (workshop_id, order_id, token_hash, created_by, created_at) VALUES (?, ?, ?, ?, ?)", workshopID, orderID, tokenHash, actorID, now).Error; err != nil {
-			return err
-		}
-		return tx.Exec("INSERT INTO audit_events (workshop_id, actor_user_id, event_type, details) VALUES (?, ?, 'ORDER_TRACKING_LINK_CREATED', jsonb_build_object('order_id', ?::text))", workshopID, actorID, orderID.String()).Error
-	})
+	if strings.TrimSpace(sessionPepper) == "" {
+		return nil, errors.New("tracking server secret is required")
+	}
+	return &PostgresTrackingRepository{db: db, tenant: tenant, now: time.Now, secret: []byte(sessionPepper)}, nil
 }
 
 // FindByToken resolves a public token to its workshop, then reads the order
@@ -122,7 +107,7 @@ func (r *PostgresTrackingRepository) FindByToken(ctx context.Context, tokenHash 
 		}
 
 		row := tx.Raw(`
-			SELECT w.name AS workshop_name, o.code, o.product, o.quantity, o.unit, o.status, o.promised_at, o.updated_at,
+			SELECT w.name AS workshop_name, o.code, o.product, o.specification, o.quantity, o.unit, o.status, o.promised_at, o.updated_at,
 				CASE
 					WHEN o.status = 'COMPLETED' THEN 'COMPLETED'
 					WHEN o.promised_at < ? THEN 'LATE'
@@ -131,14 +116,15 @@ func (r *PostgresTrackingRepository) FindByToken(ctx context.Context, tokenHash 
 				END AS traffic_light
 			FROM orders o
 			JOIN workshops w ON w.id = o.workshop_id
-			WHERE o.id = ? AND w.status = 'ACTIVE'`, now, now.Add(48*time.Hour), link.OrderID).Scan(&order)
+			WHERE o.id = ? AND w.status = 'ACTIVE'
+ AND (o.tracking_completed_at IS NULL OR o.tracking_completed_at + interval '30 days' > ?)`, now, now.Add(48*time.Hour), link.OrderID, now).Scan(&order)
 		if row.Error != nil {
 			return row.Error
 		}
 		if row.RowsAffected == 0 {
 			return ErrTrackingNotFound
 		}
-		if err := tx.Raw("SELECT position, name, status, completed_at FROM order_stages WHERE order_id = ? ORDER BY position", link.OrderID).Scan(&order.Stages).Error; err != nil {
+		if err := tx.Raw("SELECT position, name, client_description, status, completed_at FROM order_stages WHERE order_id = ? ORDER BY position", link.OrderID).Scan(&order.Stages).Error; err != nil {
 			return err
 		}
 		return tx.Raw("SELECT stage_position, COALESCE(photo_data, '') AS photo_data, COALESCE(object_key, '') AS object_key, caption, created_at FROM stage_photos WHERE order_id = ? ORDER BY created_at", link.OrderID).Scan(&order.Photos).Error
@@ -157,32 +143,20 @@ func (r *PostgresTrackingRepository) FindByToken(ctx context.Context, tokenHash 
 
 type TrackingService struct {
 	repo   TrackingRepository
-	random io.Reader
 	photos PhotoStore
 }
 
-func NewTrackingService(repo TrackingRepository, random io.Reader, photos ...PhotoStore) *TrackingService {
-	if random == nil {
-		random = rand.Reader
-	}
-	service := &TrackingService{repo: repo, random: random}
+func NewTrackingService(repo TrackingRepository, _ io.Reader, photos ...PhotoStore) *TrackingService {
+	service := &TrackingService{repo: repo}
 	if len(photos) > 0 {
 		service.photos = photos[0]
 	}
 	return service
 }
 
-// CreateLink returns the raw token; only its hash is stored, so it cannot be
-// shown again later. A new link replaces the previous one.
+// CreateLink recovers or creates the stable link. Copying never rotates it.
 func (s *TrackingService) CreateLink(ctx context.Context, workshopID, orderID, actorID uuid.UUID) (string, error) {
-	token, err := security.RandomToken(s.random, trackingTokenBytes)
-	if err != nil {
-		return "", err
-	}
-	if err := s.repo.CreateLink(ctx, workshopID, orderID, actorID, trackingDigest(token)); err != nil {
-		return "", err
-	}
-	return token, nil
+	return s.repo.ManageLink(ctx, workshopID, orderID, actorID, "recover")
 }
 
 func (s *TrackingService) Find(ctx context.Context, token string) (*TrackingOrder, error) {
@@ -215,6 +189,7 @@ func NewTrackingHandler(service *TrackingService) *TrackingHandler {
 }
 
 func (h *TrackingHandler) CreateLink(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	principal, err := httpx.PrincipalFromGin(c)
 	if err != nil {
 		httpx.RespondError(c, http.StatusUnauthorized, "SESSION_INVALID", "The session is invalid or has expired.")
@@ -229,8 +204,22 @@ func (h *TrackingHandler) CreateLink(c *gin.Context) {
 		httpx.RespondError(c, http.StatusNotFound, "ORDER_NOT_FOUND", "The order does not exist.")
 		return
 	}
-	token, err := h.service.CreateLink(c.Request.Context(), principal.WorkshopID, orderID, principal.UserID)
+	var token string
+	action := c.Param("action")
+	if action != "" && action != "replace" && action != "revoke" {
+		httpx.RespondError(c, http.StatusBadRequest, "TRACKING_ACTION_INVALID", "Choose replace or revoke.")
+		return
+	}
+	if action == "" {
+		token, err = h.service.CreateLink(c.Request.Context(), principal.WorkshopID, orderID, principal.UserID)
+	} else {
+		token, err = h.service.repo.ManageLink(c.Request.Context(), principal.WorkshopID, orderID, principal.UserID, action)
+	}
 	if err != nil {
+		if errors.Is(err, ErrTrackingRecoveryUnavailable) {
+			httpx.RespondError(c, http.StatusConflict, "TRACKING_RECOVERY_UNAVAILABLE", "Replace the link explicitly to recover sharing after a server secret change.")
+			return
+		}
 		if errors.Is(err, ErrOrderNotFound) {
 			httpx.RespondError(c, http.StatusNotFound, "ORDER_NOT_FOUND", "The order does not exist.")
 			return
@@ -258,5 +247,6 @@ func (h *TrackingHandler) Get(c *gin.Context) {
 
 func RegisterTrackingRoutes(routes gin.IRouter, handler *TrackingHandler, requireSession gin.HandlerFunc) {
 	routes.POST("/api/v1/orders/:id/tracking-link", requireSession, handler.CreateLink)
+	routes.POST("/api/v1/orders/:id/tracking-link/:action", requireSession, handler.CreateLink)
 	routes.GET("/api/v1/tracking/:token", handler.Get)
 }

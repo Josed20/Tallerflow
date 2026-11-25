@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import UiNotice from '../../components/UiNotice.vue'
 import { computed, nextTick, ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ordersApi, type Order, type OrderStage, type StageStatus, type StagePhoto } from './api'
@@ -8,7 +9,7 @@ import { canAdvanceProduction } from '../session/role-policy'
 import { compressImageFile } from '../../utils/image'
 import { capturePhoto } from '../../native/camera'
 import { isNativeApp } from '../../native/platform'
-import { Camera, Check, Copy, ExternalLink, Link2, Pencil, Printer, RotateCcw, X } from '@lucide/vue'
+import { Camera, Check, Link2, Pencil, Printer, RotateCcw, X } from '@lucide/vue'
 import { clientsApi, type Client } from '../clients/api'
 import UiField from '../../components/UiField.vue'
 import UiButton from '../../components/UiButton.vue'
@@ -17,6 +18,8 @@ import { completedStations, formatOrderQuantity } from './order-display'
 import StatusChip from '../../components/StatusChip.vue'
 import StitchSeam from '../../components/StitchSeam.vue'
 import StageAdvanceDialog from './StageAdvanceDialog.vue'
+import OrderOperationPanel from './OrderOperationPanel.vue'
+import { manageTrackingLink } from '../tracking/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -36,12 +39,10 @@ const correctionReason = ref('')
 const correctionError = ref('')
 const correcting = ref(false)
 const pendingAdvanceStage = ref<OrderStage | null>(null)
-const showSharePanel = ref(false)
 const trackingUrl = ref('')
 const generatingLink = ref(false)
 const shareError = ref('')
 const copied = ref(false)
-const trackingInput = ref<HTMLInputElement | null>(null)
 const clock = ref(Date.now())
 const undoingPosition = ref<number | null>(null)
 const showCancelDialog = ref(false)
@@ -59,6 +60,8 @@ const editForm = ref({
   clientId: '',
   product: '',
   quantity: 0,
+  specification: '',
+  changeReason: '',
   promisedDate: '',
   promisedTime: '18:00',
 })
@@ -69,7 +72,7 @@ const lastCompletedPosition = computed(() => Math.max(0, ...(order.value?.stages
 
 function canReopen(stage: OrderStage) {
   if (!canCorrect.value || stage.status !== 'COMPLETED' || stage.position !== lastCompletedPosition.value) return false
-  if (stage.position === 7) return order.value?.status === 'COMPLETED'
+  if (stage.position === order.value?.stages?.length) return order.value?.status === 'COMPLETED'
   const next = order.value?.stages?.find((item) => item.position === stage.position + 1)
   return next?.status === 'IN_PROGRESS' && getStagePhotos(stage.position + 1).length === 0
 }
@@ -120,6 +123,8 @@ async function openEditModal() {
     clientId: order.value.client_id,
     product: order.value.product,
     quantity: order.value.quantity,
+    specification: order.value.specification,
+    changeReason: '',
     promisedDate: localDate,
     promisedTime: localTime,
   }
@@ -168,6 +173,7 @@ async function handleEditOrder() {
         client_id: editForm.value.clientId,
         product: editForm.value.product.trim(),
         quantity: Number(editForm.value.quantity),
+        ...(editForm.value.specification !== order.value.specification ? { specification: editForm.value.specification, change_reason: editForm.value.changeReason } : {}),
         promised_at: combinedISO,
         version: order.value.version,
       },
@@ -254,7 +260,7 @@ async function loadOrder(showLoading = true) {
 }
 
 async function handleAdvanceStage(stage: OrderStage, nextStatus: StageStatus) {
-  if (!order.value || !canAdvance.value || stage.status !== 'IN_PROGRESS' || nextStatus !== 'COMPLETED') return
+  if (!order.value || order.value.block_reason || !canAdvance.value || stage.status !== 'IN_PROGRESS' || nextStatus !== 'COMPLETED') return
   if (!session.csrfToken) {
     error.value = 'Tu sesión ya no permite actualizar producción. Actualiza la página e inicia sesión nuevamente.'
     return
@@ -354,9 +360,9 @@ function getStagePhotos(position: number): StagePhoto[] {
 }
 
 function nextStageName(position: number) {
-  if (position >= 7) return null
+  if (position >= (order.value?.stages?.length ?? 0)) return null
   return order.value?.stages?.find((stage) => stage.position === position + 1)?.name
-    ?? ['Corte', 'Costura', 'Acabado', 'Control de calidad', 'Planchado', 'Empaque', 'Entrega'][position]
+    ?? null
 }
 
 function formatDate(iso: string) {
@@ -378,9 +384,15 @@ function formatShortTime(iso: string | null) {
   return d.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
 }
 
-const whatsappUrl = computed(() => order.value && trackingUrl.value
-  ? `https://wa.me/?text=${encodeURIComponent(`Hola, puedes ver el avance de tu pedido ${order.value.code} (${order.value.product}) aquí: ${trackingUrl.value}`)}`
-  : '')
+
+async function openSharePanel() {
+  notice.value = ''
+  error.value = ''
+  await nextTick()
+  if (!trackingUrl.value) await generateTrackingLink()
+  if (trackingUrl.value && !shareError.value) { await copyTrackingLink(); if (copied.value) notice.value = 'Enlace de seguimiento copiado.' }
+  if (shareError.value) error.value = shareError.value
+}
 
 async function generateTrackingLink() {
   if (!order.value || generatingLink.value) return
@@ -392,10 +404,14 @@ async function generateTrackingLink() {
   shareError.value = ''
   copied.value = false
   try {
-    const response = await ordersApi.createTrackingLink(order.value.id, session.csrfToken)
-    trackingUrl.value = `${window.location.origin}/seguimiento/${response.data.token}`
+    const response = await manageTrackingLink(order.value.id, session.csrfToken, 'recover')
+    const publicOrigin = (import.meta.env.VITE_API_BASE_URL || window.location.origin).replace(/\/+$/, '')
+    trackingUrl.value = response.data.token ? `${publicOrigin}/seguimiento/${response.data.token}` : ''
+    if (!trackingUrl.value) throw new Error('El enlace no está disponible. Inténtalo nuevamente.')
   } catch (err: any) {
-    shareError.value = err?.message || 'No pudimos generar el enlace.'
+    shareError.value = err?.code === 'TRACKING_RECOVERY_UNAVAILABLE'
+      ? 'El enlace necesita ser recuperado por soporte. Contacta a TallerFlow.'
+      : err?.message || 'No pudimos recuperar el enlace. Inténtalo de nuevo.'
   } finally {
     generatingLink.value = false
   }
@@ -403,11 +419,12 @@ async function generateTrackingLink() {
 
 async function copyTrackingLink() {
   try {
+    shareError.value = ''
     await navigator.clipboard.writeText(trackingUrl.value)
     copied.value = true
   } catch {
-    trackingInput.value?.select()
-    shareError.value = 'No pudimos copiar automáticamente. El enlace quedó seleccionado: cópialo con Ctrl+C.'
+    copied.value = false
+    shareError.value = 'El navegador no permitió copiar. Habilita el permiso del portapapeles e inténtalo nuevamente.'
   }
 }
 
@@ -460,8 +477,8 @@ onUnmounted(() => {
           <h1>{{ order.product }}</h1>
         </div>
         <div class="header-actions">
-          <button v-if="canCorrect" class="btn-ticket" type="button" :aria-expanded="showSharePanel" @click="showSharePanel = !showSharePanel">
-            <Link2 :size="17" aria-hidden="true" /> Compartir con el cliente
+          <button v-if="canCorrect" class="btn-ticket" type="button" :disabled="generatingLink" @click="openSharePanel">
+            <Link2 :size="17" aria-hidden="true" /> Copiar enlace de seguimiento
           </button>
           <button class="btn-ticket" type="button" @click="showTicketModal = true">
             <Printer :size="17" aria-hidden="true" /> Imprimir ficha viajera
@@ -476,35 +493,10 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <section v-if="showSharePanel && order" class="share-panel" aria-labelledby="share-title">
-      <div class="share-panel__head">
-        <h2 id="share-title">Enlace de seguimiento para el cliente</h2>
-        <button class="share-panel__close" type="button" aria-label="Cerrar" @click="showSharePanel = false"><X :size="18" /></button>
-      </div>
-      <p class="share-panel__text">El cliente verá la estación actual, la fecha de entrega, el semáforo y las fotos de evidencia de <strong>{{ order.code }}</strong>, sin crear una cuenta. No verá datos internos ni otras órdenes.</p>
-      <template v-if="trackingUrl">
-        <label class="share-panel__label" for="tracking-url">Enlace privado</label>
-        <div class="share-panel__row">
-          <input id="tracking-url" ref="trackingInput" class="share-panel__input" type="text" readonly :value="trackingUrl" @focus="($event.target as HTMLInputElement).select()" />
-          <button class="share-panel__primary" type="button" @click="copyTrackingLink"><Copy :size="16" aria-hidden="true" /> {{ copied ? 'Copiado' : 'Copiar' }}</button>
-        </div>
-        <div class="share-panel__links">
-          <a :href="whatsappUrl" target="_blank" rel="noopener noreferrer">Enviar por WhatsApp</a>
-          <a :href="trackingUrl" target="_blank" rel="noopener noreferrer"><ExternalLink :size="14" aria-hidden="true" /> Ver como cliente</a>
-        </div>
-        <p class="share-panel__note">Guárdalo ahora: por seguridad no se puede volver a mostrar. Si lo pierdes, genera uno nuevo.</p>
-      </template>
-      <template v-else>
-        <p class="share-panel__note">Si ya enviaste un enlace de esta orden antes, generar uno nuevo lo desactiva.</p>
-        <button class="share-panel__primary" type="button" :disabled="generatingLink" @click="generateTrackingLink">
-          <Link2 :size="16" aria-hidden="true" /> {{ generatingLink ? 'Generando...' : 'Generar enlace' }}
-        </button>
-      </template>
-      <p v-if="shareError" class="share-panel__error" role="alert">{{ shareError }}</p>
-    </section>
+
 
     <UiAlert v-if="error" :message="error" />
-    <p v-if="notice" class="detail-notice" role="status">{{ notice }}</p>
+    <UiNotice :message="notice" />
 
     <section v-if="loading" class="loading-state">
       <p>Cargando detalle de la orden...</p>
@@ -514,7 +506,7 @@ onUnmounted(() => {
       <div class="order-delivery-line">
         <StatusChip :state="order.traffic_light" />
         <span class="order-delivery-line__date">Entrega prometida <strong>{{ formatDate(order.promised_at) }}</strong></span>
-        <StitchSeam class="order-delivery-line__seam" :completed="completedStations(order)" :tone="order.traffic_light === 'LATE' ? 'late' : 'default'" />
+        <StitchSeam class="order-delivery-line__seam" :completed="completedStations(order)" :total="order.stages?.length ?? order.stage_count ?? 7" :tone="order.traffic_light === 'LATE' ? 'late' : 'default'" />
       </div>
 
       <!-- Ficha de Datos del Pedido -->
@@ -531,7 +523,7 @@ onUnmounted(() => {
           <div>
             <span class="label">Estado de la Orden:</span>
             <span class="val status-pill" :class="'status-' + order.status.toLowerCase()">
-              {{ order.status === 'ACTIVE' ? 'En producción' : order.status === 'COMPLETED' ? 'Completada' : 'Cancelada' }}
+              {{ order.status === 'ACTIVE' ? (order.block_reason ? 'En pausa' : 'En producción') : order.status === 'COMPLETED' ? 'Completada' : 'Cancelada' }}
             </span>
           </div>
           <div>
@@ -545,6 +537,8 @@ onUnmounted(() => {
           <p class="spec-text">{{ order.specification }}</p>
         </div>
       </section>
+
+      <OrderOperationPanel :order="order" @updated="order = $event" />
 
       <!-- Flujo de Etapas de Producción (Micro-MES) con Fotos de Evidencia -->
       <section class="stages-section">
@@ -567,6 +561,7 @@ onUnmounted(() => {
                 <span class="stage-num">{{ stage.position }}</span>
                 <div class="stage-text">
                   <h3>{{ stage.name }}</h3>
+                  <p v-if="stage.client_description">{{ stage.client_description }}</p>
                   <span class="stage-status-label">
                     <span v-if="stage.status === 'COMPLETED'">Completada {{ formatShortTime(stage.completed_at) }}</span>
                     <span v-else-if="stage.status === 'IN_PROGRESS'">En proceso</span>
@@ -607,7 +602,7 @@ onUnmounted(() => {
                 <button
                   v-if="stage.status === 'IN_PROGRESS' && canAdvance"
                   class="btn-complete-stage"
-                  :disabled="updatingStage === stage.position"
+                  :disabled="updatingStage === stage.position || !!order.block_reason"
                   @click="pendingAdvanceStage = stage"
                 >
                   {{ updatingStage === stage.position ? 'Guardando...' : nextStageName(stage.position) ? `Completar etapa · pasar a ${nextStageName(stage.position)?.toLocaleLowerCase('es-PE')}` : 'Completar etapa y pedido' }}
@@ -730,6 +725,12 @@ onUnmounted(() => {
             <input id="edit-quantity" v-model.number="editForm.quantity" type="number" step="any" min="0.01" required :disabled="editingOrder" />
           </div>
 
+          <div class="form-group">
+            <label for="edit-specification">Especificaciones / Diseño</label>
+            <textarea id="edit-specification" v-model="editForm.specification" maxlength="10000" rows="4" placeholder="Ej. Tipo de tela, color y acabados" :disabled="editingOrder" />
+            <label v-if="editForm.specification !== order.specification" for="edit-change-reason">Motivo del cambio de diseño</label>
+            <textarea v-if="editForm.specification !== order.specification" id="edit-change-reason" v-model="editForm.changeReason" required minlength="5" maxlength="300" :disabled="editingOrder" />
+          </div>
           <div class="form-row-2">
             <div class="form-group">
               <label for="edit-date">Fecha de entrega</label>
@@ -959,7 +960,8 @@ h1 {
   color: var(--tf-ink);
 }
 .edit-order-form input,
-.edit-order-form select {
+.edit-order-form select,
+.edit-order-form textarea {
   width: 100%;
   min-height: 48px;
   padding: 0.625rem 0.75rem;
@@ -972,11 +974,13 @@ h1 {
   box-sizing: border-box;
 }
 .edit-order-form input:focus,
-.edit-order-form select:focus {
+.edit-order-form select:focus,
+.edit-order-form textarea:focus {
   outline: 3px solid var(--tf-focus);
   outline-offset: 2px;
   border-color: var(--tf-primary);
 }
+.edit-order-form textarea { resize: vertical; }
 .form-row-2 {
   display: grid;
   grid-template-columns: 1.5fr 1fr;
@@ -1399,22 +1403,7 @@ h1 {
 .header-left h1 { font-size: var(--tf-page-title-size); color: var(--tf-ink); }
 .btn-ticket { min-height: 44px; color: var(--tf-primary); border-color: var(--tf-primary-border); background: var(--tf-surface); display: inline-flex; align-items: center; gap: .45rem; }
 .header-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
-.share-panel { display: grid; gap: .75rem; margin: 0 0 1rem; padding: 1rem 1.1rem; border: 1px solid var(--tf-primary-border); border-radius: .5rem; background: var(--tf-primary-soft); }
-.share-panel__head { display: flex; justify-content: space-between; align-items: center; gap: .75rem; }
-.share-panel__head h2 { margin: 0; color: var(--tf-ink); font-size: var(--tf-section-title-size); }
-.share-panel__close { display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: .4rem; color: var(--tf-ink-soft); background: transparent; cursor: pointer; }
-.share-panel__text, .share-panel__note { margin: 0; color: var(--tf-text-subtle); font-size: .88rem; line-height: 1.5; }
-.share-panel__label { color: var(--tf-ink); font-size: .82rem; font-weight: 700; }
-.share-panel__row { display: flex; gap: .5rem; }
-.share-panel__input { flex: 1; min-width: 0; min-height: 44px; padding: .5rem .7rem; border: 1px solid var(--tf-border); border-radius: .4rem; color: var(--tf-ink); background: var(--tf-surface); font: inherit; font-size: .85rem; }
-.share-panel__primary { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; min-height: 44px; padding: .5rem 1rem; border: 0; border-radius: .4rem; color: var(--tf-on-primary); background: var(--tf-primary); font: inherit; font-size: .88rem; font-weight: 750; cursor: pointer; justify-self: start; white-space: nowrap; }
-.share-panel__primary:hover:not(:disabled) { background: var(--tf-primary-hover); }
-.share-panel__primary:disabled { opacity: .65; cursor: wait; }
-.share-panel__links { display: flex; flex-wrap: wrap; gap: 1.1rem; }
-.share-panel__links a { display: inline-flex; align-items: center; gap: .3rem; min-height: 44px; color: var(--tf-primary-strong); font-size: .88rem; font-weight: 700; }
-.share-panel__error { margin: 0; color: var(--tf-error); font-size: .85rem; font-weight: 700; }
-.share-panel button:focus-visible, .share-panel a:focus-visible, .share-panel__input:focus-visible { outline: 3px solid var(--tf-focus); outline-offset: 2px; }
-@media (max-width: 480px) { .share-panel__row { flex-direction: column; } .header-actions, .header-actions .btn-ticket { width: 100%; justify-content: center; } }
+@media (max-width: 480px) { .header-actions, .header-actions .btn-ticket { width: 100%; justify-content: center; } }
 .order-summary-card, .stages-section { border-radius: .5rem; box-shadow: none; }
 .stage-card.stage-in_progress { border-color: var(--tf-primary-border); background: var(--tf-primary-soft); box-shadow: none; }
 .stage-in_progress .stage-num { background: var(--tf-primary); }
@@ -1500,4 +1489,6 @@ h1 {
 .ticket-route { width: 100%; border-top: 1px solid var(--tf-border-soft); padding-top: 1rem; font-size: .82rem; }
 .ticket-route h3 { margin: 0 0 .35rem; font-size: .85rem; }
 .ticket-route p { margin: 0; line-height: 1.5; }
+
+@media(max-width:480px){.header-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);width:100%}.header-actions .btn-ticket{width:100%;font-size:.75rem}.header-actions .btn-ticket:first-child{grid-column:1/-1}}
 </style>

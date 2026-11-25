@@ -82,6 +82,7 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
+	input.ActorID = principal.UserID
 	order, err := h.service.Create(c.Request.Context(), principal.WorkshopID, input, idempotencyKey)
 	if err != nil {
 		if errors.Is(err, ErrOrderInvalid) {
@@ -158,8 +159,8 @@ func (h *Handler) UpdateStage(c *gin.Context) {
 
 	posStr := c.Param("position")
 	pos, err := strconv.Atoi(posStr)
-	if err != nil || pos < 1 || pos > 7 {
-		httpx.RespondError(c, http.StatusBadRequest, "STAGE_INVALID", "The stage position must be between 1 and 7.")
+	if err != nil || pos < 1 || pos > 20 {
+		httpx.RespondError(c, http.StatusBadRequest, "STAGE_INVALID", "The stage position must be between 1 and 20.")
 		return
 	}
 
@@ -206,8 +207,8 @@ func (h *Handler) UndoStage(c *gin.Context) {
 		return
 	}
 	position, err := strconv.Atoi(c.Param("position"))
-	if err != nil || position < 1 || position > 7 {
-		httpx.RespondError(c, http.StatusBadRequest, "STAGE_INVALID", "The stage position must be between 1 and 7.")
+	if err != nil || position < 1 || position > 20 {
+		httpx.RespondError(c, http.StatusBadRequest, "STAGE_INVALID", "The stage position must be between 1 and 20.")
 		return
 	}
 	stage, err := h.service.UndoStage(c.Request.Context(), principal.WorkshopID, orderID, position, principal.UserID)
@@ -287,8 +288,8 @@ func (h *Handler) ReopenStage(c *gin.Context) {
 		return
 	}
 	position, err := strconv.Atoi(c.Param("position"))
-	if err != nil || position < 1 || position > 7 {
-		httpx.RespondError(c, http.StatusBadRequest, "STAGE_INVALID", "The stage position must be between 1 and 7.")
+	if err != nil || position < 1 || position > 20 {
+		httpx.RespondError(c, http.StatusBadRequest, "STAGE_INVALID", "The stage position must be between 1 and 20.")
 		return
 	}
 	var input struct {
@@ -339,8 +340,8 @@ func (h *Handler) AddPhoto(c *gin.Context) {
 
 	posStr := c.Param("position")
 	pos, err := strconv.Atoi(posStr)
-	if err != nil || pos < 1 || pos > 7 {
-		httpx.RespondError(c, http.StatusBadRequest, "STAGE_INVALID", "The stage position must be between 1 and 7.")
+	if err != nil || pos < 1 || pos > 20 {
+		httpx.RespondError(c, http.StatusBadRequest, "STAGE_INVALID", "The stage position must be between 1 and 20.")
 		return
 	}
 
@@ -384,6 +385,9 @@ func (h *Handler) Dashboard(c *gin.Context) {
 }
 
 func RegisterRoutes(routes gin.IRouter, handler *Handler, requireSession gin.HandlerFunc) {
+	routes.GET("/api/v1/production-settings", requireSession, handler.GetProductionSettings)
+	routes.PATCH("/api/v1/production-settings", requireSession, handler.SaveProductionSettings)
+	routes.PATCH("/api/v1/orders/:id/operation", requireSession, handler.UpdateOperation)
 	routes.GET("/api/v1/orders", requireSession, handler.List)
 	routes.GET("/api/v1/orders/:id", requireSession, handler.GetByID)
 	routes.POST("/api/v1/orders", requireSession, handler.Create)

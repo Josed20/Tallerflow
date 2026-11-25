@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import UiNotice from '../../components/UiNotice.vue'
 import { computed, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import AuthLayout from '../../layouts/AuthLayout.vue'
@@ -59,7 +60,7 @@ async function submit() {
     <h1 id="auth-title">Controla tus pedidos sin preguntar todo el día</h1>
     <p class="auth-subtitle">Plataforma de trazabilidad para talleres de confección textil</p>
     <form class="auth-form" novalidate @submit.prevent="submit">
-      <p v-if="sessionNotice" class="auth-session-notice" role="status">{{ sessionNotice }}</p>
+      <UiNotice :message="sessionNotice" />
       <UiAlert v-if="serverError" :message="serverError" />
       <div v-if="unverifiedEmail" class="auth-session-notice auth-unverified" role="status">
         <p><strong>Activa tu taller primero.</strong> Abre el enlace que enviamos a {{ unverifiedEmail }} para verificar tu correo.</p>

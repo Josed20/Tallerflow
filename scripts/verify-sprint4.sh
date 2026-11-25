@@ -48,6 +48,9 @@ docker compose up -d --wait postgres
 docker compose run --rm flyway
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U tallerflow_app -d tallerflow < database/tests/email_verification_contract.sql
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d tallerflow < database/tests/sprint4_michael_contract.sql
+docker compose cp ./database postgres:/tmp/tallerflow-database
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d tallerflow -f /tmp/tallerflow-database/tests/sprint5_production_contract.sql
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d tallerflow -f /tmp/tallerflow-database/tests/bootstrap_owner_purge_contract.sql
 
 export TF_TEST_DATABASE_URL='postgres://tallerflow_app:local-app-change-me@127.0.0.1:55435/tallerflow?sslmode=disable'
 export TF_TEST_BOOTSTRAP_DATABASE_URL='postgres://tallerflow_bootstrap:local-bootstrap-change-me@127.0.0.1:55435/tallerflow?sslmode=disable'
@@ -68,3 +71,4 @@ export E2E_OWNER_PASSWORD='Permanent secure passphrase 27!'
 # Onboarding first: once signup creates a workshop the installation is claimed.
 npm --prefix frontend run test:e2e -- onboarding-flow.spec.ts
 npm --prefix frontend run test:e2e -- signup-flow.spec.ts
+npm --prefix frontend run test:e2e -- sprint5-flow.spec.ts

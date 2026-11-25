@@ -1,0 +1,12 @@
+/* TallerFlow: shared product surfaces and restrained motion. */
+:root {font-feature-settings: "zero" 0; font-optical-sizing: auto;}
+body {line-height:1.55; -webkit-font-smoothing:antialiased;}
+h1,h2,h3 {font-family:var(--tf-font-body);font-variation-settings:normal;font-weight:700;letter-spacing:-.035em;line-height:1.2;}
+button,a,input,textarea,select {-webkit-tap-highlight-color:transparent;}
+button,a {transition:background-color .16s, border-color .16s, box-shadow .16s, transform .16s;}
+input,select,textarea {color:var(--tf-ink);}
+button:disabled {cursor:not-allowed;}
+.product-surface {background:white;border:1px solid var(--tf-border-soft);border-radius:16px;padding:1.5rem;}
+.product-muted {color:var(--tf-text-subtle);font-size:.9rem;}
+.product-pill {display:inline-flex;align-items:center;gap:.35rem;padding:.3rem .65rem;border-radius:999px;background:var(--tf-primary-soft);color:var(--tf-primary);font-size:.75rem;font-weight:650;}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}

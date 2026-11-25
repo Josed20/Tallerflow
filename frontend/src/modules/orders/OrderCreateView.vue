@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ordersApi } from './api'
+import { productionApi, defaultStages } from './production-api'
 import { clientsApi, type Client } from '../clients/api'
 import { useSessionStore } from '../session/session.store'
 import UiButton from '../../components/UiButton.vue'
@@ -27,7 +28,14 @@ const promisedTime = ref('18:00')
 
 // Idempotency key generated per form lifecycle
 const idempotencyKey = ref(crypto.randomUUID())
-const productionStages = ['Corte', 'Costura', 'Acabado', 'Control de calidad', 'Planchado', 'Empaque', 'Entrega']
+const productionStages = ref(defaultStages.map(stage => stage.name))
+const loadingTemplate = ref(true)
+const templateError = ref(false)
+async function loadTemplate() {
+  try { productionStages.value = (await productionApi.get()).data.stages.map(stage => stage.name) }
+  catch { templateError.value = true; error.value = "No se pudo cargar el proceso de producción. Actualiza la página para reintentar." }
+  finally { loadingTemplate.value = false }
+}
 
 async function loadClients() {
   loadingClients.value = true
@@ -55,6 +63,7 @@ function setDefaultDate() {
 }
 
 async function handleSubmit() {
+  if (loadingTemplate.value || templateError.value || submitting.value) return
   if (!clientId.value) {
     error.value = 'Debes seleccionar un cliente.'
     return
@@ -104,6 +113,7 @@ async function handleSubmit() {
 onMounted(() => {
   setDefaultDate()
   loadClients()
+  loadTemplate()
 })
 </script>
 
@@ -175,7 +185,7 @@ onMounted(() => {
             id="order-qty"
             v-model="quantity"
             type="number"
-            min="1"
+            min="0.01"
             step="any"
             required
             class="input-text"
@@ -219,7 +229,7 @@ onMounted(() => {
 
       <div class="stages-preview">
         <p class="stages-title">Recorrido de producción</p>
-        <p class="stages-caption">La orden comenzará en Corte. Cada estación activa la siguiente al completarse.</p>
+        <p class="stages-caption">{{ loadingTemplate ? 'Cargando recorrido de producción…' : templateError ? 'No se pudo verificar el recorrido.' : `La orden comenzará en ${productionStages[0] || 'su primera etapa'}. Cada estación activa la siguiente al completarse.` }}</p>
         <ol class="stages-list">
           <li v-for="(stage, index) in productionStages" :key="stage"><span class="stages-list__number">{{ index + 1 }}</span><span>{{ stage }}</span><ArrowRight v-if="index < productionStages.length - 1" :size="14" aria-hidden="true" /></li>
         </ol>
@@ -234,7 +244,7 @@ onMounted(() => {
         >
           Cancelar
         </button>
-        <UiButton type="submit" :disabled="submitting">
+        <UiButton type="submit" :disabled="submitting || loadingTemplate || templateError">
           {{ submitting ? 'Creando orden...' : 'Crear orden' }}
         </UiButton>
       </div>

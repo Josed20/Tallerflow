@@ -33,9 +33,9 @@ jobs:
         run: npm --prefix frontend ci --no-audit
       - name: Build web assets and sync Android
         run: npm --prefix frontend run android:sync
-      - name: Compile debug APK
+      - name: Compile debug and optimized release APKs
         working-directory: frontend/android
-        run: bash ./gradlew assembleDebug --no-daemon
+        run: bash ./gradlew :app:assembleDebug :app:assembleRelease --no-daemon --max-workers=2
 
   # The job keeps its sprint-2 id so a required status check stays the same;
   # it runs the Sprint 4 suite, which includes the Sprint 1 and 2 ones.

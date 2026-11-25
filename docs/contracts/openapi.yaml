@@ -1,10 +1,12 @@
 openapi: 3.1.0
 info:
   title: TallerFlow API
-  version: 0.2.0
+  version: 1.1.0
   description: >-
     API contract for TallerFlow. Sprint 3 adds open workshop registration with
-    email verification and bearer sessions for the Android app.
+    email verification and bearer sessions for the Android app. Sprint 5 adds
+    configurable production, recoverable tracking and administrative analytics;
+    their standalone contracts are in openapi/sprint5/.
 servers:
   - url: /
     description: Same-origin deployment
@@ -33,7 +35,8 @@ paths:
       summary: Edit an active order using its current version
       description: >-
         OWNER and ADMIN only. Updates the client, product, quantity and promised
-        date in one transaction. The client must belong to the same workshop.
+        date in one transaction. Specifications can be updated with a reason.
+        The client must belong to the same workshop.
         Returns the updated order and records changed fields in ORDER_UPDATED.
       security:
         - sessionCookie: []
@@ -69,6 +72,14 @@ paths:
                 promised_at:
                   type: string
                   format: date-time
+                specification:
+                  type: string
+                  maxLength: 10000
+                change_reason:
+                  type: string
+                  minLength: 5
+                  maxLength: 300
+                  description: Required when the specification changes.
                 version:
                   type: integer
                   minimum: 1
@@ -722,7 +733,7 @@ paths:
         - in: path
           name: position
           required: true
-          schema: { type: integer, minimum: 1, maximum: 7 }
+          schema: { type: integer, minimum: 1, maximum: 20 }
       requestBody:
         required: true
         content:

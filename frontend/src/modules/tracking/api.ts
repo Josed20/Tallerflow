@@ -1,7 +1,10 @@
+import { api } from '../session/api'
+
 export type TrackingTrafficLight = 'ON_TIME' | 'AT_RISK' | 'LATE' | 'COMPLETED'
 
 /** Customer-facing order data returned by the public tracking endpoint. */
 export interface TrackingOrder {
+  specification?: string
   workshop_name: string
   code: string
   product: string
@@ -11,7 +14,7 @@ export interface TrackingOrder {
   traffic_light: TrackingTrafficLight
   promised_at: string
   updated_at: string
-  stages: { position: number; name: string; status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED'; completed_at: string | null }[]
+  stages: { position: number; name: string; client_description?: string; status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED'; completed_at: string | null }[]
   photos: { stage_position: number; photo_data: string; caption: string; created_at: string }[]
 }
 
@@ -26,4 +29,10 @@ export async function fetchTrackingOrder(token: string): Promise<TrackingOrder> 
   if (!response.ok) throw new Error('Tracking request failed')
   const payload = await response.json() as { data: TrackingOrder }
   return payload.data
+}
+
+/** Recovery is idempotent; replacement and revocation are explicit manager actions. */
+export function manageTrackingLink(orderId: string, csrfToken: string, action: 'recover' | 'replace' | 'revoke' = 'recover') {
+  const suffix = action === 'recover' ? '' : `/${action}`
+  return api.post<{ data: { token: string } }>(`/api/v1/orders/${encodeURIComponent(orderId)}/tracking-link${suffix}`, undefined, csrfToken)
 }

@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
 import BrandLogo from '../../components/BrandLogo.vue'
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 </script>
 
 <template>
   <div class="legal-page">
-    <header class="legal-header"><div class="legal-container legal-header__inner">
+    <header v-if="!embedded" class="legal-header"><div class="legal-container legal-header__inner">
       <BrandLogo :size="32" />
       <RouterLink to="/login" class="legal-back-link">Volver a TallerFlow</RouterLink>
     </div></header>
-    <main class="legal-container legal-content"><article class="legal-article">
+    <component :is="embedded ? 'div' : 'main'" class="legal-container legal-content"><article class="legal-article">
       <header class="legal-article__header">
         <span class="legal-badge">Tu cuenta y tus datos</span>
         <h1>Solicitar la eliminación de tu cuenta de TallerFlow</h1>
@@ -34,9 +35,9 @@ import BrandLogo from '../../components/BrandLogo.vue'
         <p>Para la eliminación del taller se aplica el periodo de gracia de <strong>30 días calendario</strong> indicado en nuestra política de privacidad. Durante ese periodo puedes solicitar cancelar la eliminación por el mismo correo. Después se realiza la supresión definitiva de los datos del taller.</p>
         <p>Las copias de seguridad pueden conservar los datos durante un máximo de <strong>4 semanas adicionales</strong>, según la política de privacidad. Si alguna información debe conservarse por una obligación aplicable, te informaremos los datos, el motivo y el plazo correspondiente al responder tu solicitud.</p>
       </section>
-      <section><h2>Más información</h2><p>Consulta nuestra <RouterLink to="/privacidad">política de privacidad</RouterLink> y los <RouterLink to="/terminos">términos de servicio</RouterLink>.</p></section>
-    </article></main>
-    <footer class="legal-footer"><div class="legal-container"><p>TallerFlow · Contacto: <a href="mailto:tallerflow.pe@gmail.com">tallerflow.pe@gmail.com</a></p></div></footer>
+      <section><h2>Más información</h2><p>Consulta nuestra <RouterLink :to="embedded ? '/app/account/privacy' : '/privacidad'">política de privacidad</RouterLink> y los <RouterLink :to="embedded ? '/app/account/terms' : '/terminos'">términos de servicio</RouterLink>.</p></section>
+    </article></component>
+    <footer v-if="!embedded" class="legal-footer"><div class="legal-container"><p>TallerFlow · Contacto: <a href="mailto:tallerflow.pe@gmail.com">tallerflow.pe@gmail.com</a></p></div></footer>
   </div>
 </template>
 

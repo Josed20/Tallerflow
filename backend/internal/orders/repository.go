@@ -2,6 +2,7 @@ package orders
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Josed20/Tallerflow/backend/platform/database"
+	"github.com/Josed20/Tallerflow/backend/platform/security"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -50,39 +52,46 @@ type StagePhoto struct {
 }
 
 type OrderStage struct {
-	ID          uuid.UUID  `json:"id" gorm:"type:uuid;primaryKey"`
-	WorkshopID  uuid.UUID  `json:"workshop_id" gorm:"type:uuid;not null"`
-	OrderID     uuid.UUID  `json:"order_id" gorm:"type:uuid;not null"`
-	Position    int        `json:"position" gorm:"not null"`
-	Name        string     `json:"name" gorm:"not null"`
-	Status      string     `json:"status" gorm:"not null"` // PENDING, IN_PROGRESS, COMPLETED
-	CompletedAt *time.Time `json:"completed_at"`
-	CompletedBy *uuid.UUID `json:"completed_by,omitempty" gorm:"type:uuid"`
+	ClientDescription string     `json:"client_description"`
+	ID                uuid.UUID  `json:"id" gorm:"type:uuid;primaryKey"`
+	WorkshopID        uuid.UUID  `json:"workshop_id" gorm:"type:uuid;not null"`
+	OrderID           uuid.UUID  `json:"order_id" gorm:"type:uuid;not null"`
+	Position          int        `json:"position" gorm:"not null"`
+	Name              string     `json:"name" gorm:"not null"`
+	Status            string     `json:"status" gorm:"not null"` // PENDING, IN_PROGRESS, COMPLETED
+	CompletedAt       *time.Time `json:"completed_at"`
+	CompletedBy       *uuid.UUID `json:"completed_by,omitempty" gorm:"type:uuid"`
 }
 
 type Order struct {
-	ID                 uuid.UUID    `json:"id" gorm:"type:uuid;primaryKey"`
-	WorkshopID         uuid.UUID    `json:"workshop_id" gorm:"type:uuid;not null"`
-	ClientID           uuid.UUID    `json:"client_id" gorm:"type:uuid;not null"`
-	ClientName         string       `json:"client_name" gorm:"->"`
-	OrderNumber        int64        `json:"order_number" gorm:"not null"`
-	Code               string       `json:"code" gorm:"not null"`
-	Product            string       `json:"product" gorm:"not null"`
-	Specification      string       `json:"specification"`
-	Quantity           float64      `json:"quantity" gorm:"not null"`
-	Unit               string       `json:"unit" gorm:"not null"`
-	Status             string       `json:"status" gorm:"not null;default:'ACTIVE'"` // ACTIVE, COMPLETED, CANCELLED
-	PromisedAt         time.Time    `json:"promised_at" gorm:"not null"`
-	Version            int64        `json:"version" gorm:"not null;default:1"`
-	CreatedAt          time.Time    `json:"created_at"`
-	UpdatedAt          time.Time    `json:"updated_at"`
-	CancelledAt        *time.Time   `json:"cancelled_at,omitempty"`
-	CancelledBy        *uuid.UUID   `json:"cancelled_by,omitempty" gorm:"type:uuid"`
-	CancellationReason string       `json:"cancellation_reason,omitempty"`
-	TrafficLight       TrafficLight `json:"traffic_light" gorm:"->"`
-	CurrentStage       string       `json:"current_stage" gorm:"->"`
-	Stages             []OrderStage `json:"stages,omitempty" gorm:"-"`
-	Photos             []StagePhoto `json:"photos,omitempty" gorm:"-"`
+	ResponsibleName     string        `json:"responsible_name" gorm:"->"`
+	ResponsibleUserID   *uuid.UUID    `json:"responsible_user_id" gorm:"type:uuid"`
+	BlockReason         string        `json:"block_reason"`
+	Changes             []OrderChange `json:"changes,omitempty" gorm:"-"`
+	StageCount          int           `json:"stage_count" gorm:"->"`
+	CompletedStageCount int           `json:"completed_stage_count" gorm:"->"`
+	ID                  uuid.UUID     `json:"id" gorm:"type:uuid;primaryKey"`
+	WorkshopID          uuid.UUID     `json:"workshop_id" gorm:"type:uuid;not null"`
+	ClientID            uuid.UUID     `json:"client_id" gorm:"type:uuid;not null"`
+	ClientName          string        `json:"client_name" gorm:"->"`
+	OrderNumber         int64         `json:"order_number" gorm:"not null"`
+	Code                string        `json:"code" gorm:"not null"`
+	Product             string        `json:"product" gorm:"not null"`
+	Specification       string        `json:"specification"`
+	Quantity            float64       `json:"quantity" gorm:"not null"`
+	Unit                string        `json:"unit" gorm:"not null"`
+	Status              string        `json:"status" gorm:"not null;default:'ACTIVE'"` // ACTIVE, COMPLETED, CANCELLED
+	PromisedAt          time.Time     `json:"promised_at" gorm:"not null"`
+	Version             int64         `json:"version" gorm:"not null;default:1"`
+	CreatedAt           time.Time     `json:"created_at"`
+	UpdatedAt           time.Time     `json:"updated_at"`
+	CancelledAt         *time.Time    `json:"cancelled_at,omitempty"`
+	CancelledBy         *uuid.UUID    `json:"cancelled_by,omitempty" gorm:"type:uuid"`
+	CancellationReason  string        `json:"cancellation_reason,omitempty"`
+	TrafficLight        TrafficLight  `json:"traffic_light" gorm:"->"`
+	CurrentStage        string        `json:"current_stage" gorm:"->"`
+	Stages              []OrderStage  `json:"stages,omitempty" gorm:"-"`
+	Photos              []StagePhoto  `json:"photos,omitempty" gorm:"-"`
 }
 
 type DashboardMetrics struct {
@@ -94,6 +103,7 @@ type DashboardMetrics struct {
 }
 
 type CreateOrderInput struct {
+	ActorID       uuid.UUID `json:"-"`
 	ClientID      uuid.UUID `json:"client_id"`
 	Product       string    `json:"product"`
 	Specification string    `json:"specification"`
@@ -107,11 +117,13 @@ type UpdateStageInput struct {
 }
 
 type UpdateOrderInput struct {
-	ClientID   uuid.UUID `json:"client_id"`
-	Product    string    `json:"product"`
-	Quantity   float64   `json:"quantity"`
-	PromisedAt time.Time `json:"promised_at"`
-	Version    int64     `json:"version"`
+	Specification *string   `json:"specification"`
+	ChangeReason  string    `json:"change_reason"`
+	ClientID      uuid.UUID `json:"client_id"`
+	Product       string    `json:"product"`
+	Quantity      float64   `json:"quantity"`
+	PromisedAt    time.Time `json:"promised_at"`
+	Version       int64     `json:"version"`
 }
 
 type AddStagePhotoInput struct {
@@ -133,15 +145,20 @@ type Repository interface {
 }
 
 type PostgresRepository struct {
-	tenant database.TenantRunner
-	now    func() time.Time
+	trackingSecret []byte
+	tenant         database.TenantRunner
+	now            func() time.Time
 }
 
-func NewPostgresRepository(tenant database.TenantRunner) (*PostgresRepository, error) {
+func NewPostgresRepository(tenant database.TenantRunner, secret ...string) (*PostgresRepository, error) {
 	if tenant == nil {
 		return nil, errors.New("tenant runner is required")
 	}
-	return &PostgresRepository{tenant: tenant, now: time.Now}, nil
+	r := &PostgresRepository{tenant: tenant, now: time.Now}
+	if len(secret) > 0 {
+		r.trackingSecret = []byte(secret[0])
+	}
+	return r, nil
 }
 
 func (r *PostgresRepository) List(ctx context.Context, workshopID uuid.UUID) ([]Order, error) {
@@ -155,6 +172,10 @@ func (r *PostgresRepository) List(ctx context.Context, workshopID uuid.UUID) ([]
 			o.order_number, o.code, o.product, o.specification,
 			o.quantity, o.unit, o.status, o.promised_at, o.version,
 			o.created_at, o.updated_at, o.cancelled_at, o.cancelled_by, o.cancellation_reason,
+ o.responsible_user_id, o.block_reason,
+ COALESCE((SELECT u.name FROM workshop_members m JOIN users u ON u.id = m.user_id WHERE m.workshop_id = o.workshop_id AND m.user_id = o.responsible_user_id), '') AS responsible_name,
+ (SELECT count(*) FROM order_stages WHERE order_id = o.id) AS stage_count,
+ (SELECT count(*) FROM order_stages WHERE order_id = o.id AND status = 'COMPLETED') AS completed_stage_count,
 			CASE
 				WHEN o.status = 'COMPLETED' THEN 'COMPLETED'
 				WHEN o.promised_at < ? THEN 'LATE'
@@ -194,6 +215,10 @@ func (r *PostgresRepository) GetByID(ctx context.Context, workshopID uuid.UUID, 
 			o.order_number, o.code, o.product, o.specification,
 			o.quantity, o.unit, o.status, o.promised_at, o.version,
 			o.created_at, o.updated_at, o.cancelled_at, o.cancelled_by, o.cancellation_reason,
+ o.responsible_user_id, o.block_reason,
+ COALESCE((SELECT u.name FROM workshop_members m JOIN users u ON u.id = m.user_id WHERE m.workshop_id = o.workshop_id AND m.user_id = o.responsible_user_id), '') AS responsible_name,
+ (SELECT count(*) FROM order_stages WHERE order_id = o.id) AS stage_count,
+ (SELECT count(*) FROM order_stages WHERE order_id = o.id AND status = 'COMPLETED') AS completed_stage_count,
 			CASE
 				WHEN o.status = 'COMPLETED' THEN 'COMPLETED'
 				WHEN o.promised_at < ? THEN 'LATE'
@@ -215,7 +240,7 @@ func (r *PostgresRepository) GetByID(ctx context.Context, workshopID uuid.UUID, 
 		}
 
 		var stages []OrderStage
-		if err := tx.Raw("SELECT id, workshop_id, order_id, position, name, status, completed_at, completed_by FROM order_stages WHERE order_id = ? ORDER BY position", id).Scan(&stages).Error; err != nil {
+		if err := tx.Raw("SELECT id, workshop_id, order_id, position, name, client_description, status, completed_at, completed_by FROM order_stages WHERE order_id = ? ORDER BY position", id).Scan(&stages).Error; err != nil {
 			return err
 		}
 		order.Stages = stages
@@ -225,6 +250,9 @@ func (r *PostgresRepository) GetByID(ctx context.Context, workshopID uuid.UUID, 
 			return err
 		}
 		order.Photos = photos
+		if err := tx.Raw("SELECT oc.id, oc.actor_user_id, COALESCE(u.name, '') AS actor_name, oc.changes, oc.created_at FROM order_changes oc LEFT JOIN workshop_members m ON m.workshop_id = oc.workshop_id AND m.user_id = oc.actor_user_id LEFT JOIN users u ON u.id = m.user_id WHERE oc.order_id = ? ORDER BY oc.created_at, oc.id", id).Scan(&order.Changes).Error; err != nil {
+			return err
+		}
 		return nil
 	})
 	if err != nil {
@@ -265,6 +293,23 @@ func (r *PostgresRepository) Update(ctx context.Context, workshopID uuid.UUID, o
 			return ErrOrderInvalid
 		}
 		changes := map[string]any{}
+		if input.Specification != nil {
+			spec := strings.TrimSpace(*input.Specification)
+			reason := strings.TrimSpace(input.ChangeReason)
+			if len([]rune(spec)) > 10000 || len([]rune(reason)) < 5 || len([]rune(reason)) > 300 {
+				return ErrOrderInvalid
+			}
+			var previous string
+			if err := tx.Raw("SELECT specification FROM orders WHERE id = ?", orderID).Scan(&previous).Error; err != nil {
+				return err
+			}
+			if previous != spec {
+				changes["specification"] = map[string]any{"from": previous, "to": spec, "reason": reason}
+				if err := tx.Exec("UPDATE orders SET specification = ? WHERE id = ?", spec, orderID).Error; err != nil {
+					return err
+				}
+			}
+		}
 		if current.ClientID != input.ClientID {
 			changes["client_id"] = map[string]any{"from": current.ClientID, "to": input.ClientID}
 		}
@@ -287,6 +332,9 @@ func (r *PostgresRepository) Update(ctx context.Context, workshopID uuid.UUID, o
 		if result.RowsAffected != 1 {
 			return ErrOrderVersionConflict
 		}
+		if err := recordOrderChange(tx, workshopID, orderID, actorID, changes); err != nil {
+			return err
+		}
 		changeJSON, err := json.Marshal(changes)
 		if err != nil {
 			return err
@@ -300,7 +348,7 @@ func (r *PostgresRepository) Update(ctx context.Context, workshopID uuid.UUID, o
 }
 
 func (r *PostgresRepository) AddStagePhoto(ctx context.Context, workshopID uuid.UUID, orderID uuid.UUID, stagePosition int, photoData string, objectKey string, caption string) (*StagePhoto, error) {
-	if (strings.TrimSpace(photoData) == "") == (strings.TrimSpace(objectKey) == "") || stagePosition < 1 || stagePosition > 7 {
+	if (strings.TrimSpace(photoData) == "") == (strings.TrimSpace(objectKey) == "") || stagePosition < 1 || stagePosition > 20 {
 		return nil, ErrOrderInvalid
 	}
 	now := r.now().UTC()
@@ -337,7 +385,7 @@ func (r *PostgresRepository) AddStagePhoto(ctx context.Context, workshopID uuid.
 }
 
 func (r *PostgresRepository) Create(ctx context.Context, workshopID uuid.UUID, input CreateOrderInput, idempotencyKey string) (*Order, error) {
-	if input.ClientID == uuid.Nil || strings.TrimSpace(input.Product) == "" || input.Quantity <= 0 || input.PromisedAt.IsZero() {
+	if input.ClientID == uuid.Nil || strings.TrimSpace(input.Product) == "" || math.IsNaN(input.Quantity) || math.IsInf(input.Quantity, 0) || input.Quantity <= 0 || input.Quantity > 9999999999.99 || len([]rune(strings.TrimSpace(input.Product))) > 160 || len([]rune(input.Specification)) > 10000 || input.PromisedAt.IsZero() {
 		return nil, ErrOrderInvalid
 	}
 
@@ -369,6 +417,13 @@ func (r *PostgresRepository) Create(ctx context.Context, workshopID uuid.UUID, i
 			}
 		}
 
+		var clientCount int64
+		if err := tx.Raw("SELECT count(*) FROM clients WHERE id = ? AND workshop_id = ?", input.ClientID, workshopID).Scan(&clientCount).Error; err != nil {
+			return err
+		}
+		if clientCount != 1 {
+			return ErrOrderInvalid
+		}
 		// 2. Increment sequential counter per workshop
 		if err := tx.Exec("INSERT INTO workshop_counters (workshop_id, next_order_number) VALUES (?, 1) ON CONFLICT (workshop_id) DO NOTHING", workshopID).Error; err != nil {
 			return err
@@ -406,32 +461,35 @@ func (r *PostgresRepository) Create(ctx context.Context, workshopID uuid.UUID, i
 			return err
 		}
 
-		// 4. Default Stages for Garment Workshop
-		defaultStages := []string{
-			"CORTE",
-			"COSTURA",
-			"ACABADO",
-			"CONTROL DE CALIDAD",
-			"PLANCHADO",
-			"EMPAQUE",
-			"ENTREGA",
+		// Copy the current template once; later changes never rewrite this snapshot.
+		settings, err := loadProductionSettings(tx, workshopID)
+		if err != nil {
+			return err
 		}
-
-		for idx, stageName := range defaultStages {
-			pos := idx + 1
+		for idx, stage := range settings.Stages {
 			status := "PENDING"
-			if pos == 1 {
+			if idx == 0 {
 				status = "IN_PROGRESS"
 			}
-			stageID := uuid.New()
-			if err := tx.Exec(
-				"INSERT INTO order_stages (id, workshop_id, order_id, position, name, status) VALUES (?, ?, ?, ?, ?, ?)",
-				stageID, workshopID, orderID, pos, stageName, status,
-			).Error; err != nil {
+			if err := tx.Exec("INSERT INTO order_stages (id, workshop_id, order_id, position, name, client_description, status) VALUES (?, ?, ?, ?, ?, ?, ?)", uuid.New(), workshopID, orderID, idx+1, stage.Name, stage.ClientDescription, status).Error; err != nil {
 				return err
 			}
 		}
 
+		// Create the recoverable tracking link in the same transaction as the order.
+		if len(r.trackingSecret) > 0 {
+			if input.ActorID == uuid.Nil {
+				return ErrOrderInvalid
+			}
+			nonce, err := security.RandomToken(rand.Reader, trackingTokenBytes)
+			if err != nil {
+				return err
+			}
+			token := recoverTrackingToken(r.trackingSecret, workshopID, orderID, nonce)
+			if err := tx.Exec("INSERT INTO order_tracking_links (workshop_id, order_id, token_hash, recovery_nonce, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)", workshopID, orderID, trackingDigest(token), nonce, input.ActorID, now).Error; err != nil {
+				return err
+			}
+		}
 		// 5. Save Idempotency Key
 		if idempotencyKey != "" {
 			if err := tx.Exec(
@@ -482,7 +540,7 @@ func (r *PostgresRepository) UpdateStage(ctx context.Context, workshopID uuid.UU
 		}
 
 		result := tx.Exec(
-			"UPDATE order_stages SET status = ?, completed_at = ?, completed_by = ? WHERE id = ? AND status = 'IN_PROGRESS'",
+			"UPDATE order_stages SET status = ?, completed_at = ?, completed_by = ? WHERE id = ? AND status = 'IN_PROGRESS' AND NOT EXISTS (SELECT 1 FROM orders WHERE id = order_stages.order_id AND block_reason <> '')",
 			status, now, actorID, current.ID,
 		)
 		if result.Error != nil {
@@ -492,7 +550,11 @@ func (r *PostgresRepository) UpdateStage(ctx context.Context, workshopID uuid.UU
 			return ErrOrderInvalid
 		}
 
-		if position < 7 {
+		var lastPosition int
+		if err := tx.Raw("SELECT max(position) FROM order_stages WHERE order_id = ?", orderID).Scan(&lastPosition).Error; err != nil {
+			return err
+		}
+		if position < lastPosition {
 			next := tx.Exec(
 				"UPDATE order_stages SET status = 'IN_PROGRESS' WHERE order_id = ? AND position = ? AND status = 'PENDING'",
 				orderID, position+1,
@@ -505,7 +567,7 @@ func (r *PostgresRepository) UpdateStage(ctx context.Context, workshopID uuid.UU
 			}
 		}
 
-		if position == 7 {
+		if position == lastPosition {
 			result = tx.Exec("UPDATE orders SET status = 'COMPLETED', version = version + 1, updated_at = ? WHERE id = ? AND status = 'ACTIVE'", now, orderID)
 		} else {
 			result = tx.Exec("UPDATE orders SET version = version + 1, updated_at = ? WHERE id = ? AND status = 'ACTIVE'", now, orderID)
@@ -527,7 +589,7 @@ func (r *PostgresRepository) UpdateStage(ctx context.Context, workshopID uuid.UU
 }
 
 func (r *PostgresRepository) ReopenStage(ctx context.Context, workshopID uuid.UUID, orderID uuid.UUID, position int, actorID uuid.UUID, reason string) (*OrderStage, error) {
-	if position < 1 || position > 7 || len([]rune(strings.TrimSpace(reason))) < 5 || len([]rune(reason)) > 300 {
+	if position < 1 || position > 20 || len([]rune(strings.TrimSpace(reason))) < 5 || len([]rune(reason)) > 300 {
 		return nil, ErrOrderInvalid
 	}
 	var reopened OrderStage
@@ -541,7 +603,11 @@ func (r *PostgresRepository) ReopenStage(ctx context.Context, workshopID uuid.UU
 		if orderRow.RowsAffected == 0 {
 			return ErrOrderNotFound
 		}
-		if (position == 7 && orderStatus != "COMPLETED") || (position < 7 && orderStatus != "ACTIVE") {
+		var lastPosition int
+		if err := tx.Raw("SELECT max(position) FROM order_stages WHERE order_id = ?", orderID).Scan(&lastPosition).Error; err != nil {
+			return err
+		}
+		if (position == lastPosition && orderStatus != "COMPLETED") || (position < lastPosition && orderStatus != "ACTIVE") {
 			return ErrOrderInvalid
 		}
 
@@ -556,7 +622,7 @@ func (r *PostgresRepository) ReopenStage(ctx context.Context, workshopID uuid.UU
 			return ErrOrderInvalid
 		}
 
-		if position < 7 {
+		if position < lastPosition {
 			var next OrderStage
 			nextRow := tx.Raw("SELECT id, workshop_id, order_id, position, name, status, completed_at, completed_by FROM order_stages WHERE order_id = ? AND position = ? FOR UPDATE", orderID, position+1).Scan(&next)
 			if nextRow.Error != nil {
@@ -608,7 +674,7 @@ func (r *PostgresRepository) ReopenStage(ctx context.Context, workshopID uuid.UU
 }
 
 func (r *PostgresRepository) UndoStage(ctx context.Context, workshopID uuid.UUID, orderID uuid.UUID, position int, actorID uuid.UUID) (*OrderStage, error) {
-	if position < 1 || position > 7 || actorID == uuid.Nil {
+	if position < 1 || position > 20 || actorID == uuid.Nil {
 		return nil, ErrOrderInvalid
 	}
 	var reopened OrderStage
@@ -622,7 +688,11 @@ func (r *PostgresRepository) UndoStage(ctx context.Context, workshopID uuid.UUID
 		if orderRow.RowsAffected == 0 {
 			return ErrOrderNotFound
 		}
-		if (position == 7 && orderStatus != "COMPLETED") || (position < 7 && orderStatus != "ACTIVE") {
+		var lastPosition int
+		if err := tx.Raw("SELECT max(position) FROM order_stages WHERE order_id = ?", orderID).Scan(&lastPosition).Error; err != nil {
+			return err
+		}
+		if (position == lastPosition && orderStatus != "COMPLETED") || (position < lastPosition && orderStatus != "ACTIVE") {
 			return ErrStageNotLatest
 		}
 
@@ -643,7 +713,7 @@ func (r *PostgresRepository) UndoStage(ctx context.Context, workshopID uuid.UUID
 			return ErrUndoWindowExpired
 		}
 
-		if position < 7 {
+		if position < lastPosition {
 			var next OrderStage
 			nextRow := tx.Raw("SELECT id, workshop_id, order_id, position, name, status, completed_at, completed_by FROM order_stages WHERE order_id = ? AND position = ? FOR UPDATE", orderID, position+1).Scan(&next)
 			if nextRow.Error != nil {

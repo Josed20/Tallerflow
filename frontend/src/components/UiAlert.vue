@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import FeedbackToast from './FeedbackToast.vue'
 defineProps<{ message: string }>()
 </script>
 
 <template>
-  <p class="ui-alert" role="alert" aria-live="assertive">{{ message }}</p>
+  <FeedbackToast kind="error" :message="message" />
 </template>

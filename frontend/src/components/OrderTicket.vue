@@ -9,6 +9,7 @@ const props = defineProps<{
   product: string
   state: DeliveryState
   completed: number
+  total?: number
   station?: string
   client?: string
   due?: string
@@ -29,23 +30,12 @@ const late = computed(() => props.state === 'LATE')
         <span v-if="due">{{ due }}</span>
       </span>
       <slot />
-      <StitchSeam :completed="completed" :tone="late ? 'late' : 'default'" />
+      <StitchSeam :completed="completed" :total="total ?? 7" :tone="late ? 'late' : 'default'" />
     </span>
   </component>
 </template>
 
 <style scoped>
-/* Flex column so the inner face fills a ticket stretched by a grid row; otherwise the border fill shows below it. */
-.ticket { display: flex; flex-direction: column; min-width: 0; padding: 1px; border-radius: var(--tf-radius-sm); background: var(--tf-border-soft); color: var(--tf-ink); text-decoration: none; clip-path: polygon(0 0, calc(100% - var(--tf-notch)) 0, 100% var(--tf-notch), 100% 100%, 0 100%); }
-.ticket__in { flex: 1; display: grid; align-content: start; gap: .3rem; padding: .7rem .75rem .65rem; border-radius: calc(var(--tf-radius-sm) - 1px); background: var(--tf-surface); clip-path: polygon(0 0, calc(100% - var(--tf-notch) + .5px) 0, 100% calc(var(--tf-notch) - .5px), 100% 100%, 0 100%); }
-.ticket--late { background: var(--tf-late); }
-.ticket--late .ticket__in { background: var(--tf-late-soft); }
-a.ticket:hover { background: var(--tf-primary); }
-a.ticket.ticket--late:hover { background: var(--tf-danger-hover); }
-a.ticket:focus-visible { outline: 3px solid var(--tf-focus); outline-offset: 2px; clip-path: none; }
-.ticket__top { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding-right: .7rem; }
-.ticket__code { font-family: var(--tf-font-mono); font-size: .85rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-.ticket__product { overflow-wrap: anywhere; font-size: .98rem; font-weight: 700; line-height: 1.3; }
-.ticket__meta { display: flex; flex-wrap: wrap; gap: .15rem .75rem; color: var(--tf-text-subtle); font-size: .8rem; }
-.ticket__meta b { color: var(--tf-ink); font-weight: 700; }
+.ticket{display:flex;flex-direction:column;min-width:0;color:var(--tf-ink);text-decoration:none;border:1px solid var(--tf-border-soft);border-radius:14px;background:white;box-shadow:0 2px 3px #152b4b04;overflow:hidden;transition:border-color .18s,box-shadow .18s,transform .18s}
+.ticket__in{display:grid;gap:.6rem;padding:1rem;align-content:start;flex:1}.ticket--late{border-left:3px solid var(--tf-late)}.ticket__top{display:flex;align-items:center;justify-content:space-between;gap:.5rem}.ticket__code{font-family:var(--tf-font-body);color:var(--tf-text-subtle);font-size:.75rem;font-weight:600;letter-spacing:.02em}.ticket__product{font-size:.98rem;font-weight:700;line-height:1.4;overflow-wrap:anywhere}.ticket__meta{display:flex;flex-wrap:wrap;gap:.25rem .7rem;color:var(--tf-text-subtle);font-size:.8rem}.ticket__meta b{color:var(--tf-primary);font-weight:600}a.ticket:hover{border-color:var(--tf-primary-border);box-shadow:0 6px 20px #09234c0c;transform:translateY(-1px)}a.ticket:focus-visible{outline:3px solid var(--tf-focus);outline-offset:3px}
 </style>

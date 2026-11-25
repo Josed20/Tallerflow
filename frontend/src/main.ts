@@ -19,6 +19,9 @@ function signOut(reason: 'expired' | 'suspended') {
 if (usesNativeToken()) configureMobileTransport(signOut)
 else configureApiTransport({ kind: 'web', onUnauthorized: signOut })
 
+// Start telemetry only after Pinia and the web/mobile transport are ready.
+void import('./native/analytics-bootstrap').catch(() => undefined)
+
 if (isNativeApp()) {
   void NativeApp.addListener('backButton', ({ canGoBack }) => {
     if (canGoBack) router.back()

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/vue'
+import { fireEvent, render, screen, waitFor } from '@testing-library/vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import TrackingView from './TrackingView.vue'
@@ -27,10 +27,11 @@ async function renderTracking(response: Response) {
   await router.push('/seguimiento/' + 'A'.repeat(43))
   await router.isReady()
   render(TrackingView, { global: { plugins: [router] } })
+  return router
 }
 
 describe('TrackingView', () => {
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
 
   it('shows the current stage and progress to the customer', async () => {
     await renderTracking(new Response(JSON.stringify({ data: order }), { status: 200 }))
@@ -46,5 +47,71 @@ describe('TrackingView', () => {
     await renderTracking(new Response('{}', { status: 404 }))
 
     expect(await screen.findByRole('heading', { name: 'Este enlace ya no está activo' })).toBeTruthy()
+  })
+
+  it('shows the specification, custom stage description and actual stage count', async () => {
+    const custom = { ...order, specification: 'Tela azul\nCuello redondo', stages: [
+      { position: 1, name: 'Revisión del lote', client_description: 'Verificamos las medidas acordadas.', status: 'IN_PROGRESS', completed_at: null },
+    ] }
+    await renderTracking(Response.json({ data: custom }))
+    expect(await screen.findByRole('heading', { name: 'Descripción del pedido' })).toBeTruthy()
+    expect(screen.getByText(/Tela azul/)).toBeTruthy()
+    expect(screen.getAllByText('Verificamos las medidas acordadas.')).toHaveLength(2)
+    expect(screen.getByText('0 de 1 etapas completadas')).toBeTruthy()
+  })
+
+  it('explains finishing and does not claim a completed order was delivered', async () => {
+    await renderTracking(Response.json({ data: { ...order, status: 'COMPLETED', traffic_light: 'COMPLETED' } }))
+    expect(await screen.findByText(/Coordina la entrega/)).toBeTruthy()
+    expect(screen.queryByText('Entregado')).toBeNull()
+    expect(screen.getByText(/Se retiran hilos sobrantes/)).toBeTruthy()
+  })
+
+  it('keeps the order during an automatic refresh failure and recovers next minute', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    await renderTracking(Response.json({ data: order }))
+    await screen.findByRole('heading', { name: order.product })
+    expect(screen.queryByRole('button', { name: 'Actualizar' })).toBeNull()
+    vi.mocked(fetch).mockRejectedValueOnce(new Error('offline'))
+    await vi.advanceTimersByTimeAsync(60_000)
+    await screen.findByText(/No pudimos actualizar el estado/)
+    expect(screen.getByRole('heading', { name: order.product })).toBeTruthy()
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ data: order }))
+    await vi.advanceTimersByTimeAsync(60_000)
+    await waitFor(() => expect(screen.queryByText(/No pudimos actualizar el estado/)).toBeNull())
+  })
+
+  it('automatically refreshes every minute only while visible and stops on invalidation', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    await renderTracking(Response.json({ data: order }))
+    await screen.findByRole('heading', { name: order.product })
+    expect(screen.getByText('Actualización automática')).toBeTruthy()
+    vi.mocked(fetch).mockImplementation(async () => Response.json({ data: order }))
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(fetch).toHaveBeenCalledTimes(1)
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(fetch).toHaveBeenCalledTimes(2)
+    vi.mocked(fetch).mockResolvedValueOnce(new Response('{}', { status: 404 }))
+    await vi.advanceTimersByTimeAsync(60_000)
+    await screen.findByRole('heading', { name: 'Este enlace ya no está activo' })
+    await vi.advanceTimersByTimeAsync(120_000)
+    expect(fetch).toHaveBeenCalledTimes(3)
+  })
+
+  it('reloads when navigating to a different tracking token', async () => {
+    const router = await renderTracking(Response.json({ data: order }))
+    await screen.findByRole('heading', { name: order.product })
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ data: { ...order, product: 'Otro pedido' } }))
+    await router.push('/seguimiento/' + 'B'.repeat(43))
+    await screen.findByRole('heading', { name: 'Otro pedido' })
+    await waitFor(() => expect(fetch).toHaveBeenLastCalledWith('/api/v1/tracking/' + 'B'.repeat(43), expect.any(Object)))
+  })
+
+  it('handles an order without registered stages', async () => {
+    await renderTracking(Response.json({ data: { ...order, stages: [] } }))
+    expect(await screen.findByText('El taller todavía no registró etapas para este pedido.')).toBeTruthy()
+    expect(screen.getByText('0 de 0 etapas completadas')).toBeTruthy()
   })
 })

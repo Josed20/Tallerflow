@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/Josed20/Tallerflow/backend/internal/clients"
 	"github.com/Josed20/Tallerflow/backend/internal/orders"
@@ -36,16 +37,39 @@ func NewHandler(orders OrdersProvider, clients ClientsProvider) *Handler {
 	}
 }
 
-// sanitizeCSVField previene la ejecución de fórmulas en Excel (CSV Injection)
-// anteponiendo una comilla simple (') si el texto comienza con =, +, - o @
+// sanitizeCSVField produces human-view spreadsheet text, following OWASP CSV Injection.
+// Normalize locale formula markers, discard non-printing controls, and put a tab
+// inside the CSV-quoted field for Excel. This is not a raw-data interchange export.
 func sanitizeCSVField(val string) string {
-	if len(val) > 0 {
-		first := val[0]
-		if first == '=' || first == '+' || first == '-' || first == '@' {
-			return "'" + val
+	val = strings.Map(func(r rune) rune {
+		switch r {
+		case '＝':
+			return '='
+		case '＋':
+			return '+'
+		case '－':
+			return '-'
+		case '＠':
+			return '@'
 		}
+		if unicode.IsControl(r) && r != '\t' && r != '\r' && r != '\n' {
+			return -1
+		}
+		return r
+	}, val)
+	trimmed := strings.TrimLeftFunc(val, func(r rune) bool { return unicode.IsSpace(r) || r == '\uFEFF' })
+	if strings.HasPrefix(val, "\t") || strings.HasPrefix(val, "\r") || strings.HasPrefix(val, "\n") || strings.HasPrefix(trimmed, "=") || strings.HasPrefix(trimmed, "+") || strings.HasPrefix(trimmed, "-") || strings.HasPrefix(trimmed, "@") {
+		return "\t" + trimmed
 	}
 	return val
+}
+
+func writeCSVRecord(w *csv.Writer, record []string) {
+	for i := range record {
+		record[i] = sanitizeCSVField(record[i])
+	}
+	// bytes.Buffer cannot fail writes; csv.Writer handles delimiters/quotes/newlines.
+	_ = w.Write(record)
 }
 
 // translateOrderStatus traduce el estado interno al español
@@ -110,6 +134,12 @@ func (h *Handler) ExportOrders(c *gin.Context) {
 		"Estado",
 		"Fecha de Promesa",
 		"Fecha de Creación",
+		"Estación",
+		"Semáforo",
+		"Responsable (ID)",
+		"Responsable",
+		"Bloqueada",
+		"Motivo de bloqueo",
 	}
 	_ = w.Write(header)
 
@@ -122,17 +152,30 @@ func (h *Handler) ExportOrders(c *gin.Context) {
 		if !o.CreatedAt.IsZero() {
 			created = o.CreatedAt.Format(time.RFC3339)
 		}
+		responsible := "Sin asignar"
+		if o.ResponsibleUserID != nil {
+			responsible = o.ResponsibleUserID.String()
+		}
+		blocked := "No"
+		if strings.TrimSpace(o.BlockReason) != "" {
+			blocked = "Sí"
+		}
+		traffic := map[orders.TrafficLight]string{orders.TrafficLightOnTime: "A tiempo", orders.TrafficLightAtRisk: "En riesgo", orders.TrafficLightLate: "Atrasada", orders.TrafficLightCompleted: "Completada"}[o.TrafficLight]
+		if traffic == "" {
+			traffic = string(o.TrafficLight)
+		}
 		record := []string{
-			sanitizeCSVField(o.Code),
-			sanitizeCSVField(o.ClientName),
-			sanitizeCSVField(o.Product),
+			o.Code,
+			o.ClientName,
+			o.Product,
 			fmt.Sprintf("%.2f", o.Quantity),
 			translateUnit(o.Unit),
 			translateOrderStatus(o.Status),
 			promised,
 			created,
+			o.CurrentStage, traffic, responsible, o.ResponsibleName, blocked, o.BlockReason,
 		}
-		_ = w.Write(record)
+		writeCSVRecord(w, record)
 	}
 	w.Flush()
 
@@ -176,11 +219,11 @@ func (h *Handler) ExportClients(c *gin.Context) {
 	for _, cl := range list {
 		email := ""
 		if cl.Email != nil {
-			email = sanitizeCSVField(*cl.Email)
+			email = *cl.Email
 		}
 		phone := ""
 		if cl.Phone != nil {
-			phone = sanitizeCSVField(*cl.Phone)
+			phone = *cl.Phone
 		}
 		status := "Inactivo"
 		if cl.IsActive {
@@ -191,13 +234,13 @@ func (h *Handler) ExportClients(c *gin.Context) {
 			created = cl.CreatedAt.Format(time.RFC3339)
 		}
 		record := []string{
-			sanitizeCSVField(cl.Name),
+			cl.Name,
 			email,
 			phone,
 			status,
 			created,
 		}
-		_ = w.Write(record)
+		writeCSVRecord(w, record)
 	}
 	w.Flush()
 

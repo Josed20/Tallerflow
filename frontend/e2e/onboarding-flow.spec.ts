@@ -41,7 +41,9 @@ test('an empty installation creates its permanent OWNER through the browser', as
       status: await status.json(), duplicateStatus: duplicate.status, duplicateBody,
       meStatus: me.status, me: await me.json(),
       workshopStatus: workshop.status, workshop: await workshop.json(),
-      local: Object.keys(localStorage), session: Object.keys(sessionStorage), cookie: document.cookie,
+      local: Object.keys(localStorage), analytics: localStorage.getItem('tallerflow.analytics.v1'),
+      pendingAnalytics: Object.entries(localStorage).filter(([key]) => key.startsWith('tallerflow.analytics.v1.event.')),
+      localValues: Object.values(localStorage), session: Object.keys(sessionStorage), cookie: document.cookie,
       viewportWidth: window.innerWidth, documentWidth: document.documentElement.scrollWidth,
     }
   }, { email: ownerEmail, password: ownerPassword })
@@ -53,7 +55,28 @@ test('an empty installation creates its permanent OWNER through the browser', as
   expect(state.workshop.data.role).toBe('OWNER')
   expect(state.duplicateStatus).toBe(409)
   expect(state.duplicateBody).not.toContain(ownerPassword)
-  expect(state.local).toEqual([])
+  const eventKey = /^tallerflow\.analytics\.v1\.event\.[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  expect(state.local.every(key => ['tallerflow.analytics.v1', 'tallerflow.analytics.disabled'].includes(key) || eventKey.test(key))).toBe(true)
+  // Telemetry has an explicit schema; no auth credentials may enter browser storage.
+  if (state.analytics) {
+    const analytics = JSON.parse(state.analytics)
+    expect(Object.keys(analytics).sort()).toEqual(['installation', 'opened', 'queue'])
+    expect(analytics.installation).toMatch(/^[0-9a-f-]{36}$/)
+    expect(typeof analytics.opened).toBe('boolean')
+    expect(analytics.queue).toEqual([])
+    expect(state.pendingAnalytics.length).toBeLessThanOrEqual(100)
+    for (const [key, value] of state.pendingAnalytics) {
+      const pending = JSON.parse(value)
+      expect(key).toBe(`tallerflow.analytics.v1.event.${pending.event.id}`)
+      expect(Object.keys(pending).sort()).toEqual(['actor', 'event'])
+      expect(Object.keys(pending.event).sort()).toEqual(['channel', 'id', 'installation_id', 'occurred_at', 'type', 'version'])
+      expect(['first_open', 'registration', 'login', 'activity']).toContain(pending.event.type)
+      expect(['web', 'android']).toContain(pending.event.channel)
+    }
+  }
+  expect(state.localValues.join(' ')).not.toContain(ownerPassword)
+  expect(state.localValues.join(' ')).not.toContain(ownerEmail)
+  expect(state.localValues.join(' ')).not.toMatch(/csrf|session_token|password_hash|Bearer /i)
   expect(state.session).toEqual([])
   expect(state.cookie).not.toContain('tallerflow_session')
   expect(state.documentWidth).toBeLessThanOrEqual(state.viewportWidth)

@@ -1,0 +1,538 @@
+openapi: 3.1.0
+info:
+  title: TallerFlow Sprint 5 Operations and Tracking
+  version: 1.0.0
+  description: |
+    Standalone contract for the implemented routes. Workshop scope comes from
+    the authenticated principal, never a request field. Foreign order IDs return
+    the same 404 as missing IDs. Web mutations require the session cookie,
+    X-CSRF-Token and the configured Origin. Native mutations use a mobile bearer
+    token, without CSRF; browser sessions cannot be replayed as mobile tokens.
+    All private routes enforce active workshop and password-change gates.
+servers:
+  - url: /
+tags:
+  - name: Production
+    description: Workshop production templates, assignments and blockers.
+  - name: Tracking
+    description: Stable customer links and public order progress.
+security:
+  - WebSession: []
+  - MobileBearer: []
+paths:
+  /api/v1/production-settings:
+    get:
+      tags: [Production]
+      operationId: getProductionSettings
+      summary: Read the current workshop production template
+      description: |
+        Available to authenticated workshop members. Before the first save,
+        returns version 0 and the seven original stages (CORTE, COSTURA, ACABADO,
+        CONTROL DE CALIDAD, PLANCHADO, EMPAQUE, ENTREGA), with client descriptions.
+      responses:
+        '200':
+          $ref: '#/components/responses/ProductionSettingsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    patch:
+      tags: [Production]
+      operationId: saveProductionSettings
+      summary: Replace the template for future orders
+      description: |
+        OWNER or ADMIN only. Send the current body version (0 for the first
+        save); success increments it. No If-Match header is used. Names and
+        descriptions are trimmed; names must be unique ignoring case. Array
+        order defines stage positions. This replaces the entire template and
+        affects only orders created afterward. Existing order snapshots,
+        including their client descriptions, are never rewritten.
+      security:
+        - WebSession: []
+          CsrfToken: []
+        - MobileBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductionSettingsInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/ProductionSettingsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/VersionConflict'
+        '422':
+          $ref: '#/components/responses/ProductionInvalid'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/orders/{id}/operation:
+    parameters:
+      - $ref: '#/components/parameters/OrderId'
+    patch:
+      tags: [Production]
+      operationId: updateOrderOperation
+      summary: Set the order responsible member and block reason
+      description: |
+        OWNER or ADMIN only; order must be ACTIVE. Requires the current body
+        version, not If-Match. The responsible UUID is a user_id, not a membership
+        ID, and must belong to an ACTIVE membership in the same workshop.
+        Null or omitted responsible_user_id clears the assignment; empty or
+        omitted block_reason unblocks the order. Send both operational fields
+        to preserve either one: omitted fields are not retained. Reasons are
+        trimmed, then must be empty or 5-300 characters. A nonempty reason blocks
+        stage completion. Each successful request increments the order version
+        and appends an actor-attributed history entry; no changes to stages.
+      security:
+        - WebSession: []
+          CsrfToken: []
+        - MobileBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperationPatch'
+      responses:
+        '200':
+          description: Updated private order detail
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Order'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/OrderNotFound'
+        '409':
+          description: ORDER_VERSION_CONFLICT or ORDER_NOT_EDITABLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ProductionInvalid'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/orders/{id}/tracking-link:
+    parameters:
+      - $ref: '#/components/parameters/OrderId'
+    post:
+      tags: [Tracking]
+      operationId: recoverOrderTrackingLink
+      summary: Recover or create the stable private link
+      description: |
+        OWNER or ADMIN only; no request body. Recovers the same bearer token on
+        repeat requests, without rotating or revoking any link. For legacy
+        hash-only links, creates an additional recoverable link while keeping
+        old tokens valid. The raw token is returned to the manager, never stored
+        in the database or audit details. Secret changes return 409 when the
+        existing token cannot be recovered; explicit replacement is required.
+        Management is serialized per order. This operation does not reset the
+        completion-based expiry and may return a token already expired.
+      security:
+        - WebSession: []
+          CsrfToken: []
+        - MobileBearer: []
+      responses:
+        '201':
+          $ref: '#/components/responses/TrackingTokenResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/OrderNotFound'
+        '409':
+          description: TRACKING_RECOVERY_UNAVAILABLE; explicitly replace the link
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/orders/{id}/tracking-link/{action}:
+    parameters:
+      - $ref: '#/components/parameters/OrderId'
+      - name: action
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [replace, revoke]
+    post:
+      tags: [Tracking]
+      operationId: manageOrderTrackingLink
+      summary: Explicitly replace or revoke all order tracking links
+      description: |
+        OWNER or ADMIN only; no request body. replace atomically revokes ALL
+        active links (including legacy links) and creates a different stable
+        token. revoke revokes ALL active links and returns token as an empty
+        string, creating no replacement. Repeating replace rotates again;
+        repeating revoke leaves the order unshared. Recovery after revocation
+        creates a new token and never restores revoked tokens. Actions are
+        audited without tokens/nonces. Neither action extends completion expiry.
+      security:
+        - WebSession: []
+          CsrfToken: []
+        - MobileBearer: []
+      responses:
+        '201':
+          $ref: '#/components/responses/TrackingTokenResponse'
+        '400':
+          description: TRACKING_ACTION_INVALID for an unsupported action
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/OrderNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/tracking/{token}:
+    get:
+      tags: [Tracking]
+      operationId: getPublicTrackingOrder
+      summary: Anonymously read one customer-facing order
+      description: |
+        No account, cookie, bearer session or CSRF required: the URL token is
+        the credential. Successful reads contain only the public schema below,
+        not customer contacts, user IDs, assignments, blockers or change history.
+        Invalid format, unknown/revoked/expired tokens and inactive workshops
+        all return the same 404. Lookup resolves the token hash before setting
+        tenant scope, then reads within that transaction under RLS.
+        All links, including legacy tokens, expire exactly 30 days after
+        tracking_completed_at. Unrelated edits do not extend that timestamp;
+        reopening a completed order clears it and a later completion starts a
+        fresh period. Cancelling preserves any existing completion deadline;
+        cancelled orders cannot be reopened through the correction endpoint.
+        Responses are no-store. R2 photo URLs are temporary signed URLs; refresh
+        the public endpoint to obtain fresh URLs. Returned timestamps are RFC3339.
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/TrackingToken'
+      responses:
+        '200':
+          description: Customer-facing order, including its stage snapshot
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PublicOrder'
+        '404':
+          description: TRACKING_NOT_FOUND; no distinction between inactive causes
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+components:
+  securitySchemes:
+    WebSession:
+      type: apiKey
+      in: cookie
+      name: __Host-tallerflow_session
+      description: HttpOnly production cookie; development uses tallerflow_session.
+    MobileBearer:
+      type: http
+      scheme: bearer
+      description: Opaque mobile session token, not a JWT; mobile origins are validated.
+    CsrfToken:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: Bound to the web session; configured Origin must also match.
+  parameters:
+    OrderId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    ProductionSettingsResponse:
+      description: Current template and version
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data:
+                $ref: '#/components/schemas/ProductionSettings'
+    TrackingTokenResponse:
+      description: Stable/new token, or empty string after revocation; status 201 even for recovery
+      headers:
+        Cache-Control:
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data:
+                type: object
+                required: [token]
+                properties:
+                  token:
+                    oneOf:
+                      - $ref: '#/components/schemas/TrackingToken'
+                      - type: string
+                        const: ''
+    Unauthorized:
+      description: SESSION_INVALID; authentication missing or expired
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: ROLE_FORBIDDEN, CSRF_INVALID, suspended workshop or required password change
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    OrderNotFound:
+      description: ORDER_NOT_FOUND; malformed, nonexistent or foreign order ID
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    VersionConflict:
+      description: ORDER_VERSION_CONFLICT; reload the current version before retrying
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ProductionInvalid:
+      description: PRODUCTION_INVALID; malformed JSON, invalid fields or foreign/inactive responsible member
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    InternalError:
+      description: INTERNAL_ERROR; no internal cause or secrets exposed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    ProductionStage:
+      type: object
+      required: [name, client_description]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        client_description: { type: string, minLength: 1, maxLength: 500 }
+    ProductionSettings:
+      type: object
+      required: [stages, version]
+      properties:
+        stages:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items: { $ref: '#/components/schemas/ProductionStage' }
+        version: { type: integer, format: int64, minimum: 0 }
+    ProductionSettingsInput:
+      type: object
+      required: [stages]
+      properties:
+        stages:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items: { $ref: '#/components/schemas/ProductionStage' }
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+          default: 0
+          description: Omission is interpreted as version 0 and succeeds only on the first save.
+    OperationPatch:
+      type: object
+      required: [version]
+      properties:
+        version: { type: integer, format: int64, minimum: 1 }
+        responsible_user_id:
+          type: [string, 'null']
+          format: uuid
+          description: Active same-workshop user_id; null or omission clears it.
+        block_reason:
+          type: string
+          default: ''
+          description: Trimmed before validation; empty clears the blocker.
+          oneOf:
+            - maxLength: 0
+            - minLength: 5
+              maxLength: 300
+    TrackingToken:
+      type: string
+      pattern: '^[A-Za-z0-9_-]{43}$'
+      minLength: 43
+      maxLength: 43
+    StageStatus:
+      type: string
+      enum: [PENDING, IN_PROGRESS, COMPLETED]
+    TrafficLight:
+      type: string
+      enum: [ON_TIME, AT_RISK, LATE, COMPLETED]
+    PublicStage:
+      type: object
+      additionalProperties: false
+      required: [position, name, client_description, status, completed_at]
+      properties:
+        position: { type: integer, minimum: 1, maximum: 20 }
+        name: { type: string }
+        client_description: { type: string }
+        status: { $ref: '#/components/schemas/StageStatus' }
+        completed_at: { type: [string, 'null'], format: date-time }
+    PublicPhoto:
+      type: object
+      additionalProperties: false
+      required: [stage_position, photo_data, caption, created_at]
+      properties:
+        stage_position: { type: integer, minimum: 1, maximum: 20 }
+        photo_data:
+          type: string
+          description: Signed R2 URL or legacy JPEG data URL; object key is never returned.
+        caption: { type: string }
+        created_at: { type: string, format: date-time }
+    PublicOrder:
+      type: object
+      additionalProperties: false
+      required: [workshop_name, code, product, specification, quantity, unit, status, traffic_light, promised_at, updated_at, stages, photos]
+      properties:
+        workshop_name: { type: string }
+        code: { type: string }
+        product: { type: string }
+        specification: { type: string }
+        quantity: { type: number, exclusiveMinimum: 0 }
+        unit: { type: string, enum: [UNITS, DOZENS, KILOGRAMS, METERS] }
+        status: { type: string, enum: [ACTIVE, COMPLETED, CANCELLED] }
+        traffic_light: { $ref: '#/components/schemas/TrafficLight' }
+        promised_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        stages:
+          type: array
+          maxItems: 20
+          description: Ordered snapshot; empty array is tolerated for historical records.
+          items: { $ref: '#/components/schemas/PublicStage' }
+        photos:
+          type: array
+          items: { $ref: '#/components/schemas/PublicPhoto' }
+    OrderStage:
+      type: object
+      required: [id, workshop_id, order_id, position, name, client_description, status, completed_at]
+      properties:
+        id: { type: string, format: uuid }
+        workshop_id: { type: string, format: uuid }
+        order_id: { type: string, format: uuid }
+        position: { type: integer, minimum: 1, maximum: 20 }
+        name: { type: string }
+        client_description: { type: string }
+        status: { $ref: '#/components/schemas/StageStatus' }
+        completed_at: { type: [string, 'null'], format: date-time }
+        completed_by: { type: string, format: uuid }
+    OrderChange:
+      type: object
+      required: [id, actor_user_id, actor_name, changes, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        actor_user_id: { type: string, format: uuid }
+        actor_name: { type: string }
+        created_at: { type: string, format: date-time }
+        changes:
+          type: object
+          additionalProperties:
+            type: object
+            required: [from, to]
+            properties:
+              from: {}
+              to: {}
+              reason: { type: string }
+    Order:
+      type: object
+      required: [id, workshop_id, client_id, client_name, order_number, code, product, specification, quantity, unit, status, promised_at, version, created_at, updated_at, responsible_user_id, responsible_name, block_reason, stage_count, completed_stage_count, traffic_light, current_stage]
+      properties:
+        id: { type: string, format: uuid }
+        workshop_id: { type: string, format: uuid }
+        client_id: { type: string, format: uuid }
+        client_name: { type: string }
+        order_number: { type: integer, format: int64 }
+        code: { type: string }
+        product: { type: string }
+        specification: { type: string }
+        quantity: { type: number, exclusiveMinimum: 0 }
+        unit: { type: string, enum: [UNITS, DOZENS, KILOGRAMS, METERS] }
+        status: { type: string, enum: [ACTIVE, COMPLETED, CANCELLED] }
+        promised_at: { type: string, format: date-time }
+        version: { type: integer, format: int64, minimum: 1 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        responsible_user_id: { type: [string, 'null'], format: uuid }
+        responsible_name: { type: string }
+        block_reason: { type: string, maxLength: 300 }
+        stage_count: { type: integer, minimum: 0, maximum: 20 }
+        completed_stage_count: { type: integer, minimum: 0, maximum: 20 }
+        traffic_light: { $ref: '#/components/schemas/TrafficLight' }
+        current_stage:
+          type: string
+          description: Detail currently returns an empty string; use the snapshot to identify the active stage.
+        cancelled_at: { type: string, format: date-time }
+        cancelled_by: { type: string, format: uuid }
+        cancellation_reason: { type: string }
+        stages:
+          type: array
+          maxItems: 20
+          items: { $ref: '#/components/schemas/OrderStage' }
+        photos:
+          type: array
+          items:
+            type: object
+            required: [id, workshop_id, order_id, stage_position, photo_data, caption, created_at]
+            properties:
+              id: { type: string, format: uuid }
+              workshop_id: { type: string, format: uuid }
+              order_id: { type: string, format: uuid }
+              stage_position: { type: integer, minimum: 1, maximum: 20 }
+              photo_data: { type: string }
+              caption: { type: string }
+              created_at: { type: string, format: date-time }
+        changes:
+          type: array
+          items: { $ref: '#/components/schemas/OrderChange' }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, details, request_id]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: { type: object, additionalProperties: true }
+            request_id: { type: string }

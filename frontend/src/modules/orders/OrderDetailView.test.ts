@@ -4,6 +4,9 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import OrderDetailView from './OrderDetailView.vue'
 import { ordersApi } from './api'
+import { manageTrackingLink } from '../tracking/api'
+
+vi.mock('../tracking/api', () => ({ manageTrackingLink: vi.fn() }))
 import { useSessionStore } from '../session/session.store'
 
 vi.mock('./api', () => ({ ordersApi: { getByID: vi.fn(), update: vi.fn(), updateStage: vi.fn(), reopenStage: vi.fn(), addStagePhoto: vi.fn(), createTrackingLink: vi.fn() } }))
@@ -136,21 +139,33 @@ describe('OrderDetailView', () => {
     await screen.findByText('Corte')
   }
 
-  it('lets a manager generate a customer tracking link only after confirming', async () => {
-    vi.mocked(ordersApi.createTrackingLink).mockResolvedValue({ data: { token: 'T'.repeat(43) } } as never)
+  it('copies the stable tracking link directly and reuses it on subsequent clicks', async () => {
+    vi.mocked(manageTrackingLink).mockResolvedValue({ data: { token: 'T'.repeat(43) } })
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     await renderAs('OWNER')
-
-    await fireEvent.click(screen.getByRole('button', { name: /compartir con el cliente/i }))
-    expect(ordersApi.createTrackingLink).not.toHaveBeenCalled()
-    await fireEvent.click(screen.getByRole('button', { name: /generar enlace/i }))
-
-    await waitFor(() => expect(ordersApi.createTrackingLink).toHaveBeenCalledWith('order-1', 'csrf-share'))
-    expect((await screen.findByLabelText('Enlace privado') as HTMLInputElement).value).toBe(`${window.location.origin}/seguimiento/${'T'.repeat(43)}`)
+    await fireEvent.click(screen.getByRole('button', { name: /copiar enlace de seguimiento/i }))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/seguimiento/${'T'.repeat(43)}`))
+    await fireEvent.click(screen.getByRole('button', { name: /copiar enlace de seguimiento/i }))
+    expect(writeText).toHaveBeenCalledTimes(2)
+    expect(manageTrackingLink).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText('Enviar por WhatsApp')).toBeNull()
+    expect(screen.queryByText('Ver como cliente')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Reemplazar enlace' })).toBeNull()
+  })
+  it('announces recovery failure without claiming the link was copied', async () => {
+    vi.mocked(manageTrackingLink).mockRejectedValue(new Error('No se pudo recuperar el enlace.'))
+    const writeText = vi.fn()
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    await renderAs('OWNER')
+    await fireEvent.click(screen.getByRole('button', { name: /copiar enlace de seguimiento/i }))
+    await waitFor(() => expect(writeText).not.toHaveBeenCalled())
+    expect(await screen.findByRole('alert')).toBeTruthy()
   })
 
   it('does not offer customer sharing to an operator', async () => {
     await renderAs('OPERATOR')
-    expect(screen.queryByRole('button', { name: /compartir con el cliente/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /copiar enlace de seguimiento/i })).toBeNull()
   })
   it('lets a manager open edit modal and submit order updates', async () => {
     vi.mocked(ordersApi.update).mockResolvedValue({ data: { ...order, product: 'Polo Pique Actualizado', quantity: 24 } } as never)

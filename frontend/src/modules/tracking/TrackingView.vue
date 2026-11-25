@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Check, Clock, RefreshCw, X } from '@lucide/vue'
+import { Check, Clock, X } from '@lucide/vue'
 import { fetchTrackingOrder, TrackingNotFoundError, type TrackingOrder } from './api'
 import { formatOrderQuantity } from '../orders/order-display'
 import UiAlert from '../../components/UiAlert.vue'
@@ -14,6 +14,9 @@ const REFRESH_MS = 60_000
 const route = useRoute()
 const order = ref<TrackingOrder | null>(null)
 const loading = ref(true)
+const refreshing = ref(false)
+const checkedAt = ref<string | null>(null)
+let disposed = false
 const notFound = ref(false)
 const error = ref('')
 const previewPhoto = ref<TrackingOrder['photos'][number] | null>(null)
@@ -23,7 +26,7 @@ const currentStage = computed(() => order.value?.stages.find((stage) => stage.st
 const completedCount = computed(() => order.value?.stages.filter((stage) => stage.status === 'COMPLETED').length ?? 0)
 const stationHeadline = computed(() => {
   if (!order.value) return ''
-  if (order.value.status === 'COMPLETED') return 'Entregado'
+  if (order.value.status === 'COMPLETED') return 'Completado'
   if (order.value.status === 'CANCELLED') return 'Cancelado'
   return currentStage.value ? stageLabel(currentStage.value.name) : 'En preparación'
 })
@@ -34,21 +37,31 @@ const statusLabel = computed(() => {
 })
 
 async function load(showLoading = false) {
+  if (refreshing.value || disposed) return
+  refreshing.value = true
   if (showLoading) loading.value = true
   error.value = ''
+  const requestedToken = String(route.params.token)
   try {
-    order.value = await fetchTrackingOrder(String(route.params.token))
+    const result = await fetchTrackingOrder(requestedToken)
+    if (disposed || requestedToken !== String(route.params.token)) return
+    order.value = result
+    checkedAt.value = new Date().toISOString()
     notFound.value = false
   } catch (cause) {
+    if (disposed || requestedToken !== String(route.params.token)) return
     if (cause instanceof TrackingNotFoundError) {
       notFound.value = true
       order.value = null
+      previewPhoto.value = null
       stopRefresh()
     } else {
-      error.value = 'No pudimos actualizar el estado. Revisa tu conexión e inténtalo de nuevo.'
+          error.value = 'No pudimos actualizar el estado. Revisa tu conexión e inténtalo de nuevo.'
     }
   } finally {
     loading.value = false
+    refreshing.value = false
+    if (!disposed && requestedToken !== String(route.params.token)) void load(true)
   }
 }
 
@@ -65,6 +78,25 @@ function stageLabel(name: string) {
   const lower = name.toLocaleLowerCase('es-PE')
   return lower.charAt(0).toLocaleUpperCase('es-PE') + lower.slice(1)
 }
+
+function stageDescription(stage: TrackingOrder['stages'][number]) {
+  const key = stage.name.trim().toLocaleLowerCase('es-PE')
+  if (stage.client_description?.trim() && !(key === 'acabado' && stage.client_description === 'Realizamos los acabados de tus prendas.')) return stage.client_description
+  return ({
+    corte: 'Se cortan las piezas de tela del pedido.',
+    costura: 'Se unen y cosen las piezas de cada prenda.',
+    acabado: 'Se retiran hilos sobrantes y se realizan los detalles finales de las prendas. Todavía puede haber etapas pendientes.',
+    planchado: 'Se planchan las prendas.',
+    empaque: 'Se prepara y protege el pedido para su entrega.',
+    'control de calidad': 'Se revisa la calidad de las prendas.',
+  } as Record<string, string>)[key] ?? 'Etapa del proceso definido por el taller. Su avance se muestra debajo.'
+}
+
+const progressDescription = computed(() => {
+  if (order.value?.status === 'COMPLETED') return 'El taller marcó el pedido como completado. Coordina la entrega con quien te atendió.'
+  if (order.value?.status === 'CANCELLED') return 'El taller canceló este pedido. Contacta a quien te atendió para conocer los detalles.'
+  return currentStage.value ? stageDescription(currentStage.value) : 'El taller está preparando el pedido para continuar su producción.'
+})
 
 function photosFor(position: number) {
   return order.value?.photos.filter((photo) => photo.stage_position === position) ?? []
@@ -100,6 +132,17 @@ function onKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape' && previewPhoto.value) closePhoto()
 }
 
+watch(() => route.params.token, () => {
+  order.value = null
+  previewPhoto.value = null
+  notFound.value = false
+  checkedAt.value = null
+  stopRefresh()
+  timer = setInterval(() => { if (document.visibilityState === 'visible') load() }, REFRESH_MS)
+  loading.value = true
+  void load(true)
+})
+
 onMounted(() => {
   load(true)
   timer = setInterval(() => { if (document.visibilityState === 'visible') load() }, REFRESH_MS)
@@ -108,6 +151,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  disposed = true
   stopRefresh()
   document.removeEventListener('visibilitychange', onVisibility)
   window.removeEventListener('keydown', onKeydown)
@@ -120,36 +164,43 @@ onUnmounted(() => {
 
     <section v-else-if="notFound" class="tracking__state tracking__state--empty">
       <h1>Este enlace ya no está activo</h1>
-      <p>Puede que el taller haya generado un enlace nuevo. Pídele el enlace actualizado a quien te atendió.</p>
+      <p>El enlace puede haber vencido, sido reemplazado o revocado. Pide un enlace actualizado al taller.</p>
     </section>
 
     <template v-else-if="order">
       <header class="tracking__header">
-        <p class="tracking__workshop"><span>Hecho en</span> <strong>{{ order.workshop_name }}</strong></p>
         <div class="tracking__title">
-          <span class="tracking__code">{{ order.code }}</span>
           <h1>{{ order.product }}</h1>
+          <p class="tracking__workshop"><span>Taller</span> <strong>{{ order.workshop_name }}</strong></p>
+          <span class="tracking__code">{{ order.code }}</span>
           <p>{{ formatOrderQuantity(order.quantity, order.unit) }}</p>
         </div>
       </header>
 
       <section class="tracking__summary" aria-label="Resumen del pedido">
         <div class="tracking__headline">
-          <span class="tracking__eyebrow">{{ order.status === 'COMPLETED' ? 'Tu pedido fue' : 'Tu pedido está en' }}</span>
+          <span class="tracking__eyebrow">{{ order.status === 'ACTIVE' ? 'Etapa actual de tu pedido' : 'Estado de tu pedido' }}</span>
           <p class="tracking__station">{{ stationHeadline }}</p>
+          <p class="tracking__explanation">{{ progressDescription }}</p>
         </div>
         <dl class="tracking__facts">
-          <div><dt>Entrega prometida</dt><dd>{{ formatDate(order.promised_at) }}</dd></div>
+          <div><dt>Fecha de entrega prometida</dt><dd>{{ formatDate(order.promised_at) }}</dd></div>
           <div><dt>Estado</dt><dd><StatusChip :state="order.status === 'CANCELLED' ? 'CANCELLED' : order.traffic_light" :label="statusLabel" /></dd></div>
         </dl>
-        <StitchSeam :completed="completedCount" :total="order.stages.length" :tone="order.traffic_light === 'LATE' ? 'late' : 'default'" />
+        <StitchSeam v-if="order.stages.length" :completed="completedCount" :total="order.stages.length" :tone="order.traffic_light === 'LATE' ? 'late' : 'default'" />
         <p class="tracking__progress-label">{{ completedCount }} de {{ order.stages.length }} etapas completadas</p>
+      </section>
+
+      <section v-if="order.specification" class="tracking__route" aria-labelledby="description-title">
+        <h2 id="description-title">Descripción del pedido</h2>
+        <p class="tracking__specification">{{ order.specification }}</p>
       </section>
 
       <UiAlert v-if="error" :message="error" />
 
       <section class="tracking__route" aria-labelledby="route-title">
         <h2 id="route-title">Recorrido en el taller</h2>
+        <p v-if="!order.stages.length">El taller todavía no registró etapas para este pedido.</p>
         <ol>
           <li v-for="stage in order.stages" :key="stage.position" class="tracking__stage" :class="`tracking__stage--${stage.status.toLowerCase()}`" :aria-current="stage.status === 'IN_PROGRESS' ? 'step' : undefined">
             <span class="tracking__dot" aria-hidden="true">
@@ -158,6 +209,7 @@ onUnmounted(() => {
             </span>
             <div class="tracking__stage-body">
               <strong>{{ stageLabel(stage.name) }}</strong>
+              <p class="tracking__explanation">{{ stageDescription(stage) }}</p>
               <span v-if="stage.status === 'COMPLETED'">Terminado {{ formatShort(stage.completed_at) }}</span>
               <span v-else-if="stage.status === 'IN_PROGRESS'">En proceso ahora</span>
               <span v-else>Pendiente</span>
@@ -171,13 +223,10 @@ onUnmounted(() => {
         </ol>
       </section>
 
-      <footer class="tracking__footer">
-        <span><Clock :size="14" aria-hidden="true" /> Actualizado {{ formatShort(order.updated_at) }}</span>
-        <button type="button" @click="load()"><RefreshCw :size="14" aria-hidden="true" /> Actualizar</button>
-      </footer>
+      <footer class="tracking__footer"><span class="tracking__live"><i aria-hidden="true"/> Actualización automática</span><span><Clock :size="14" aria-hidden="true"/> Último avance: {{ formatShort(order.updated_at) }}</span><span v-if="refreshing" class="sr-only" role="status">Consultando el estado del pedido</span></footer>
     </template>
 
-    <p v-else-if="error" class="tracking__state">{{ error }}</p>
+    <section v-else-if="error" class="tracking__state"><p role="alert">{{ error }}</p><button type="button" :disabled="refreshing" @click="load(true)">Reintentar</button></section>
 
     <!-- Shown on dead links too, so a customer always knows which service sent them. -->
     <p v-if="!loading" class="tracking__brand"><span>Seguimiento con</span> <BrandLogo :size="16" /></p>
@@ -191,7 +240,19 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.tracking .tracking__title h1{font-family:var(--tf-font-body);font-size:clamp(1.6rem,4vw,2.1rem);font-weight:700;letter-spacing:-.035em}
+.tracking .tracking__workshop strong,.tracking .tracking__code{background:none;border:0;padding:0;color:var(--tf-text-subtle);font-family:var(--tf-font-body);font-size:.9rem;font-weight:500;letter-spacing:normal;text-transform:none}
+.tracking .tracking__header{padding-bottom:1.5rem;border-bottom:1px solid var(--tf-border-soft)}
+.tracking .tracking__summary{border:0;border-radius:0;background:transparent;padding:1.5rem 0}
+.tracking .tracking__station{font-family:var(--tf-font-body);font-size:clamp(1.6rem,5vw,2rem);font-weight:700;line-height:1.25;font-variation-settings:normal}
+.tracking .tracking__eyebrow{text-transform:none;letter-spacing:normal;font-family:var(--tf-font-body);font-size:.9rem;font-weight:500}
+
 .tracking { width: min(40rem, 100%); margin: 0 auto; padding: 1.5rem 1rem 2.5rem; display: grid; gap: 1.1rem; color: var(--tf-ink); }
+.tracking__explanation { margin: .4rem 0; color: var(--tf-text-subtle); line-height: 1.55; font-size: .9rem; }
+.tracking__specification { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tracking__title h1, .tracking__station, .tracking__stage-body strong { overflow-wrap: anywhere; }
+.tracking__footer p { margin: 0; }
+.tracking__footer button:disabled { opacity: .65; cursor: wait; }
 .tracking__state { padding: 2rem 0; color: var(--tf-text-subtle); text-align: center; }
 .tracking__state--empty { display: grid; gap: .6rem; padding: 3rem 1.25rem; border: 1px solid var(--tf-border-soft); border-radius: var(--tf-radius-sm); background: var(--tf-surface); text-align: left; }
 .tracking__state--empty h1 { margin: 0; color: var(--tf-ink); font-size: 1.35rem; }
@@ -241,4 +302,8 @@ onUnmounted(() => {
 .tracking__lightbox img { max-width: min(100%, 48rem); max-height: 80vh; border-radius: .5rem; }
 .tracking__lightbox p { margin: 0; color: var(--tf-on-primary); font-size: .85rem; text-align: center; }
 .tracking button:focus-visible { outline: 3px solid var(--tf-focus); outline-offset: 2px; }
+
+.tracking h2, .tracking__summary strong { font-family: var(--tf-font-body); font-variation-settings: normal; }
+
+.tracking{width:min(820px,100%);padding:2rem 1rem;gap:1rem}.tracking .tracking__header{padding:0 0 1rem;gap:.35rem}.tracking .tracking__title{gap:.25rem}.tracking .tracking__title h1{font-size:clamp(1.5rem,4vw,2rem)}.tracking .tracking__summary{padding:1.25rem;background:white;border:1px solid var(--tf-border-soft);border-radius:16px;gap:.75rem}.tracking .tracking__station{font-size:1.6rem;margin:.2rem 0}.tracking .tracking__explanation{margin:.2rem 0}.tracking__facts{margin:.25rem 0;gap:.5rem}.tracking .tracking__route{border-radius:16px;padding:1.4rem}.tracking__route h2{font-size:1.15rem}.tracking__live{color:var(--tf-success);font-weight:600}.tracking__live i{width:7px;height:7px;border-radius:50%;background:currentColor}.tracking__footer{padding:.25rem 0;font-size:.75rem}.tracking__header h1{order:0}.tracking__workshop{order:-1}
 </style>

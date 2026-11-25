@@ -2,9 +2,9 @@
    La marca calla en el marino del logo, con el turquesa como hilo de firma;
    el único relleno saturado es "Atrasada". */
 :root {
-  --tf-font-display: "Archivo", "Arial Black", system-ui, sans-serif;
-  --tf-font-body: "Atkinson Hyperlegible Next", "Segoe UI", system-ui, sans-serif;
-  --tf-font-mono: "Atkinson Hyperlegible Mono", ui-monospace, Consolas, monospace;
+  --tf-font-display: "DM Sans", system-ui, sans-serif;
+  --tf-font-body: "DM Sans", "Segoe UI", system-ui, sans-serif;
+  --tf-font-mono: "DM Sans", "Segoe UI", monospace;
   font-family: var(--tf-font-body);
   color: #16233d;
   background: #f3f5f9;
@@ -75,8 +75,8 @@
   --tf-info-soft: #e7eef8;
   --tf-info-border: #a9bcd9;
 
-  --tf-radius-sm: 4px;
-  --tf-radius: 6px;
+  --tf-radius-sm: 10px;
+  --tf-radius: 12px;
   --tf-notch: 14px;
   --tf-shadow-sm: 0 1px 2px rgb(22 35 61 / 6%);
   --tf-shadow-md: 0 10px 28px rgb(22 35 61 / 10%);

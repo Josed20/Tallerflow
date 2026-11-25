@@ -1,23 +1,24 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
 import BrandLogo from '../../components/BrandLogo.vue'
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 </script>
 
 <template>
   <div class="legal-page">
-    <header class="legal-header">
+    <header v-if="!embedded" class="legal-header">
       <div class="legal-container legal-header__inner">
         <BrandLogo :size="32" />
         <RouterLink to="/" class="legal-back-link">← Volver al inicio</RouterLink>
       </div>
     </header>
 
-    <main class="legal-container legal-content">
+    <component :is="embedded ? 'div' : 'main'" class="legal-container legal-content">
       <article class="legal-article">
         <header class="legal-article__header">
           <span class="legal-badge">Protección de datos</span>
           <h1>Política de Privacidad</h1>
-          <p class="legal-date">Conforme a la Ley N° 29733 (Perú) · Octubre de 2026</p>
+          <p class="legal-date">Conforme a la Ley N° 29733 (Perú) · Noviembre de 2026</p>
         </header>
 
         <section>
@@ -29,12 +30,17 @@ import BrandLogo from '../../components/BrandLogo.vue'
 
         <section>
           <h2>2. Datos que Tratamos y Finalidad</h2>
-          <p>Tratamos únicamente los datos necesarios para brindar el servicio de trazabilidad textil:</p>
+          <p>Tratamos los siguientes datos para prestar y mejorar el servicio de trazabilidad textil:</p>
           <ul>
             <li><strong>Datos del taller y equipo:</strong> Razón social o nombre comercial, nombre y correo del propietario y miembros (operarios y administradores), para gestionar accesos y perfiles de trabajo.</li>
             <li><strong>Clientes de confección:</strong> Nombre comercial o de contacto, y teléfono de coordinación para generar los enlaces de seguimiento.</li>
             <li><strong>Órdenes y fotos de evidencia:</strong> Fichas de lote, cantidades, estaciones de avance y fotografías tomadas en planta para sustentar el control de calidad.</li>
+            <li><strong>Uso del servicio:</strong> Identificadores aleatorios de instalación, primera apertura, registro, inicio de sesión y actividad, junto con fecha, plataforma y versión. Cuando existe una sesión, estos eventos se asocian a la cuenta y al taller para medir adopción y funcionamiento. No incluyen el contenido de órdenes, mensajes ni fotografías.</li>
           </ul>
+          <p>
+            Un proceso diario elimina los eventos de uso que superan los 90 días y los informes estadísticos de Google Play que superan los 25 meses. Estos informes contienen cifras agregadas de instalaciones y desinstalaciones; no identifican a las personas que descargaron la aplicación. Las copias de seguridad siguen los plazos indicados más adelante.
+          </p>
+          <p>Puedes desactivar las estadísticas de uso desde Mi cuenta → Cuenta y privacidad. La preferencia se aplica al navegador o instalación actual; se borra la cola local y se detienen nuevos envíos. No elimina eventos que el servidor ya recibió. El identificador local permanece mientras se conserve el almacenamiento del dispositivo y las estadísticas estén activadas.</p>
         </section>
 
         <section>
@@ -65,17 +71,17 @@ import BrandLogo from '../../components/BrandLogo.vue'
 
         <section>
           <h2>6. Derechos ARCO y Contacto</h2>
-          <p>Para eliminar tu cuenta y los datos asociados, consulta los <RouterLink to="/eliminar-cuenta">pasos para solicitar la eliminación</RouterLink>.</p>
+          <p>Para eliminar tu cuenta y los datos asociados, consulta los <RouterLink :to="embedded ? '/app/account/delete' : '/eliminar-cuenta'">pasos para solicitar la eliminación</RouterLink>.</p>
           <p>
             Puedes ejercer en cualquier momento tus derechos de Acceso, Rectificación, Cancelación y Oposición (ARCO) enviando un mensaje a <a href="mailto:tallerflow.pe@gmail.com">tallerflow.pe@gmail.com</a> con el asunto "Derechos ARCO", indicando el correo de tu cuenta registrada.
           </p>
         </section>
       </article>
-    </main>
+    </component>
 
-    <footer class="legal-footer">
+    <footer v-if="!embedded" class="legal-footer">
       <div class="legal-container">
-        <p>© 2026 TallerFlow · <RouterLink to="/terminos">Términos de servicio</RouterLink> · Contacto: tallerflow.pe@gmail.com</p>
+        <p>© 2026 TallerFlow · <RouterLink :to="embedded ? '/app/account/terms' : '/terminos'">Términos de servicio</RouterLink> · Contacto: tallerflow.pe@gmail.com</p>
       </div>
     </footer>
   </div>

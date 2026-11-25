@@ -1,18 +1,19 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
 import BrandLogo from '../../components/BrandLogo.vue'
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 </script>
 
 <template>
   <div class="legal-page">
-    <header class="legal-header">
+    <header v-if="!embedded" class="legal-header">
       <div class="legal-container legal-header__inner">
         <BrandLogo :size="32" />
         <RouterLink to="/" class="legal-back-link">← Volver al inicio</RouterLink>
       </div>
     </header>
 
-    <main class="legal-container legal-content">
+    <component :is="embedded ? 'div' : 'main'" class="legal-container legal-content">
       <article class="legal-article">
         <header class="legal-article__header">
           <span class="legal-badge">Documento legal</span>
@@ -73,11 +74,11 @@ import BrandLogo from '../../components/BrandLogo.vue'
           </p>
         </section>
       </article>
-    </main>
+    </component>
 
-    <footer class="legal-footer">
+    <footer v-if="!embedded" class="legal-footer">
       <div class="legal-container">
-        <p>© 2026 TallerFlow · <RouterLink to="/privacidad">Política de privacidad</RouterLink> · Contacto: tallerflow.pe@gmail.com</p>
+        <p>© 2026 TallerFlow · <RouterLink :to="embedded ? '/app/account/privacy' : '/privacidad'">Política de privacidad</RouterLink> · Contacto: tallerflow.pe@gmail.com</p>
       </div>
     </footer>
   </div>

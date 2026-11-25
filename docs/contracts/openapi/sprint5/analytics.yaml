@@ -1,0 +1,576 @@
+openapi: "3.1.0"
+info:
+  title: "TallerFlow Sprint 5 — Analytics"
+  version: "0.5.0"
+  description: "Standalone contract for telemetry, administrative metrics, demo classification and Google Play import. Paths are relative to the deployed API; console routes must use the configured console Host. No automatic import or downloads inferred from first opens."
+servers:
+  - url: /
+    description: Same-origin API; console endpoints require the configured administrative host.
+paths:
+  "/api/v1/analytics/first-open":
+    post:
+      operationId: "analyticsFirstOpen"
+      summary: "Record an observed first execution, never a download"
+      security: []
+      description: "No account or tenant identifiers accepted. UUID deduplication and one first_open per installation. Nonempty Origin must match a configured web/mobile origin; omitted Origin is accepted. Client honors opt-out, DNT and GPC. Raw retention 90 days; cleanup runs on API startup and daily. Max 2048 request bytes."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/FirstOpenEvent"
+      responses:
+        "204":
+          description: "Accepted or deduplicated; no body."
+        "403":
+          description: "ORIGIN_INVALID: nonempty Origin is not configured web/mobile origin."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        "422":
+          description: "EVENT_INVALID: invalid event/JSON, unknown fields, multiple JSON values or body over 2048 bytes."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        "429":
+          description: "ANALYTICS_RATE_LIMITED: 120 events per IP/minute per process; limiter tracks at most 10000 keys."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+          headers:
+            Retry-After:
+              schema:
+                type: "string"
+                enum: ["60"]
+              description: "Seconds until retry."
+        "503":
+          description: "ANALYTICS_UNAVAILABLE: storage failure; retry with the same event UUID."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+  "/api/v1/analytics/events":
+    post:
+      operationId: "analyticsRecordEvent"
+      summary: "Record authenticated registration, login or interaction"
+      security:
+        -
+          workshopCookie: []
+          csrfToken: []
+        -
+          developmentWorkshopCookie: []
+          csrfToken: []
+        -
+          mobileBearer: []
+      description: "Workshop/user come exclusively from session, with active membership and tenant transaction/RLS. Web requires cookie, CSRF and exact web Origin/Referer; mobile uses bearer with configured mobile Origin or none. Cookie plus bearer is rejected. registration requires verified OWNER email near event time and deduplicates per workshop; login requires USER_SIGNED_IN evidence for same actor/workshop/channel within 5 minutes, consumable once; already-consumed evidence is excluded and claims are serialized per actor/workshop. activity is client-reported interaction (client throttles to one/minute). UUID is stable across retries."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/AuthenticatedEvent"
+      responses:
+        "204":
+          description: "Accepted or deduplicated; no body."
+        "403":
+          description: "CSRF_INVALID, ORIGIN_INVALID, WORKSHOP_SUSPENDED or PASSWORD_CHANGE_REQUIRED."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        "422":
+          description: "EVENT_INVALID or EVENT_EVIDENCE_REQUIRED: malformed event or no matching server evidence."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        "429":
+          description: "ANALYTICS_RATE_LIMITED: 120 events per IP/minute per process; limiter tracks at most 10000 keys."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+          headers:
+            Retry-After:
+              schema:
+                type: "string"
+                enum: ["60"]
+              description: "Seconds until retry."
+        "503":
+          description: "ANALYTICS_UNAVAILABLE: storage failure; retry with the same event UUID."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        "400":
+          description: "AUTH_AMBIGUOUS_CREDENTIALS: cookie and Authorization sent together."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        "401":
+          description: "SESSION_INVALID: missing/invalid/wrong-transport session."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        "500":
+          description: "INTERNAL_ERROR: auth/session/workshop lookup failed."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+  "/api/v1/console/analytics":
+    get:
+      operationId: "consoleAnalytics"
+      summary: "Get daily counts and distinct users/workshops for the entire period"
+      security:
+        -
+          consoleCookie: []
+        -
+          developmentConsoleCookie: []
+      description: "Console Host only; session established by console email/password/TOTP login. No workshop bearer or workshop ADMIN role grants access. UTC inclusive days; defaults last 30 days through today, maximum 366 inclusive days, start not older than 25 months, no future end. Counts before telemetry coverage/90-day retention are null; coverage start day can be partial. totals use DISTINCT over the whole period, not sum of daily distinct counts. include_demo excludes explicitly marked workshops only for attributed events; anonymous first opens and Play cannot exclude demos. Play missing data is null, never zero. Totals and version reports are not added together; total report wins for unfiltered versions."
+      parameters:
+        -
+          name: "start"
+          in: "query"
+          schema:
+            type: "string"
+            format: "date"
+          description: "Inclusive UTC YYYY-MM-DD, default today minus 29 days."
+        -
+          name: "end"
+          in: "query"
+          schema:
+            type: "string"
+            format: "date"
+          description: "Inclusive UTC YYYY-MM-DD, default today."
+        -
+          name: "channel"
+          in: "query"
+          schema:
+            type: "string"
+            enum: ["","web","android"]
+            default: ""
+          description: "Empty = all. web excludes Play reports."
+        -
+          name: "version"
+          in: "query"
+          schema:
+            type: "string"
+            maxLength: 64
+            default: ""
+            pattern: "^[^\\r\\n\\u0000]*$"
+          description: "Exact match; at most 64 UTF-8 bytes. Android and Play use numeric App Version Code (3), not versionName (1.1.0). Web uses explicit VITE_APP_VERSION or the Vite-injected package version (currently 1.1.0). Empty = all."
+        -
+          name: "include_demo"
+          in: "query"
+          schema:
+            type: "boolean"
+            default: false
+          description: "Only literal true enables inclusion; other values behave as false."
+      responses:
+        "401":
+          description: "CONSOLE_SESSION_INVALID: missing, expired or revoked admin session."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        "404":
+          description: "NOT_FOUND: request Host differs from configured console origin Host (including port)."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/AnalyticsResponse"
+        "422":
+          description: "METRICS_FILTER_INVALID: invalid dates/range/channel/version."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        "500":
+          description: "METRICS_UNAVAILABLE: daily or full-period aggregate query failed."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+  "/api/v1/console/workshops/{id}/demo":
+    post:
+      operationId: "consoleSetWorkshopDemo"
+      summary: "Set explicit demo classification with administrative audit"
+      security:
+        -
+          consoleCookie: []
+          csrfToken: []
+        -
+          developmentConsoleCookie: []
+          csrfToken: []
+      parameters:
+        -
+          name: "id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            format: "uuid"
+      description: "Console Host/session and CSRF required. Does not infer demo from name/email. Unknown input properties are ignored by the existing JSON binder."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/DemoInput"
+      responses:
+        "401":
+          description: "CONSOLE_SESSION_INVALID: missing, expired or revoked admin session."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        "404":
+          description: "NOT_FOUND: request Host differs from configured console origin Host (including port)."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        "403":
+          description: "CSRF_INVALID: wrong/missing X-CSRF-Token or nonmatching Origin; omitted Origin is accepted."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        "204":
+          description: "Classification updated and audited; no body."
+        "422":
+          description: "WORKSHOP_INVALID: bad UUID; DEMO_INVALID: is_demo missing/null/nonboolean or invalid JSON."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        "409":
+          description: "DEMO_UPDATE_FAILED: workshop missing or classification update failed."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+  "/api/v1/console/analytics/play/import":
+    post:
+      operationId: "consoleImportPlayCSV"
+      summary: "Atomically import Google Play installs CSV as platform administrator"
+      security:
+        -
+          consoleCookie: []
+          csrfToken: []
+        -
+          developmentConsoleCookie: []
+          csrfToken: []
+      description: "Console Host/session and CSRF required. JSON CSV string, not multipart or remote URL. Official English installs headers; totals or App Version Code dimension only; package pe.tallerflow.app. UTF-8 or UTF-16 LE/BE with BOM (browser normally decodes file first). CSV <=4 MiB in UTF-8 bytes, request <=8388608+4096 bytes, 1..10000 rows. Date in last 25 months, not future; nonnegative int64 metrics; duplicate date/version rows or unsupported columns rejected. Omitted metric columns preserve previous stored values on update (null on insert); present blank/-/N/A cells explicitly replace the metric with null. App Version Code is canonicalized numerically before duplicate detection: 03 and 3 address the same version and duplicate date/version rows are rejected. Atomic upsert by report date/package/dimension/version, not additive; identical checksum preserves previous import timestamp. Every successful import is audited. Stored source google_play_csv, report date/version, filename, import time, importing admin and SHA-256; retention 25 months with startup/daily cleanup. Automatic import is not enabled without authorized credentials/bucket."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/PlayImportInput"
+      responses:
+        "401":
+          description: "CONSOLE_SESSION_INVALID: missing, expired or revoked admin session."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        "404":
+          description: "NOT_FOUND: request Host differs from configured console origin Host (including port)."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        "403":
+          description: "CSRF_INVALID: wrong/missing X-CSRF-Token or nonmatching Origin; omitted Origin is accepted."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/PlayImportResponse"
+        "422":
+          description: "PLAY_CSV_INVALID: malformed/oversized/unsupported CSV or JSON; PLAY_SOURCE_INVALID: invalid filename."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        "500":
+          description: "PLAY_IMPORT_FAILED: transaction rolled back, including audit."
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+components:
+  securitySchemes:
+    workshopCookie:
+      type: "apiKey"
+      in: "cookie"
+      name: "__Host-tallerflow_session"
+      description: "Production web session; never interchangeable with mobile bearer or console session."
+    developmentWorkshopCookie:
+      type: "apiKey"
+      in: "cookie"
+      name: "tallerflow_session"
+      description: "Development only; substitutes production workshop cookie."
+    mobileBearer:
+      type: "http"
+      scheme: "bearer"
+      description: "Opaque mobile-kind session token, not JWT. Send without cookies."
+    consoleCookie:
+      type: "apiKey"
+      in: "cookie"
+      name: "__Host-tallerflow_console"
+      description: "Platform admin session issued by console email/password/TOTP login; Secure, HttpOnly, SameSite=Strict."
+    developmentConsoleCookie:
+      type: "apiKey"
+      in: "cookie"
+      name: "tallerflow_console"
+      description: "Development only; substitutes production console cookie."
+    csrfToken:
+      type: "apiKey"
+      in: "header"
+      name: "X-CSRF-Token"
+      description: "CSRF token for the same web or console session; required on cookie-authenticated mutations."
+  schemas:
+    Error:
+      type: "object"
+      properties:
+        error:
+          type: "object"
+          properties:
+            code:
+              type: "string"
+            message:
+              type: "string"
+            details:
+              type: "object"
+              additionalProperties: true
+            request_id:
+              type: "string"
+          required: ["code","message","details","request_id"]
+      required: ["error"]
+    Event:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+          format: "uuid"
+          not:
+            enum: ["00000000-0000-0000-0000-000000000000"]
+          description: "Client-generated random UUID, stable across delivery retries."
+        installation_id:
+          type: "string"
+          format: "uuid"
+          not:
+            enum: ["00000000-0000-0000-0000-000000000000"]
+          description: "Random local installation/browser-storage UUID, not advertising or hardware ID."
+        type:
+          type: "string"
+          enum: ["first_open","registration","login","activity"]
+        occurred_at:
+          type: "string"
+          format: "date-time"
+          description: "UTC timestamp within previous 7 days and no more than 5 minutes ahead. Auth evidence supplies server timestamp for login/registration."
+        channel:
+          type: "string"
+          enum: ["web","android"]
+        version:
+          type: "string"
+          minLength: 1
+          maxLength: 64
+          pattern: "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$"
+          description: "Android build/App Version Code; web explicit build identifier or package version (currently 1.1.0)."
+      required: ["id","installation_id","type","occurred_at","channel","version"]
+      additionalProperties: false
+    FirstOpenEvent:
+      allOf:
+        -
+          "$ref": "#/components/schemas/Event"
+        -
+          properties:
+            type:
+              enum: ["first_open"]
+    AuthenticatedEvent:
+      allOf:
+        -
+          "$ref": "#/components/schemas/Event"
+        -
+          properties:
+            type:
+              enum: ["registration","login","activity"]
+    MetricDay:
+      type: "object"
+      properties:
+        day:
+          type: "string"
+          format: "date-time"
+          description: "UTC date serialized as a timestamp, e.g. 2026-11-24T00:00:00Z."
+        first_opens:
+          type: ["integer","null"]
+          format: "int64"
+          minimum: 0
+          description: "null means unavailable, not zero."
+        registrations:
+          type: ["integer","null"]
+          format: "int64"
+          minimum: 0
+          description: "null means unavailable, not zero."
+        logins:
+          type: ["integer","null"]
+          format: "int64"
+          minimum: 0
+          description: "null means unavailable, not zero."
+        activities:
+          type: ["integer","null"]
+          format: "int64"
+          minimum: 0
+          description: "null means unavailable, not zero."
+        active_users:
+          type: ["integer","null"]
+          format: "int64"
+          minimum: 0
+          description: "null means unavailable, not zero."
+        active_workshops:
+          type: ["integer","null"]
+          format: "int64"
+          minimum: 0
+          description: "null means unavailable, not zero."
+        play_device_installs:
+          type: ["integer","null"]
+          format: "int64"
+          minimum: 0
+          description: "null means unavailable, not zero."
+        play_user_installs:
+          type: ["integer","null"]
+          format: "int64"
+          minimum: 0
+          description: "null means unavailable, not zero."
+        play_uninstalls:
+          type: ["integer","null"]
+          format: "int64"
+          minimum: 0
+          description: "null means unavailable, not zero."
+        play_imported_at:
+          type: ["string","null"]
+          format: "date-time"
+        coverage_started_at:
+          type: "string"
+          format: "date-time"
+      required: ["day","first_opens","registrations","logins","activities","active_users","active_workshops","play_device_installs","play_user_installs","play_uninstalls","play_imported_at","coverage_started_at"]
+      additionalProperties: false
+    PeriodTotals:
+      type: "object"
+      properties:
+        active_users:
+          type: ["integer","null"]
+          format: "int64"
+          minimum: 0
+          description: "null means unavailable, not zero."
+        active_workshops:
+          type: ["integer","null"]
+          format: "int64"
+          minimum: 0
+          description: "null means unavailable, not zero."
+        coverage_complete:
+          type: "boolean"
+          description: "False if requested start precedes retained telemetry coverage."
+      required: ["active_users","active_workshops","coverage_complete"]
+      additionalProperties: false
+    AnalyticsResponse:
+      type: "object"
+      properties:
+        data:
+          type: "array"
+          items:
+            "$ref": "#/components/schemas/MetricDay"
+        totals:
+          "$ref": "#/components/schemas/PeriodTotals"
+        meta:
+          type: "object"
+          properties:
+            timezone:
+              type: "string"
+              enum: ["UTC"]
+            telemetry_source:
+              type: "string"
+              enum: ["client_reported"]
+            play_source:
+              type: "string"
+              enum: ["google_play_csv"]
+            first_open_is_download:
+              type: "boolean"
+              enum: [false]
+            anonymous_first_opens_include_unclassified_demos:
+              type: "boolean"
+              enum: [true]
+            raw_retention_days:
+              type: "integer"
+              enum: [90]
+            play_retention_months:
+              type: "integer"
+              enum: [25]
+          required: ["timezone","telemetry_source","play_source","first_open_is_download","anonymous_first_opens_include_unclassified_demos","raw_retention_days","play_retention_months"]
+          additionalProperties: false
+      required: ["data","totals","meta"]
+      additionalProperties: false
+    DemoInput:
+      type: "object"
+      properties:
+        is_demo:
+          type: "boolean"
+      required: ["is_demo"]
+      additionalProperties: true
+    PlayImportInput:
+      type: "object"
+      properties:
+        csv:
+          type: "string"
+          minLength: 1
+          maxLength: 4194304
+          x-max-utf8-bytes: 4194304
+          description: "CSV file contents; requires Date, Package Name and at least one supported metric: Daily Device Installs, Daily User Installs, Daily Device Uninstalls. App Version Code optional, numeric >0 if present; canonicalized (03 becomes 3) before duplicate detection. Standard nonimported installs columns are accepted; other dimensions rejected."
+        source_name:
+          type: "string"
+          minLength: 1
+          maxLength: 128
+          x-max-utf8-bytes: 128
+          pattern: "^[^/\\\\\\r\\n\\u0000]+$"
+          description: "Filename only, trimmed; no path, backslash, CR, LF or NUL. At most 128 UTF-8 bytes."
+      required: ["csv","source_name"]
+      additionalProperties: false
+    PlayImportResponse:
+      type: "object"
+      properties:
+        data:
+          type: "object"
+          properties:
+            rows:
+              type: "integer"
+              minimum: 1
+              maximum: 10000
+            source:
+              type: "string"
+              enum: ["google_play_csv"]
+            checksum:
+              type: "string"
+              pattern: "^[0-9a-f]{64}$"
+          required: ["rows","source","checksum"]
+      required: ["data"]
+      additionalProperties: false
