@@ -1,10 +1,32 @@
 <script setup lang="ts">
 import UiAlert from '../../components/UiAlert.vue'
 import UiNotice from '../../components/UiNotice.vue'
+import { isNativeApp } from '../../native/platform'
 import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { ChevronRight, LogOut, Settings, UsersRound } from '@lucide/vue'
+import { canManageOperations } from '../session/role-policy'
 import { getAnalyticsDisabled, setAnalyticsDisabled } from '../../native/analytics'
 import { useSessionStore } from '../session/session.store'
 const session = useSessionStore()
+const router = useRouter()
+const native = isNativeApp()
+const canManage = computed(() => canManageOperations(session.principal?.role))
+const signingOut = ref(false)
+const signOutError = ref('')
+async function signOut() {
+  signingOut.value = true
+  signOutError.value = ''
+  try {
+    await session.logout()
+    await router.replace('/login')
+  } catch {
+    if (!session.isAuthenticated) await router.replace('/login')
+    else signOutError.value = 'No se pudo cerrar la sesión. Inténtalo de nuevo.'
+  } finally {
+    signingOut.value = false
+  }
+}
 const roleLabels: Record<string, string> = { OWNER: 'Propietario', ADMIN: 'Administrador', SUPERVISOR: 'Supervisor', OPERATOR: 'Operador' }
 const role = computed(() => roleLabels[session.principal?.role ?? ''] ?? 'Miembro')
 const analyticsEnabled = ref(false)
@@ -35,6 +57,17 @@ function changeAnalytics(event: Event) {
       <h2 id="profile-title">Perfil</h2>
       <dl><div><dt>Nombre</dt><dd>{{ session.principal?.displayName || 'Sin nombre' }}</dd></div><div><dt>Correo</dt><dd>{{ session.principal?.email }}</dd></div><div><dt>Taller</dt><dd>{{ session.principal?.workshop.name }}</dd></div><div><dt>Rol</dt><dd>{{ role }}</dd></div></dl>
     </section>
+    <section v-if="native && canManage" aria-labelledby="workshop-settings-title">
+      <h2 id="workshop-settings-title">Administración del taller</h2>
+      <div class="account-links">
+        <RouterLink to="/app/team"><span><UsersRound :size="20" aria-hidden="true" /> Equipo</span><ChevronRight :size="18" aria-hidden="true" /></RouterLink>
+        <RouterLink to="/app/settings"><span><Settings :size="20" aria-hidden="true" /> Ajustes del taller</span><ChevronRight :size="18" aria-hidden="true" /></RouterLink>
+      </div>
+    </section>
+    <section v-if="!native" aria-labelledby="app-title">
+      <h2 id="app-title">TallerFlow para Android</h2>
+      <a href="https://play.google.com/store/apps/details?id=pe.tallerflow.app" target="_blank" rel="noopener noreferrer">Abrir en Google Play ↗</a>
+    </section>
     <section aria-labelledby="analytics-title">
       <h2 id="analytics-title">Estadísticas de uso</h2>
       <label class="analytics-choice"><input type="checkbox" :checked="analyticsEnabled" :disabled="browserOptOut" aria-describedby="analytics-help" @change="changeAnalytics" /><span>Compartir estadísticas de uso en este dispositivo</span></label>
@@ -49,6 +82,10 @@ function changeAnalytics(event: Event) {
       <div class="account-links"><RouterLink to="/app/account/privacy">Política de privacidad <span aria-hidden="true">›</span></RouterLink><RouterLink to="/app/account/delete">Solicitar eliminación de cuenta <span aria-hidden="true">›</span></RouterLink></div>
 
     </section>
+    <UiAlert :message="signOutError" />
+    <button v-if="native" type="button" class="account-logout" :disabled="signingOut" @click="signOut">
+      <LogOut :size="20" aria-hidden="true" /> {{ signingOut ? 'Cerrando sesión…' : 'Cerrar sesión' }}
+    </button>
   </main>
 </template>
 
@@ -79,4 +116,8 @@ a:focus-visible { outline: 3px solid var(--tf-focus); outline-offset: 2px; }
 .account-document :deep(.legal-article__header h1) { font-size: 1.5rem; }
 
 .account-page{max-width:900px;gap:1.25rem}.account-page>section{border:1px solid var(--tf-border-soft);border-radius:16px;padding:1.5rem} .account-links{display:grid;gap:0}.account-links a{display:flex;justify-content:space-between;gap:1rem;min-height:58px;padding:.75rem 0;border-bottom:1px solid var(--tf-border-soft);color:var(--tf-primary);text-decoration:none;font-weight:600}.account-links a:last-child{border-bottom:0}.account-links a:hover{color:var(--tf-accent-text)}
+.account-links a > span, .account-logout { display:flex; align-items:center; gap:.65rem; }
+.account-logout { justify-content:center; min-height:48px; padding:.6rem 1rem; border:1px solid #d6aab3; border-radius:10px; background:white; color:#84243a; font:inherit; font-weight:700; cursor:pointer; }
+.account-logout:hover { background:#fff3f5; }
+.account-logout:focus-visible { outline:3px solid var(--tf-focus); outline-offset:2px; }
 </style>

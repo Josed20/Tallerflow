@@ -76,3 +76,17 @@ it('requires a fresh sign-in in a tab without the mutation token', async () => {
   expect(screen.queryByRole('heading', { name: 'Vista general' })).toBeNull()
   expect(api.get).not.toHaveBeenCalled()
 })
+it('applies a UTC date preset and retains the selected channel', async () => {
+  api.get.mockResolvedValue(result())
+  render(AnalyticsPanel, { props: { csrf: 'csrf', includeDemo: false } })
+  await screen.findByText('Usuarios activos únicos')
+  await fireEvent.update(screen.getByLabelText('Canal'), 'web')
+  await fireEvent.click(screen.getByRole('button', { name: '7 días' }))
+  const lastCall = api.get.mock.calls.at(-1)![0]
+  const params = new URL(lastCall, 'http://localhost').searchParams
+  const from = Date.parse(params.get('start')!)
+  const to = Date.parse(params.get('end')!)
+  expect(to - from).toBe(6 * 86400000)
+  expect(params.get('channel')).toBe('web')
+  expect(screen.getByRole('button', { name: '7 días', pressed: true })).toBeTruthy()
+})

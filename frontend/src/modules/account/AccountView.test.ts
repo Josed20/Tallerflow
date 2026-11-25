@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createAppRouter } from '../../app/router'
 import { useSessionStore } from '../session/session.store'
 import { ANALYTICS_DISABLED_KEY, ANALYTICS_KEY, ANALYTICS_PREFERENCE_EVENT } from '../../native/analytics'
+import * as platform from '../../native/platform'
 import AccountView from './AccountView.vue'
 import AppShell from '../session/AppShell.vue'
 async function setup(role: 'OWNER' | 'ADMIN' | 'SUPERVISOR' | 'OPERATOR' = 'OWNER', authenticated = true) {
@@ -33,6 +34,20 @@ describe('account access and privacy navigation', () => {
     await fireEvent.click(screen.getByRole('link', { name: /Solicitar eliminación de cuenta/ }))
     await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('account-delete'))
     expect(screen.queryByRole('button', { name: 'Cerrar información' })).toBeNull()
+  })
+  it.each(['OWNER', 'OPERATOR'] as const)('shows Android account actions for %s', async role => {
+    vi.spyOn(platform, 'isNativeApp').mockReturnValue(true)
+    const { pinia, router } = await setup(role)
+    const logout = vi.spyOn(useSessionStore(pinia), 'logout').mockImplementation(async () => {
+      useSessionStore(pinia).clearSession()
+    })
+    render(AccountView, { global: { plugins: [pinia, router] } })
+    for (const name of ['Equipo', 'Ajustes del taller']) {
+      expect(Boolean(screen.queryByRole('link', { name }))).toBe(role === 'OWNER')
+    }
+    await fireEvent.click(screen.getByRole('button', { name: 'Cerrar sesión' }))
+    expect(logout).toHaveBeenCalledOnce()
+    await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('login'))
   })
   it('uses a short readable fallback for an unknown role', async () => {
     const { pinia, router } = await setup()

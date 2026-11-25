@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { Columns3, Settings, LayoutDashboard, LogOut, Plus, Users, UsersRound } from '@lucide/vue'
+import { computed, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { Columns3, Settings, LayoutDashboard, LogOut, Plus, Users, UsersRound, PanelLeftClose, PanelLeftOpen, UserRound } from '@lucide/vue'
+import { isNativeApp } from '../../native/platform'
 import BrandLogo from '../../components/BrandLogo.vue'
 import { useSessionStore } from './session.store'
 import { canManageOperations } from './role-policy'
 
 const session = useSessionStore()
 const router = useRouter()
+const route = useRoute()
+const native = isNativeApp()
+const collapsed = ref(false)
 const canManage = computed(() => canManageOperations(session.principal?.role))
 
 async function signOut() {
@@ -17,22 +21,36 @@ async function signOut() {
 </script>
 
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'app-shell--collapsed': collapsed, 'app-shell--android': native }">
+    <header v-if="native" class="android-app-bar">
+      <strong>{{ session.principal?.workshop.name }}</strong>
+    </header>
+    <nav v-if="native" class="android-app-nav" aria-label="Navegación de Android">
+      <RouterLink v-if="canManage" to="/app"><LayoutDashboard :size="22" />Panel</RouterLink>
+      <RouterLink to="/app/orders" :class="{ 'android-active': route.path.startsWith('/app/orders/') && route.path !== '/app/orders/new' }"><Columns3 :size="22" />Órdenes</RouterLink>
+      <RouterLink v-if="canManage" to="/app/orders/new"><Plus :size="22" />Nueva</RouterLink>
+      <RouterLink v-if="canManage" to="/app/clients"><Users :size="22" />Clientes</RouterLink>
+      <RouterLink to="/app/account" :class="{ 'android-active': route.path.startsWith('/app/account/') || route.name === 'team' || route.name === 'settings' }"><UserRound :size="22" />Cuenta</RouterLink>
+    </nav>
     <aside class="app-shell__sidebar" aria-label="Navegación principal">
       <RouterLink class="app-shell__brand" :to="canManage ? '/app' : '/app/orders'" aria-label="TallerFlow, ir al inicio"><BrandLogo :size="26" tone="dark" decorative /></RouterLink>
       <!-- Etiqueta tejida del taller (DESIGN.md, Components). -->
+      <button class="sidebar-toggle" type="button" :aria-label="collapsed ? 'Expandir barra lateral' : 'Plegar barra lateral'" :aria-expanded="!collapsed" aria-controls="workshop-nav" @click="collapsed = !collapsed">
+        <PanelLeftOpen v-if="collapsed" :size="20" />
+        <PanelLeftClose v-else :size="20" />
+      </button>
       <p class="app-shell__workshop"><strong>{{ session.principal?.workshop.name }}</strong><small>Taller</small></p>
-      <nav class="app-shell__nav" aria-label="Secciones internas">
-        <RouterLink v-if="canManage" to="/app"><LayoutDashboard :size="18" aria-hidden="true" /> Panel</RouterLink>
-        <RouterLink to="/app/orders"><Columns3 :size="18" aria-hidden="true" /> Órdenes</RouterLink>
-        <RouterLink v-if="canManage" to="/app/clients"><Users :size="18" aria-hidden="true" /> Clientes</RouterLink>
-        <RouterLink v-if="canManage" class="app-shell__nav-action" to="/app/orders/new"><Plus :size="18" aria-hidden="true" /> Nueva orden</RouterLink>
-        <RouterLink v-if="canManage" to="/app/team"><UsersRound :size="18" aria-hidden="true" /> Equipo</RouterLink>
-        <RouterLink v-if="canManage" to="/app/settings"><Settings :size="18" aria-hidden="true" /> Ajustes</RouterLink>
+      <nav id="workshop-nav" class="app-shell__nav" aria-label="Secciones internas">
+        <RouterLink v-if="canManage" to="/app"><LayoutDashboard :size="18" aria-hidden="true" /> <span class="sidebar-label">Panel</span></RouterLink>
+        <RouterLink to="/app/orders"><Columns3 :size="18" aria-hidden="true" /> <span class="sidebar-label">Órdenes</span></RouterLink>
+        <RouterLink v-if="canManage" to="/app/clients"><Users :size="18" aria-hidden="true" /> <span class="sidebar-label">Clientes</span></RouterLink>
+        <RouterLink v-if="canManage" class="app-shell__nav-action" to="/app/orders/new"><Plus :size="18" aria-hidden="true" /> <span class="sidebar-label">Nueva orden</span></RouterLink>
+        <RouterLink v-if="canManage" to="/app/team"><UsersRound :size="18" aria-hidden="true" /> <span class="sidebar-label">Equipo</span></RouterLink>
+        <RouterLink v-if="canManage" to="/app/settings"><Settings :size="18" aria-hidden="true" /> <span class="sidebar-label">Ajustes</span></RouterLink>
       </nav>
       <div class="app-shell__footer">
 <RouterLink to="/app/account" class="app-shell__user" aria-label="Mi cuenta" title="Mi cuenta"><span class="app-shell__avatar" aria-hidden="true">{{ (session.principal?.displayName || session.principal?.email || 'U').charAt(0).toUpperCase() }}</span><span><strong>{{ session.principal?.displayName || session.principal?.email }}</strong><small>{{ session.principal?.role === 'OWNER' ? 'Propietario' : session.principal?.role === 'ADMIN' ? 'Administrador' : 'Operador' }}</small></span></RouterLink>
-        <button class="app-shell__logout" type="button" title="Cerrar sesión" @click="signOut"><LogOut :size="17" aria-hidden="true" /> Cerrar sesión</button>
+        <button class="app-shell__logout" type="button" title="Cerrar sesión" @click="signOut"><LogOut :size="17" aria-hidden="true" /> <span class="sidebar-label">Cerrar sesión</span></button>
       </div>
     </aside>
     <div class="app-shell__main"><header v-if="$slots.header" class="app-shell__header"><slot name="header" /></header><div class="app-shell__content"><slot /></div></div>
@@ -86,5 +104,50 @@ async function signOut() {
   .app-shell__workshop, .app-shell__nav { grid-column: 1 / -1; }
   .app-shell .app-shell__workshop { padding: .35rem 0 .6rem; }
   .app-shell__nav { margin: 0; padding: 0; }
+}
+
+.sidebar-toggle, .android-app-bar, .android-app-nav { display: none; }
+@media (min-width: 900px) {
+  .sidebar-toggle {
+    display: grid; place-items: center; position: absolute; top: 1.3rem; right: .45rem;
+    width: 34px; height: 40px; color: var(--tf-on-shell);
+    border: 0; border-radius: 6px; background: var(--tf-shell-hover); cursor: pointer;
+  }
+  .app-shell--collapsed { grid-template-columns: 4.5rem minmax(0, 1fr); }
+  .app-shell--collapsed .app-shell__sidebar { padding-inline: .55rem; }
+  .app-shell--collapsed .sidebar-toggle { position: static; width: 100%; order: -1; }
+  .app-shell--collapsed .app-shell__brand, .app-shell--collapsed .app-shell__workshop,
+  .app-shell--collapsed .app-shell__user > span:last-child { display: none; }
+  .app-shell--collapsed .sidebar-label {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  .app-shell--collapsed .app-shell__nav a, .app-shell--collapsed .app-shell__logout,
+  .app-shell--collapsed .app-shell__user { justify-content: center; }
+}
+@media (max-width: 899px) {
+  .app-shell__logout .sidebar-label { font-size: 0; }
+}
+.app-shell--android { display: block; padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+.app-shell--android .app-shell__sidebar { display: none; }
+.android-app-bar {
+  display: flex; position: sticky; top: 0; z-index: 35;
+  align-items: center; justify-content: space-between; gap: 1rem;
+  padding: max(.45rem, env(safe-area-inset-top)) 1rem .45rem;
+  color: #fff; background: #0d3341; min-height: 60px;
+}
+.android-app-bar strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.android-app-nav {
+  position: fixed; bottom: 0; inset-inline: 0; z-index: 35; display: flex; justify-content: center;
+  padding: .35rem .35rem max(.35rem,env(safe-area-inset-bottom));
+  background: #fff; box-shadow: 0 -1px 0 #b9cdd2; color: #244852;
+}
+.android-app-nav a {
+  flex: 1; max-width: 130px; display: grid; justify-items: center; gap: .25rem;
+  padding: .35rem .15rem; min-height: 56px; font-size: .72rem; font-weight: 650;
+  text-decoration: none; color: inherit;
+}
+.android-app-nav a:is(.router-link-exact-active,.android-active) { color: #086550; }
+.android-app-nav a:is(.router-link-exact-active,.android-active) svg {
+  background: #ceeadd; width: 46px; height: 26px; padding: 2px 11px; border-radius: 14px;
 }
 </style>

@@ -1,5 +1,10 @@
 # Sprint 5: validación local
 
+> Estado actualizado al 25/11/2026: la implementación sí fue subida a origin
+> en feat/s5-stephano-operacion-metricas (e5d191d). Las menciones a trabajo
+> exclusivamente local describen las validaciones anteriores. No hubo merge,
+> PR, despliegue ni actualización de Play. Véase sprint-05-continuidad.md.
+
 Fecha: 24 de noviembre de 2026 (Lima).
 Rama: `feat/s5-stephano-operacion-metricas`.
 Base remota comprobada: `1aa7f4ee2bb2319c36bc88bcfe4f18a29e796ffb`.

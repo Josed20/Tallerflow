@@ -186,7 +186,7 @@ onMounted(() => { loadOrders(); productionApi.get().then(res => { templateStages
       <div class="board-header__actions">
         <button v-if="isManager" class="ops-button" type="button" :disabled="loading || !!error || !filteredOrders.length" title="Descargar las órdenes del resultado actual" @click="exportOrders"><Download :size="17" aria-hidden="true" /> Exportar CSV ({{ filteredOrders.length }})</button>
         <button class="ops-button" type="button" @click="showScanner = true"><ScanLine :size="17" /> Escanear ficha viajera</button>
-        <button class="ops-icon-button" type="button" title="Actualizar órdenes" aria-label="Actualizar órdenes" :disabled="loading" @click="loadOrders()"><RefreshCw :size="18" /></button>
+        <button class="ops-icon-button" type="button" title="Actualizar órdenes" aria-label="Actualizar órdenes" :disabled="loading" @click="loadOrders()"><RefreshCw :size="18" /><span class="refresh-label">Actualizar</span></button>
         <RouterLink v-if="isManager" class="ops-button ops-button--primary" to="/app/orders/new"><Plus :size="17" /> Nueva orden</RouterLink>
       </div>
     </header>
@@ -201,7 +201,7 @@ onMounted(() => { loadOrders(); productionApi.get().then(res => { templateStages
       </div>
       <label class="board-search"><Search :size="17" aria-hidden="true" /><span class="sr-only">Buscar órdenes por código, número, prenda o cliente</span><input v-model="search" type="search" placeholder="Código o número (ej. 3), prenda, cliente" /></label>
     </div>
-    <div class="board-filters" aria-label="Filtros de órdenes">
+    <div class="board-filters" role="group" aria-label="Filtros de órdenes">
       <button v-for="option in filterOptions" :key="option.value" type="button" :class="{ active: trafficFilter === option.value && !dueTodayOnly }" :aria-pressed="trafficFilter === option.value && !dueTodayOnly" @click="selectTrafficFilter(option.value)"><span>{{ option.label }}</span><strong>{{ counts[option.value] }}</strong></button>
       <button type="button" :class="{ active: dueTodayOnly }" :aria-pressed="dueTodayOnly" @click="toggleDueToday">Entrega hoy</button>
     </div>
@@ -285,4 +285,30 @@ onMounted(() => { loadOrders(); productionApi.get().then(res => { templateStages
 @media (max-width: 620px) { .board-header { align-items: start; flex-direction: column; } .board-header__actions { width: 100%; } .board-header__actions .ops-button { flex: 1; } .board-toolbar { align-items: stretch; flex-direction: column; } .board-search { width: 100%; } }
 
 .kanban-grid{grid-template-columns:repeat(var(--stage-columns),minmax(290px,290px));gap:1rem}.kanban-column{background:#edf1f7;border-radius:16px;min-height:22rem;border:1px solid #e4eaf2}.kanban-column__header{border-bottom:0;padding:1rem;position:sticky;top:0;z-index:1;background:#edf1f7;border-radius:16px 16px 0 0}.kanban-column__number{display:none}.kanban-column__header h2{font-size:.9rem;text-transform:capitalize;font-variation-settings:normal}.kanban-column__header>strong{border-radius:999px;background:white;min-width:28px;height:28px;color:var(--tf-primary)}.kanban-column__items{padding:0 .75rem .75rem;gap:.75rem}.ticket-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5rem;border-top:1px solid var(--tf-border-soft);padding-top:.65rem;margin-top:.15rem}.ticket-actions a{font-size:.8rem;min-height:44px}.ticket-actions .ticket-advance{width:auto;min-height:44px;padding:.45rem .65rem;border-radius:8px;border:0;color:var(--tf-primary);background:var(--tf-primary-soft);font-size:.75rem;font-weight:600}.ticket-qty{font-size:.8rem}.board-filters button{border-color:transparent;background:transparent;border-radius:999px;padding:.4rem .8rem}.board-filters button.active{background:var(--tf-primary);color:white;border-color:var(--tf-primary)}.board-filters button.active strong{color:white}.board-filters button:not(.active):hover{background:var(--tf-primary-soft)}.board-filters strong{padding:.1rem .3rem;font-size:.75rem}.board-view-switch{border-radius:12px}.board-search{border-radius:12px}.board-search input:focus-visible{outline:0;box-shadow:none}
+@media (max-width: 620px), (pointer: coarse) {
+  .board-header__actions > *, .board-view-switch button, .board-search,
+  .board-filters button, .ticket-actions a, .ticket-actions .ticket-advance,
+  .ticket-actions--row .ops-button {
+    min-height: 48px;
+  }
+  .board-header__actions .ops-icon-button { min-width: 48px; }
+  .board-search input { font-size: 1rem; }
+  .kanban-scroll { scroll-snap-type: x proximity; overscroll-behavior-x: contain; }
+  .kanban-column { scroll-snap-align: start; }
+}
+
+@media (max-width: 620px) {
+  .board-header__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .board-header__actions > * { justify-content: center; }
+  .board-header__actions .ops-icon-button { display: inline-flex; align-items: center; width: 100%; gap: .4rem; }
+  .board-view-switch button { flex: 1; justify-content: center; }
+  .kanban-grid { grid-template-columns: repeat(var(--stage-columns), min(82vw, 22rem)); gap: .65rem; }
+  .kanban-column__header h2 { overflow-wrap: anywhere; }
+  .ticket-actions a, .ticket-actions button { flex: 1 1 7rem; justify-content: center; text-align: center; }
+}
+.refresh-label { display: none; }
+@media (max-width: 620px) { .refresh-label { display: inline; } }
 </style>

@@ -10,7 +10,18 @@ const emit = defineEmits<{ imported: [] }>()
 type Day = { day: string; first_opens: number | null; registrations: number | null; logins: number | null; activities: number | null; active_users: number | null; active_workshops: number | null; play_device_installs: number | null; play_user_installs: number | null; play_uninstalls: number | null; play_imported_at: string | null; coverage_started_at: string }
 type Totals = { active_users: number | null; active_workshops: number | null; coverage_complete: boolean }
 const today = new Date().toISOString().slice(0, 10)
-const start = ref(new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10))
+const periods = [7, 30, 90]
+function periodStart(days: number) {
+  const date = new Date(today)
+  date.setUTCDate(date.getUTCDate() - days + 1)
+  return date.toISOString().slice(0, 10)
+}
+const start = ref(periodStart(30))
+function selectPeriod(days: number) {
+  start.value = periodStart(days)
+  end.value = today
+  void load()
+}
 const end = ref(today)
 const channel = ref('')
 const version = ref('')
@@ -61,8 +72,15 @@ const eventTotals = computed(() => {
 
 <template>
   <section class="metrics" aria-labelledby="metrics-title">
-    <h2 id="metrics-title">Actividad y adquisición</h2>
-    <p>Uso del sistema e instalaciones de Google Play en el período seleccionado.</p>
+    <header class="metrics-heading">
+      <h2 id="metrics-title">Actividad y adquisición</h2>
+      <div class="periods" role="group" aria-label="Últimos días">
+        <button v-for="days in periods" :key="days" type="button"
+          :aria-pressed="start === periodStart(days) && end === today"
+          :disabled="busy" @click="selectPeriod(days)">{{ days }} días</button>
+      </div>
+    </header>
+
     <form class="filters" @submit.prevent="load">
       <label>Desde<input v-model="start" type="date" :max="end" required /></label>
       <label>Hasta<input v-model="end" type="date" :min="start" :max="today" required /></label>
@@ -82,14 +100,39 @@ const eventTotals = computed(() => {
 </template>
 
 <style scoped>
-.metrics h2 {font-family:var(--tf-font-body);font-variation-settings:normal;font-size:1.15rem;letter-spacing:-.025em;}
-.metrics,.metrics>*{min-width:0}.metrics input,.metrics select{min-width:0;max-width:100%;box-sizing:border-box}.metrics .filters label{flex:1 1 140px;min-width:0}
-.scroll{max-height:28rem;border:1px solid #dde1e7;border-radius:8px}.scroll table{min-width:1100px}.scroll thead{position:sticky;top:0;background:white;box-shadow:0 1px 0 #dde1e7}.scroll tbody th{white-space:nowrap;font-variant-numeric:tabular-nums}.metrics .totals{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr))}.totals article{min-width:0}
-.metrics{display:grid;gap:1rem}.metrics h2,.metrics h3,.metrics p{margin:0}.metrics p{font-size:.9rem;color:#535e6e}.filters{display:flex;flex-wrap:wrap;gap:1rem;align-items:end}label{display:grid;gap:.35rem;font-weight:600}input,select,button{min-height:44px;padding:.5rem;border:1px solid #b9c0ca;border-radius:6px;font:inherit}button{background:#087f6d;color:white;cursor:pointer}button:disabled{opacity:.6;cursor:wait}.scroll{overflow:auto}table{width:100%;border-collapse:collapse;font-size:.85rem}td,th{padding:.6rem;text-align:left;border-bottom:1px solid #dde1e7}caption{text-align:left;padding:.5rem 0}.totals{display:flex;flex-wrap:wrap;gap:1rem}.totals article{display:grid;gap:.4rem;background:#edf7f5;padding:1rem;border-radius:8px}.totals strong{font-size:1.5rem}.import{display:grid;gap:.8rem;border-top:1px solid #dde1e7;padding-top:1rem}.import button{justify-self:start}
-
-.metrics .totals{gap:.75rem}.metrics .totals article{padding:1.1rem;border-radius:14px;background:#f0f5fd;color:var(--tf-primary);border:1px solid #dce6f6}.metrics .totals article:nth-child(2){background:#eff8f4;color:#23735c;border-color:#d8eadd}.metrics .totals article:nth-child(3){background:#f5f0fa;color:#715496;border-color:#e6ddf0}.metrics .totals article:nth-child(4){background:#fff8eb;color:#8c6524;border-color:#eee1c5}.metrics .totals strong{font-size:1.7rem;line-height:1.2}.metrics .totals span{font-size:.8rem;line-height:1.5}.metrics-detail{border-top:1px solid var(--tf-border-soft);padding-top:1rem}.metrics-detail summary{min-height:44px;cursor:pointer;color:var(--tf-primary);font-size:.9rem;font-weight:600}.filters input,.filters select{border-radius:10px;background:white}.filters button{border-radius:10px;background:var(--tf-primary)}.metrics h3{font:700 1rem var(--tf-font-body)}
-
-.metrics-detail{min-width:0;max-width:100%;overflow:hidden}.metrics-detail .scroll{min-width:0;max-width:100%;overflow:auto}.import{min-width:0}.import input[type="file"]{width:100%;max-width:100%}
-
-.metric-help{display:grid;gap:.75rem;padding:.5rem 0}.metric-help p{font-size:.8rem;line-height:1.6}
+.metrics { display: grid; gap: 1.25rem; color: var(--tf-ink); }
+.metrics, .metrics > *, .filters label { min-width: 0; }
+.metrics-heading, .periods { display: flex; align-items: center; flex-wrap: wrap; }
+.metrics-heading { justify-content: space-between; gap: .75rem; }
+.metrics h2, .metrics h3, .metrics p { margin: 0; }
+.metrics h2 { font: 700 1.35rem var(--tf-font-body); letter-spacing: -.035em; }
+.metrics p { color: var(--tf-text-subtle); font-size: .88rem; line-height: 1.55; }
+.periods { gap: 2px; padding: 3px; background: #edf3f5; border-radius: 8px; }
+button, input, select { min-height: 44px; box-sizing: border-box; border-radius: 6px; font: inherit; }
+button { padding: .5rem .9rem; border: 0; color: white; background: #16594e; cursor: pointer; }
+.periods button { background: transparent; color: #244753; }
+.periods button[aria-pressed="true"] { background: #15394a; color: white; }
+button:hover:enabled { text-decoration: underline; text-underline-offset: 3px; }
+button:disabled { opacity: .65; }
+:where(button, summary, input, select):focus-visible { outline: 3px solid var(--tf-focus); outline-offset: 2px; }
+.filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; align-items: end; gap: .75rem; }
+label { display: grid; gap: .35rem; font-size: .84rem; font-weight: 600; }
+input, select { width: 100%; min-width: 0; padding: .5rem; border: 1px solid var(--tf-border); background: white; color: inherit; }
+.totals { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); border-block: 1px solid #ccdedb; background: #eff7f5; }
+.totals article { display: flex; flex-direction: column-reverse; justify-content: end; gap: .5rem; padding: 1rem; }
+.totals strong { font-size: clamp(1.4rem, 2.6vw, 2.2rem); line-height: 1.1; color: #155447; font-variant-numeric: tabular-nums; }
+.totals span { font-size: .85rem; color: #365953; }
+.metrics-detail { border-top: 1px solid var(--tf-border-soft); }
+summary { padding-block: .75rem; min-height: 44px; color: var(--tf-primary); font-weight: 600; cursor: pointer; }
+.scroll { overflow: auto; max-height: 28rem; }
+table { width: 100%; min-width: 1100px; border-collapse: collapse; font-size: .85rem; font-variant-numeric: tabular-nums; }
+thead { position: sticky; top: 0; background: #eef3f5; }
+td, th, caption { padding: .65rem; text-align: left; border-bottom: 1px solid var(--tf-border-soft); }
+tbody th { white-space: nowrap; }
+.import, .metric-help { display: grid; gap: .75rem; padding-block: .75rem; }
+.import button { justify-self: start; }
+@media (max-width: 800px) {
+  .filters, .totals { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .filters button { grid-column: 1/-1; }
+}
 </style>

@@ -727,7 +727,7 @@ onUnmounted(() => {
 
           <div class="form-group">
             <label for="edit-specification">Especificaciones / Diseño</label>
-            <textarea id="edit-specification" v-model="editForm.specification" maxlength="10000" rows="4" :disabled="editingOrder" />
+            <textarea id="edit-specification" v-model="editForm.specification" maxlength="10000" rows="4" placeholder="Ej. Tipo de tela, color y acabados" :disabled="editingOrder" />
             <label v-if="editForm.specification !== order.specification" for="edit-change-reason">Motivo del cambio de diseño</label>
             <textarea v-if="editForm.specification !== order.specification" id="edit-change-reason" v-model="editForm.changeReason" required minlength="5" maxlength="300" :disabled="editingOrder" />
           </div>
@@ -960,7 +960,8 @@ h1 {
   color: var(--tf-ink);
 }
 .edit-order-form input,
-.edit-order-form select {
+.edit-order-form select,
+.edit-order-form textarea {
   width: 100%;
   min-height: 48px;
   padding: 0.625rem 0.75rem;
@@ -973,11 +974,13 @@ h1 {
   box-sizing: border-box;
 }
 .edit-order-form input:focus,
-.edit-order-form select:focus {
+.edit-order-form select:focus,
+.edit-order-form textarea:focus {
   outline: 3px solid var(--tf-focus);
   outline-offset: 2px;
   border-color: var(--tf-primary);
 }
+.edit-order-form textarea { resize: vertical; }
 .form-row-2 {
   display: grid;
   grid-template-columns: 1.5fr 1fr;

@@ -122,7 +122,7 @@ export function createAppRouter({ pinia, history }: AppRouterOptions) {
         : '/login'
     }
 
-    if (to.name === 'not-found' || to.meta.allowAuthenticated) {
+    if (to.name === 'landing' || to.name === 'not-found' || to.meta.allowAuthenticated) {
       return
     }
 

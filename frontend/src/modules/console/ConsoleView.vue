@@ -67,6 +67,9 @@ async function showWorkshop(workshop: Workshop) {
 
 const action = ref<{workshop:Workshop; status?:Workshop['status']; purge?:boolean}|null>(null)
 const reason = ref('')
+const reasonInput = ref<HTMLTextAreaElement | null>(null)
+const reasonInvalid = ref(false)
+const actionError = ref('')
 const confirmation = ref('')
 const verificationCode = ref('')
 const notice = ref('')
@@ -74,20 +77,26 @@ const statusFilter = ref('ALL')
 const visibleWorkshops = computed(() => workshops.value.filter(workshop => statusFilter.value === 'ALL' || workshop.status === statusFilter.value))
 const statusLabels:Record<string,string> = {ACTIVE:'Activo',SUSPENDED:'Suspendido',PENDING_DELETION:'Eliminación programada'}
 const actionTitle = computed(() => action.value?.purge ? 'Eliminar taller definitivamente' : action.value?.status === 'ACTIVE' ? 'Reactivar taller' : action.value?.status === 'SUSPENDED' ? 'Suspender taller' : 'Programar eliminación')
-function changeStatus(workshop:Workshop,status:Workshop['status']) {error.value='';reason.value='';action.value={workshop,status}}
-function purge(workshop:Workshop) {error.value='';confirmation.value='';verificationCode.value='';action.value={workshop,purge:true}}
+function changeStatus(workshop:Workshop,status:Workshop['status']) {error.value='';actionError.value='';reasonInvalid.value=false;reason.value='';action.value={workshop,status}}
+function purge(workshop:Workshop) {error.value='';actionError.value='';reasonInvalid.value=false;confirmation.value='';verificationCode.value='';action.value={workshop,purge:true}}
 async function confirmAction() {
   const current=action.value
   if(!current || busy.value)return
-  error.value=''; notice.value=''
-  if(current.purge && (confirmation.value !== current.workshop.name || !/^[0-9]{6}$/.test(verificationCode.value))) {error.value='Escribe el nombre exacto del taller y un código de 6 dígitos válido.';return}
-  if(!current.purge && reason.value.trim().length<5) {error.value='Indica un motivo de al menos 5 caracteres.';return}
+  actionError.value = ''
+  reasonInvalid.value = false
+  notice.value = ''
+  if(current.purge && (confirmation.value !== current.workshop.name || !/^[0-9]{6}$/.test(verificationCode.value))) {actionError.value='Escribe el nombre exacto del taller y un código de 6 dígitos válido.';return}
+  if (!current.purge && reason.value.trim().length < 5) {
+    reasonInvalid.value = true
+    reasonInput.value?.focus()
+    return
+  }
   busy.value=true
   try {
     if(current.purge) await api.post(`/api/v1/console/workshops/${current.workshop.id}/purge`,{name:confirmation.value,code:verificationCode.value},csrf.value)
     else await api.post(`/api/v1/console/workshops/${current.workshop.id}/status`,{status:current.status,reason:reason.value.trim()},csrf.value)
     await refresh(); selected.value=null; action.value=null; notice.value=current.purge ? 'Taller eliminado.' : 'Estado del taller actualizado.'
-  } catch(err:any) {error.value=err?.message || 'No se pudo completar la acción.'}
+  } catch(err:any) {actionError.value=err?.message || 'No se pudo completar la acción.'}
   finally {busy.value=false}
 }
 function eventLabel(value:string) {return ({WORKSHOP_DEMO_CHANGED:'Clasificación demo actualizada',WORKSHOP_STATUS_CHANGED:'Estado del taller actualizado',WORKSHOP_PURGED:'Taller eliminado',CONSOLE_LOGIN:'Acceso a la consola'} as Record<string,string>)[value] || 'Cambio administrativo'}
@@ -116,22 +125,28 @@ onMounted(restore)
     <section v-if="loading" class="card">Verificando sesión…</section>
     <section v-else-if="!authenticated" class="login card"><h1>Administración de TallerFlow</h1><p>Acceso exclusivo para el equipo de plataforma.</p><form @submit.prevent="login"><label>Correo<input v-model="email" type="email" autocomplete="username" required/></label><label>Contraseña<input v-model="password" type="password" autocomplete="current-password" required/></label><label>Código de 6 dígitos<input v-model="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required/></label><button :disabled="busy">{{busy?'Ingresando…':'Ingresar'}}</button></form></section>
     <div v-else class="console-layout">
-      <div class="console-heading"><div><p>Consola de plataforma</p><h1>Vista general</h1><span>Adopción, actividad y estado de los talleres.</span></div><label class="demo-filter"><input v-model="includeDemo" type="checkbox" @change="refresh"/>Incluir talleres de demostración</label></div>
+      <div class="console-heading"><div><h1>Vista general</h1><nav class="console-links" aria-label="Secciones de la consola"><a href="#metricas">Métricas</a><a href="#workshops">Talleres</a><a href="#historial">Historial</a></nav></div><label class="demo-filter"><input v-model="includeDemo" type="checkbox" @change="refresh"/>Incluir talleres de demostración</label></div>
       <section v-if="summary" class="summary-grid" aria-label="Resumen de plataforma">
         <article><span class="stat-icon"><Building2 :size="23"/></span><span>Talleres activos</span><strong>{{summary.active_workshops}}</strong><small>{{summary.created_last_30_days}} creados en 30 días</small></article>
         <article><span class="stat-icon stat-icon--green"><Activity :size="23"/></span><span>Actividad reciente</span><strong>{{summary.active_last_7_days}}</strong><small>Talleres activos en los últimos 7 días</small></article>
         <article><span class="stat-icon stat-icon--violet"><PackageCheck :size="23"/></span><span>Órdenes creadas</span><strong>{{summary.orders_last_30_days}}</strong><small>En los últimos 30 días</small></article>
       </section>
       <section v-if="summary" class="platform-health"><span>Estado de los talleres</span><div class="health-track" role="img" :aria-label="`${summary.active_workshops} activos, ${summary.suspended_workshops} suspendidos, ${summary.pending_deletion_workshops} con eliminación programada`"><i :style="{flex:summary.active_workshops || 0}"/><i class="health-suspended" :style="{flex:summary.suspended_workshops || 0}"/><i class="health-deletion" :style="{flex:summary.pending_deletion_workshops || 0}"/></div><div class="health-legend"><span>{{summary.active_workshops}} activos</span><span>{{summary.suspended_workshops}} suspendidos</span><span>{{summary.pending_deletion_workshops}} con eliminación programada</span><span>{{summary.unverified_owners_over_48h}} propietarios sin verificar &gt; 48 h</span></div></section>
-      <section class="content"><AnalyticsPanel :revision="metricsRevision" :csrf="csrf" :include-demo="includeDemo"/></section>
+      <section id="metricas" class="content"><AnalyticsPanel :revision="metricsRevision" :csrf="csrf" :include-demo="includeDemo"/></section>
       <section class="content" id="workshops"><div class="heading"><div><h2>Talleres</h2><p>Administra el acceso y consulta su actividad.</p></div><form @submit.prevent="refresh"><label class="console-search"><Search :size="17"/><span class="sr-only">Buscar taller</span><input v-model="search" placeholder="Nombre o correo del propietario"/></label><button>Buscar</button></form></div>
         <div class="workshop-filters" role="group" aria-label="Estado del taller"><button v-for="filter in [{key:'ALL',label:'Todos'},{key:'ACTIVE',label:'Activos'},{key:'SUSPENDED',label:'Suspendidos'},{key:'PENDING_DELETION',label:'Eliminación programada'}]" :key="filter.key" :aria-pressed="statusFilter===filter.key" @click="statusFilter=filter.key">{{filter.label}}</button></div>
         <div class="table-wrap"><table><thead><tr><th>Taller</th><th>Estado</th><th>Última actividad</th><th>Equipo</th><th>Pedidos activos</th><th>Fotos</th><th><span class="sr-only">Gestión</span></th></tr></thead><tbody><tr v-for="workshop in visibleWorkshops" :key="workshop.id"><td><button class="workshop-name" @click="showWorkshop(workshop)">{{workshop.name}}</button><small>{{workshop.owner_email}}</small><span v-if="workshop.is_demo" class="demo-badge">Demostración</span></td><td data-label="Estado"><span :class="`status status--${workshop.status.toLowerCase()}`">{{statusLabels[workshop.status]}}</span></td><td data-label="Última actividad">{{date(workshop.last_activity)}}</td><td data-label="Equipo">{{workshop.members}} {{workshop.members===1?'miembro':'miembros'}}</td><td data-label="Pedidos activos">{{workshop.active_orders}}</td><td data-label="Fotos">{{workshop.photo_count}} {{workshop.photo_count===1?'foto':'fotos'}}<small>{{bytes(workshop.photo_bytes)}}</small></td><td><button class="manage-button" :aria-label="`Administrar ${workshop.name}`" @click="showWorkshop(workshop)">Administrar <ChevronRight :size="16"/></button></td></tr><tr v-if="!visibleWorkshops.length"><td colspan="7" class="empty-workshops">No hay talleres para esta selección.</td></tr></tbody></table></div>
       </section>
-      <section class="content"><h2>Actividad administrativa</h2><p class="muted">Cambios recientes realizados por el equipo de TallerFlow.</p><ul class="audit"><li v-for="event in visibleAudit" :key="event.id"><span class="audit-dot"/><div><strong>{{eventLabel(event.event_type)}}</strong><p>{{event.workshop_name || 'Plataforma'}}<span v-if="event.reason"> · {{event.reason}}</span></p><small>{{event.actor_email || 'Administrador'}}</small></div><time>{{date(event.created_at)}}</time></li><li v-if="!audit.length" class="muted">No hay cambios administrativos registrados.</li></ul><button v-if="audit.length>5" class="ops-button audit-more" @click="expandedAudit=!expandedAudit">{{expandedAudit?'Ver menos':'Ver todo el historial'}}</button></section>
+      <section id="historial" class="content"><h2>Actividad administrativa</h2><p class="muted">Cambios recientes realizados por el equipo de TallerFlow.</p><ul class="audit"><li v-for="event in visibleAudit" :key="event.id"><span class="audit-dot"/><div><strong>{{eventLabel(event.event_type)}}</strong><p>{{event.workshop_name || 'Plataforma'}}<span v-if="event.reason"> · {{event.reason}}</span></p><small>{{event.actor_email || 'Administrador'}}</small></div><time>{{date(event.created_at)}}</time></li><li v-if="!audit.length" class="muted">No hay cambios administrativos registrados.</li></ul><button v-if="audit.length>5" class="ops-button audit-more" @click="expandedAudit=!expandedAudit">{{expandedAudit?'Ver menos':'Ver todo el historial'}}</button></section>
     </div>
     <UiDialog v-if="selected && !action" :title="selected.name" :busy="busy" @close="selected=null"><p class="muted">{{selected.owner_email}}</p><div class="workshop-info"><span>Estado <b>{{statusLabels[selected.status]}}</b></span><span>Equipo <b>{{selected.members}} {{selected.members===1?'miembro':'miembros'}}</b></span><span>Pedidos activos <b>{{selected.active_orders}}</b></span></div><label class="demo-control"><div><strong>Taller de demostración</strong><p>Se excluye de las métricas habituales de adopción.</p></div><button role="switch" :aria-checked="selected.is_demo" :aria-label="`Taller de demostración: ${selected.name}`" :disabled="busy" @click="toggleDemo(selected)"><i/></button></label><p v-if="selected.deletion_scheduled_for" class="deletion-note">Eliminación programada: {{date(selected.deletion_scheduled_for)}}</p><div class="management-actions"><button v-if="selected.status !== 'ACTIVE'" class="ops-button" @click="changeStatus(selected,'ACTIVE')">{{selected.status==='PENDING_DELETION'?'Cancelar eliminación':'Reactivar taller'}}</button><button v-if="selected.status !== 'SUSPENDED'" class="ops-button" @click="changeStatus(selected,'SUSPENDED')">Suspender taller</button><button v-if="selected.status !== 'PENDING_DELETION'" class="ops-button danger-outline" @click="changeStatus(selected,'PENDING_DELETION')">Programar eliminación</button><button v-else class="ops-button danger-outline" @click="purge(selected)">Eliminar definitivamente</button></div></UiDialog>
-    <UiDialog v-if="action" :title="actionTitle" :busy="busy" @close="action=null"><p><strong>{{action.workshop.name}}</strong></p><template v-if="action.purge"><p>Esta acción elimina el taller y sus datos de forma definitiva.</p><label class="action-field">Nombre exacto del taller<input v-model="confirmation" autocomplete="off"/></label><label class="action-field">Código de 6 dígitos<input v-model="verificationCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code"/></label></template><template v-else><p class="muted">{{action.status==='SUSPENDED'?'El equipo perderá el acceso hasta que reactives el taller.':action.status==='PENDING_DELETION'?'La eliminación quedará programada. Podrás cancelarla durante el período de retención.':'El equipo podrá volver a acceder al taller.'}}</p><label class="action-field">Motivo<textarea v-model="reason" rows="3" maxlength="500" placeholder="Describe el motivo de este cambio"/></label></template><template #actions><button class="ops-button" :disabled="busy" @click="action=null">Cancelar</button><button class="ops-button ops-button--primary" :disabled="busy" @click="confirmAction">{{busy?'Guardando…':'Confirmar cambio'}}</button></template></UiDialog>
+    <UiDialog v-if="action" :title="actionTitle" :busy="busy" @close="action=null"><p><strong>{{action.workshop.name}}</strong></p><template v-if="action.purge"><p>Esta acción elimina el taller y sus datos de forma definitiva.</p><label class="action-field">Nombre exacto del taller<input v-model="confirmation" autocomplete="off"/></label><label class="action-field">Código de 6 dígitos<input v-model="verificationCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code"/></label></template><template v-else><p class="muted">{{action.status==='SUSPENDED'?'El equipo perderá el acceso hasta que reactives el taller.':action.status==='PENDING_DELETION'?'La eliminación quedará programada. Podrás cancelarla durante el período de retención.':'El equipo podrá volver a acceder al taller.'}}</p><label class="action-field">Motivo<textarea ref="reasonInput" v-model="reason" rows="3" maxlength="500" placeholder="Describe el motivo de este cambio"
+      :aria-invalid="reasonInvalid" :aria-describedby="reasonInvalid ? 'workshop-action-reason-error' : undefined"
+      @input="reasonInvalid = false"/></label>
+      <p v-if="reasonInvalid" id="workshop-action-reason-error" class="action-error" role="alert">Indica un motivo de al menos 5 caracteres.</p>
+    </template>
+    <p v-if="actionError" class="action-error" role="alert">{{ actionError }}</p>
+    <template #actions><button class="ops-button" :disabled="busy" @click="action=null">Cancelar</button><button class="ops-button ops-button--primary" :disabled="busy" @click="confirmAction">{{busy?'Guardando…':'Confirmar cambio'}}</button></template></UiDialog>
   </main>
 </template>
 <style scoped>
@@ -147,4 +162,45 @@ onMounted(restore)
 .table-wrap{position:relative}
 
 @media(max-width:760px){.table-wrap table,.table-wrap tbody{display:block;min-width:0;width:100%}.table-wrap thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}.table-wrap tbody{display:grid;gap:.8rem}.table-wrap tbody tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:.8rem;padding:1rem;border:1px solid var(--tf-border-soft);border-radius:14px;background:white}.table-wrap td{padding:0;border:0;min-width:0;overflow-wrap:anywhere}.table-wrap td:first-child,.table-wrap td:last-child{grid-column:1/-1}.table-wrap td[data-label]::before{content:attr(data-label);display:block;color:var(--tf-text-subtle);font-size:.7rem;margin-bottom:.3rem}.table-wrap .manage-button{justify-content:center;width:100%;min-height:44px}.workshop-name{font-size:.9rem}}
+.console-bar { border-bottom: 3px solid var(--tf-accent); }
+.summary-grid {
+  gap: 0;
+  border-block: 1px solid var(--tf-border-soft);
+  background: white;
+}
+.summary-grid article {
+  background: white;
+  border: 0;
+  border-radius: 0;
+  box-shadow: inset -1px 0 var(--tf-border-soft);
+}
+.summary-grid .stat-icon { background: transparent; color: var(--tf-primary); }
+.summary-grid .stat-icon--green { color: var(--tf-success); }
+.content, .card, .platform-health { border-radius: 8px; }
+.workshop-filters button {
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+}
+.workshop-filters button[aria-pressed="true"] {
+  background: transparent;
+  color: var(--tf-primary);
+  border-bottom-color: var(--tf-accent-text);
+}
+.console-heading {
+  padding: clamp(1.25rem, 3vw, 2.5rem);
+  background: #15394a;
+  color: white;
+  border-radius: 8px;
+}
+.console-heading h1 { font-size: clamp(2rem, 4vw, 3.25rem); letter-spacing: -.045em; line-height: 1.1; }
+.console-links { display: flex; flex-wrap: wrap; gap: 0 1.25rem; }
+.console-links a { display: inline-flex; align-items: center; min-height: 44px; color: #b9e9dd; text-underline-offset: 4px; }
+.demo-filter { min-height: 44px; color: white; cursor: pointer; }
+.console-layout section[id] { scroll-margin-top: 1rem; }
+.console-search:focus-within { outline: 2px solid var(--tf-primary); outline-offset: 2px; }
+.workshop-filters button:hover { background: #edf4f6; }
+.summary-grid strong { font-variant-numeric: tabular-nums; color: #15394a; }
+.action-error { margin: .55rem 0 0; color: #a01e3b; font-size: .875rem; font-weight: 600; }
+.action-field textarea[aria-invalid="true"] { border-color: #a01e3b; }
 </style>
