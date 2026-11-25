@@ -6,10 +6,11 @@ import { api } from './api'
 import { ordersApi, type DashboardMetrics, type Order } from '../orders/api'
 import { clientsApi } from '../clients/api'
 import { teamApi } from '../team/api'
-import { completedStations, productionStations } from '../orders/order-display'
+import { completedStations, formatOrderQuantity } from '../orders/order-display'
 import UiAlert from '../../components/UiAlert.vue'
 import UiButton from '../../components/UiButton.vue'
 import OrderTicket from '../../components/OrderTicket.vue'
+import ProductionSettingsPanel from '../orders/ProductionSettingsPanel.vue'
 
 const session = useSessionStore()
 const metrics = ref<DashboardMetrics>({ active: 0, on_time: 0, at_risk: 0, late: 0, completed: 0 })
@@ -85,16 +86,26 @@ function markAppDownloaded() {
 }
 
 const activeOrders = computed(() => orders.value.filter((order) => order.status === 'ACTIVE'))
-const todayKey = () => new Date().toLocaleDateString('en-CA')
-const dueToday = computed(() => activeOrders.value.filter((order) => new Date(order.promised_at).toLocaleDateString('en-CA') === todayKey()))
+const todayKey = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
+const dueToday = computed(() => activeOrders.value.filter((order) => new Date(order.promised_at).toLocaleDateString('en-CA', { timeZone: 'America/Lima' }) === todayKey()))
 const byPromise = (a: Order, b: Order) => new Date(a.promised_at).getTime() - new Date(b.promised_at).getTime()
 const urgentOrders = computed(() => activeOrders.value.filter((order) => order.traffic_light === 'LATE' || order.traffic_light === 'AT_RISK').sort(byPromise).slice(0, 5))
 const upcomingOrders = computed(() => activeOrders.value.filter((order) => order.traffic_light === 'ON_TIME').sort(byPromise).slice(0, 5))
 const attentionOrders = computed(() => urgentOrders.value.length ? urgentOrders.value : upcomingOrders.value)
-const stageCounts = computed(() => productionStations.map((name) => ({
-  name: name === 'CONTROL DE CALIDAD' ? 'Calidad' : name.charAt(0) + name.slice(1).toLocaleLowerCase('es-PE'),
-  count: activeOrders.value.filter((order) => order.current_stage?.toUpperCase() === name).length,
-})))
+const selectedStage = ref('')
+const queueFilter = ref('ALL')
+const quantitySummary = (items: Order[]) => {
+  const totals = new Map<string, number>()
+  for (const order of items) totals.set(order.unit, (totals.get(order.unit) ?? 0) + order.quantity)
+  return [...totals].map(([unit, quantity]) => formatOrderQuantity(quantity, unit)).join(' + ') || '0 unidades'
+}
+const stageCounts = computed(() => [...new Set(activeOrders.value.map(order => order.current_stage || 'Sin etapa'))].map(name => {
+  const items = activeOrders.value.filter(order => (order.current_stage || 'Sin etapa') === name)
+  return { name, count: items.length, quantities: quantitySummary(items) }
+}))
+const blockedOrders = computed(() => activeOrders.value.filter(order => order.block_reason))
+const unassignedOrders = computed(() => activeOrders.value.filter(order => !order.responsible_user_id))
+const queueOrders = computed(() => activeOrders.value.filter(order => (!selectedStage.value || order.current_stage === selectedStage.value) && (queueFilter.value === 'ALL' || (queueFilter.value === 'BLOCKED' ? !!order.block_reason : !order.responsible_user_id))).sort(byPromise))
 const busiestCount = computed(() => Math.max(0, ...stageCounts.value.map((stage) => stage.count)))
 const dateLabel = computed(() => new Intl.DateTimeFormat('es-PE', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date()))
 const alarmDetail = computed(() => {
@@ -165,6 +176,7 @@ onMounted(() => {
     <UiAlert v-if="error" :message="error" />
 
     <RouterLink v-if="loading" to="/app/orders" class="alarm alarm--loading" aria-live="polite"><strong>Revisando el taller…</strong></RouterLink>
+    <section v-else-if="error" class="alarm alarm--loading" role="status"><strong>Estado del taller no disponible</strong><span>No pudimos verificar los pedidos. Pulsa Actualizar panel para reintentar.</span></section>
     <RouterLink v-else-if="metrics.late" to="/app/orders?filter=LATE" class="alarm alarm--late">
       <strong>{{ metrics.late }} {{ metrics.late === 1 ? 'ATRASADA' : 'ATRASADAS' }}</strong>
       <span>{{ alarmDetail }}</span>
@@ -177,7 +189,7 @@ onMounted(() => {
     </RouterLink>
 
     <!-- Primeros pasos (Sprint 3 - Lucero) -->
-    <section v-if="showFirstSteps" class="first-steps" aria-labelledby="first-steps-title">
+    <section v-if="showFirstSteps && !error && !loading" class="first-steps" aria-labelledby="first-steps-title">
       <div class="first-steps__header">
         <div>
           <h2 id="first-steps-title" class="first-steps__title">Primeros pasos en tu taller</h2>
@@ -240,7 +252,7 @@ onMounted(() => {
       </div>
     </section>
 
-    <div class="overview-grid">
+    <div v-if="!error" class="overview-grid">
       <section class="overview-section" aria-labelledby="priority-title">
         <div class="overview-section__head"><h2 id="priority-title">{{ urgentOrders.length ? 'Requieren atención' : 'Próximas entregas' }}</h2><RouterLink to="/app/orders">Ver todas <ArrowRight :size="16" /></RouterLink></div>
         <div v-if="loading" class="ops-empty">Cargando pedidos…</div>
@@ -253,7 +265,7 @@ onMounted(() => {
             :code="order.code"
             :product="order.product"
             :state="order.traffic_light"
-            :completed="completedStations(order)"
+            :completed="completedStations(order)" :total="order.stage_count ?? 7"
             :station="stationLabel(order)"
             :client="order.client_name"
             :due="formatDate(order.promised_at)"
@@ -271,15 +283,30 @@ onMounted(() => {
       </section>
     </div>
 
-    <section class="overview-section" aria-labelledby="flow-title">
+    <section v-if="!error" class="overview-section" aria-labelledby="flow-title">
       <div class="overview-section__head"><h2 id="flow-title">Trabajo por estación</h2><RouterLink to="/app/orders?view=board">Abrir tablero <ArrowRight :size="16" /></RouterLink></div>
       <ol class="overview-flow">
         <li v-for="stage in stageCounts" :key="stage.name" :class="{ 'is-busiest': !loading && stage.count > 0 && stage.count === busiestCount }">
-          <strong>{{ loading ? '—' : stage.count }}</strong><span>{{ stage.name }}</span>
+          <button type="button" @click="selectedStage = stage.name; queueFilter = 'ALL'"><strong>{{ loading ? '—' : stage.count }} pedidos</strong><span>{{ stage.name }}</span><span>{{ stage.quantities }}</span></button>
         </li>
       </ol>
     </section>
   
+    <section v-if="!error" class="overview-section" aria-labelledby="queue-title">
+      <h2 id="queue-title">Acciones de producción</h2>
+      <p>{{ activeOrders.length }} pedidos activos · {{ quantitySummary(activeOrders) }}</p>
+      <div class="queue-controls">
+        <button type="button" @click="queueFilter = 'ALL'; selectedStage = ''">Todos</button>
+        <button type="button" @click="queueFilter = 'BLOCKED'; selectedStage = ''">Bloqueados ({{ blockedOrders.length }})</button>
+        <button type="button" @click="queueFilter = 'UNASSIGNED'; selectedStage = ''">Sin responsable ({{ unassignedOrders.length }})</button>
+      </div>
+      <p v-if="selectedStage">Etapa seleccionada: {{ selectedStage }}</p>
+      <p v-if="!loading && !queueOrders.length">No hay pedidos para esta selección.</p>
+      <ul class="production-queue">
+        <li v-for="order in queueOrders" :key="order.id"><RouterLink :to="`/app/orders/${order.id}`"><strong>{{ order.code }} · {{ order.product }}</strong><span>{{ formatOrderQuantity(order.quantity, order.unit) }} · {{ order.current_stage }}</span><span>{{ order.traffic_light === 'LATE' ? 'Atrasada · ' : '' }}Entrega: {{ formatDate(order.promised_at) }}</span><span v-if="order.block_reason">Bloqueo: {{ order.block_reason }}</span><span v-if="!order.responsible_user_id">Asignar responsable</span></RouterLink></li>
+      </ul>
+    </section>
+    <ProductionSettingsPanel v-if="isManager" />
     <!-- Modal Exportar Datos (Sprint 4 - Lucero) -->
     <Teleport to="body">
       <div v-if="showExportModal" class="export-modal-backdrop" @click.self="showExportModal = false">
@@ -360,7 +387,7 @@ onMounted(() => {
 .overview-today-note { margin: 0; color: var(--tf-text-subtle); font-size: .88rem; }
 .mono { font-family: var(--tf-font-mono); font-variant-numeric: tabular-nums; }
 
-.overview-flow { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .5rem; margin: 0; padding: 0; list-style: none; }
+.overview-flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: .5rem; margin: 0; padding: 0; list-style: none; }
 .overview-flow li { display: grid; gap: .2rem; min-width: 0; padding: .6rem .25rem; border-radius: var(--tf-radius-sm); background: var(--tf-surface-subtle); text-align: center; }
 .overview-flow strong { font-family: var(--tf-font-display); font-variation-settings: "wdth" 112; font-weight: 800; font-size: 1.5rem; line-height: 1; }
 .overview-flow span { color: var(--tf-text-subtle); font-size: .72rem; font-weight: 700; overflow-wrap: anywhere; }
@@ -556,4 +583,7 @@ onMounted(() => {
   justify-content: flex-end;
   margin-top: 0.5rem;
 }
+.overview-flow button { display: grid; gap: .35rem; width: 100%; min-height: 80px; padding: .5rem; background: transparent; border: 0; cursor: pointer; font: inherit; text-align: left; }
+.queue-controls { display: flex; flex-wrap: wrap; gap: .5rem; } .queue-controls button { min-height: 44px; padding: .5rem; cursor: pointer; }
+.production-queue { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); list-style: none; padding: 0; gap: .75rem; } .production-queue a { display: grid; gap: .4rem; padding: 1rem; border: 1px solid var(--tf-border); border-radius: .4rem; color: var(--tf-ink); text-decoration: none; }
 </style>

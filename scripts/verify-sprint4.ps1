@@ -55,6 +55,12 @@ try {
     Assert-NativeSuccess 'Email verification contract tests'
     Get-Content database/tests/sprint4_michael_contract.sql -Raw | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d tallerflow
     Assert-NativeSuccess 'Order recovery and console contract tests'
+    docker compose cp ./database postgres:/tmp/tallerflow-database
+    Assert-NativeSuccess 'Copy SQL migration fixtures'
+    docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d tallerflow -f /tmp/tallerflow-database/tests/sprint5_production_contract.sql
+    Assert-NativeSuccess 'Production migration, tenant isolation and account purge contract'
+    docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d tallerflow -f /tmp/tallerflow-database/tests/bootstrap_owner_purge_contract.sql
+    Assert-NativeSuccess 'Initial owner purge preserves the installation claim'
 
     $env:TF_TEST_DATABASE_URL = 'postgres://tallerflow_app:local-app-change-me@127.0.0.1:55435/tallerflow?sslmode=disable'
     $env:TF_TEST_BOOTSTRAP_DATABASE_URL = 'postgres://tallerflow_bootstrap:local-bootstrap-change-me@127.0.0.1:55435/tallerflow?sslmode=disable'
@@ -81,6 +87,8 @@ try {
     Assert-NativeSuccess 'Playwright onboarding journey'
     npm --prefix frontend run test:e2e -- signup-flow.spec.ts
     Assert-NativeSuccess 'Playwright open signup journey'
+    npm --prefix frontend run test:e2e -- sprint5-flow.spec.ts
+    Assert-NativeSuccess 'Playwright production configuration and stable tracking journey'
 }
 catch {
     $verificationFailure = $_

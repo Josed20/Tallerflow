@@ -8,10 +8,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Josed20/Tallerflow/backend/internal/analytics"
 	"github.com/Josed20/Tallerflow/backend/internal/auth"
 	"github.com/Josed20/Tallerflow/backend/internal/clients"
-	"github.com/Josed20/Tallerflow/backend/internal/exports"
 	platformconsole "github.com/Josed20/Tallerflow/backend/internal/console"
+	"github.com/Josed20/Tallerflow/backend/internal/exports"
 	"github.com/Josed20/Tallerflow/backend/internal/onboarding"
 	"github.com/Josed20/Tallerflow/backend/internal/orders"
 	"github.com/Josed20/Tallerflow/backend/internal/passwordreset"
@@ -252,7 +253,7 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 	ordersService := orders.NewService(ordersRepo, photoStore)
 	ordersHandler := orders.NewHandler(ordersService)
 	exportsHandler := exports.NewHandler(ordersRepo, clientsRepo)
-	trackingRepo, err := orders.NewPostgresTrackingRepository(db, tenantRunner)
+	trackingRepo, err := orders.NewPostgresTrackingRepository(db, tenantRunner, cfg.SessionPepper)
 	if err != nil {
 		return nil, fmt.Errorf("create tracking repository: %w", err)
 	}
@@ -264,12 +265,19 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 		}
 		return onboardingModule.ping(ctx)
 	}
+	analyticsService := &analytics.Service{DB: db, Tenants: tenantRunner}
+	stopAnalytics := analyticsService.StartRetention()
+	previousClose := closeApplication
+	closeApplication = onceClose(func() error { stopAnalytics(); return previousClose() })
 	router := httpx.NewRouter(httpx.Dependencies{
 		Ping:       ping,
 		Middleware: []gin.HandlerFunc{security.MobileCORS(cfg.MobileOrigins)},
 		Routes: []httpx.RouteRegistrar{
 			func(routes gin.IRouter) { onboarding.RegisterRoutes(routes, onboardingHandler) },
 			func(routes gin.IRouter) { auth.RegisterRoutes(routes, authHandler) },
+			func(routes gin.IRouter) {
+				analytics.RegisterRoutes(routes, analyticsService, authHandler.RequireSession(), append([]string{cfg.AllowedOrigin}, cfg.MobileOrigins...))
+			},
 			func(routes gin.IRouter) { passwordreset.RegisterRoutes(routes, passwordResetHandler) },
 			func(routes gin.IRouter) { signup.RegisterRoutes(routes, signupHandler) },
 			func(routes gin.IRouter) {

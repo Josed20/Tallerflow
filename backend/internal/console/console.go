@@ -46,6 +46,9 @@ type Session struct {
 	LastSeenAt time.Time
 }
 type Workshop struct {
+	PhotoCount           int64      `json:"photo_count"`
+	R2PhotoCount         int64      `json:"r2_photo_count"`
+	IsDemo               bool       `json:"is_demo"`
 	ID                   uuid.UUID  `json:"id"`
 	Name                 string     `json:"name"`
 	OwnerEmail           string     `json:"owner_email"`
@@ -53,7 +56,7 @@ type Workshop struct {
 	LastActivity         *time.Time `json:"last_activity"`
 	Members              int64      `json:"members"`
 	ActiveOrders         int64      `json:"active_orders"`
-	PhotoBytes           int64      `json:"photo_bytes"`
+	PhotoBytes           *int64     `json:"photo_bytes"`
 	Status               string     `json:"status"`
 	DeletionScheduledFor *time.Time `json:"deletion_scheduled_for"`
 	StatusReason         string     `json:"status_reason,omitempty"`
@@ -74,11 +77,11 @@ type Summary struct {
 	ActiveWorkshops          int64 `json:"active_workshops"`
 	SuspendedWorkshops       int64 `json:"suspended_workshops"`
 	PendingDeletionWorkshops int64 `json:"pending_deletion_workshops"`
-	CreatedLast7Days         int64 `json:"created_last_7_days"`
-	CreatedLast30Days        int64 `json:"created_last_30_days"`
-	ActiveLast7Days          int64 `json:"active_last_7_days"`
-	UnverifiedOwnersOver48h  int64 `json:"unverified_owners_over_48h"`
-	OrdersLast30Days         int64 `json:"orders_last_30_days"`
+	CreatedLast7Days         int64 `json:"created_last_7_days" gorm:"column:created_last_7_days"`
+	CreatedLast30Days        int64 `json:"created_last_30_days" gorm:"column:created_last_30_days"`
+	ActiveLast7Days          int64 `json:"active_last_7_days" gorm:"column:active_last_7_days"`
+	UnverifiedOwnersOver48h  int64 `json:"unverified_owners_over_48h" gorm:"column:unverified_owners_over_48h"`
+	OrdersLast30Days         int64 `json:"orders_last_30_days" gorm:"column:orders_last_30_days"`
 }
 type StatusChange struct {
 	OwnerEmail           string     `gorm:"column:owner_email"`
@@ -236,17 +239,18 @@ func (s *Service) Logout(ctx context.Context, sessionID uuid.UUID) error {
 }
 func (s *Service) ListWorkshops(ctx context.Context, search string, limit, offset int) ([]Workshop, error) {
 	var rows []Workshop
-	err := s.db.WithContext(ctx).Raw("SELECT * FROM console_list_workshops(?, ?, ?)", strings.TrimSpace(search), limit, offset).Scan(&rows).Error
+	err := s.db.WithContext(ctx).Raw("SELECT w.*, p.* FROM console_list_workshops(?, ?, ?) w CROSS JOIN LATERAL console_photo_counts(w.id) p", strings.TrimSpace(search), limit, offset).Scan(&rows).Error
 	return rows, err
 }
-func (s *Service) Summary(ctx context.Context) (Summary, error) {
+func (s *Service) Summary(ctx context.Context) (Summary, error) { return s.SummaryFiltered(ctx, false) }
+func (s *Service) SummaryFiltered(ctx context.Context, includeDemo bool) (Summary, error) {
 	var result Summary
-	err := s.db.WithContext(ctx).Raw("SELECT * FROM console_summary()").Scan(&result).Error
+	err := s.db.WithContext(ctx).Raw("SELECT * FROM console_summary_filtered(?)", includeDemo).Scan(&result).Error
 	return result, err
 }
 func (s *Service) Workshop(ctx context.Context, id uuid.UUID) (Workshop, error) {
 	var result Workshop
-	err := s.db.WithContext(ctx).Raw("SELECT * FROM console_workshop_detail(?)", id).Scan(&result).Error
+	err := s.db.WithContext(ctx).Raw("SELECT w.*, p.* FROM console_workshop_detail(?) w CROSS JOIN LATERAL console_photo_counts(w.id) p", id).Scan(&result).Error
 	return result, err
 }
 func (s *Service) SetStatus(ctx context.Context, adminID, workshopID uuid.UUID, status, reason, sourceIP string) (StatusChange, error) {
@@ -415,7 +419,7 @@ func (h *Handler) Workshops(c *gin.Context) {
 	c.JSON(200, gin.H{"data": rows})
 }
 func (h *Handler) Summary(c *gin.Context) {
-	result, err := h.service.Summary(c)
+	result, err := h.service.SummaryFiltered(c, c.Query("include_demo") == "true")
 	if err != nil {
 		httpx.RespondError(c, 500, "INTERNAL_ERROR", "An unexpected error occurred.")
 		return
@@ -510,4 +514,7 @@ func RegisterRoutes(routes gin.IRouter, h *Handler) {
 	routes.POST("/api/v1/console/workshops/:id/status", authn, h.SetStatus)
 	routes.POST("/api/v1/console/workshops/:id/purge", authn, h.Purge)
 	routes.GET("/api/v1/console/audit", authn, h.Audit)
+	routes.GET("/api/v1/console/analytics", authn, h.Analytics)
+	routes.POST("/api/v1/console/analytics/play/import", authn, h.ImportPlay)
+	routes.POST("/api/v1/console/workshops/:id/demo", authn, h.SetDemo)
 }

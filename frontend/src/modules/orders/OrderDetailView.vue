@@ -17,6 +17,8 @@ import { completedStations, formatOrderQuantity } from './order-display'
 import StatusChip from '../../components/StatusChip.vue'
 import StitchSeam from '../../components/StitchSeam.vue'
 import StageAdvanceDialog from './StageAdvanceDialog.vue'
+import OrderOperationPanel from './OrderOperationPanel.vue'
+import { manageTrackingLink } from '../tracking/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -40,6 +42,7 @@ const showSharePanel = ref(false)
 const trackingUrl = ref('')
 const generatingLink = ref(false)
 const shareError = ref('')
+const shareNotice = ref('')
 const copied = ref(false)
 const trackingInput = ref<HTMLInputElement | null>(null)
 const clock = ref(Date.now())
@@ -59,6 +62,8 @@ const editForm = ref({
   clientId: '',
   product: '',
   quantity: 0,
+  specification: '',
+  changeReason: '',
   promisedDate: '',
   promisedTime: '18:00',
 })
@@ -69,7 +74,7 @@ const lastCompletedPosition = computed(() => Math.max(0, ...(order.value?.stages
 
 function canReopen(stage: OrderStage) {
   if (!canCorrect.value || stage.status !== 'COMPLETED' || stage.position !== lastCompletedPosition.value) return false
-  if (stage.position === 7) return order.value?.status === 'COMPLETED'
+  if (stage.position === order.value?.stages?.length) return order.value?.status === 'COMPLETED'
   const next = order.value?.stages?.find((item) => item.position === stage.position + 1)
   return next?.status === 'IN_PROGRESS' && getStagePhotos(stage.position + 1).length === 0
 }
@@ -120,6 +125,8 @@ async function openEditModal() {
     clientId: order.value.client_id,
     product: order.value.product,
     quantity: order.value.quantity,
+    specification: order.value.specification,
+    changeReason: '',
     promisedDate: localDate,
     promisedTime: localTime,
   }
@@ -168,6 +175,7 @@ async function handleEditOrder() {
         client_id: editForm.value.clientId,
         product: editForm.value.product.trim(),
         quantity: Number(editForm.value.quantity),
+        ...(editForm.value.specification !== order.value.specification ? { specification: editForm.value.specification, change_reason: editForm.value.changeReason } : {}),
         promised_at: combinedISO,
         version: order.value.version,
       },
@@ -254,7 +262,7 @@ async function loadOrder(showLoading = true) {
 }
 
 async function handleAdvanceStage(stage: OrderStage, nextStatus: StageStatus) {
-  if (!order.value || !canAdvance.value || stage.status !== 'IN_PROGRESS' || nextStatus !== 'COMPLETED') return
+  if (!order.value || order.value.block_reason || !canAdvance.value || stage.status !== 'IN_PROGRESS' || nextStatus !== 'COMPLETED') return
   if (!session.csrfToken) {
     error.value = 'Tu sesión ya no permite actualizar producción. Actualiza la página e inicia sesión nuevamente.'
     return
@@ -354,9 +362,9 @@ function getStagePhotos(position: number): StagePhoto[] {
 }
 
 function nextStageName(position: number) {
-  if (position >= 7) return null
+  if (position >= (order.value?.stages?.length ?? 0)) return null
   return order.value?.stages?.find((stage) => stage.position === position + 1)?.name
-    ?? ['Corte', 'Costura', 'Acabado', 'Control de calidad', 'Planchado', 'Empaque', 'Entrega'][position]
+    ?? null
 }
 
 function formatDate(iso: string) {
@@ -382,20 +390,37 @@ const whatsappUrl = computed(() => order.value && trackingUrl.value
   ? `https://wa.me/?text=${encodeURIComponent(`Hola, puedes ver el avance de tu pedido ${order.value.code} (${order.value.product}) aquí: ${trackingUrl.value}`)}`
   : '')
 
-async function generateTrackingLink() {
+async function openSharePanel() {
+  showSharePanel.value = !showSharePanel.value
+  if (showSharePanel.value) await generateTrackingLink()
+}
+
+async function generateTrackingLink(action: 'recover' | 'replace' | 'revoke' = 'recover') {
   if (!order.value || generatingLink.value) return
   if (!session.csrfToken) {
     shareError.value = 'Tu sesión necesita renovarse. Vuelve a iniciar sesión.'
     return
   }
+  if (action !== 'recover' && !window.confirm(action === 'replace'
+    ? '¿Reemplazar el enlace? Los enlaces enviados antes dejarán de funcionar.'
+    : '¿Revocar los enlaces? El cliente ya no podrá consultar esta orden.')) return
   generatingLink.value = true
   shareError.value = ''
+  shareNotice.value = ''
   copied.value = false
   try {
-    const response = await ordersApi.createTrackingLink(order.value.id, session.csrfToken)
-    trackingUrl.value = `${window.location.origin}/seguimiento/${response.data.token}`
+    const response = await manageTrackingLink(order.value.id, session.csrfToken, action)
+    const publicOrigin = (import.meta.env.VITE_API_BASE_URL || window.location.origin).replace(/\/+$/, '')
+    trackingUrl.value = response.data.token ? `${publicOrigin}/seguimiento/${response.data.token}` : ''
+    shareNotice.value = action === 'revoke'
+      ? 'Todos los enlaces quedaron revocados. Los enlaces enviados ya no permiten consultar esta orden.'
+      : action === 'replace'
+        ? 'Enlace reemplazado. Los enlaces anteriores ya no funcionan; comparte este nuevo enlace.'
+        : 'Enlace listo para compartir. Copiarlo no cambia el enlace.'
   } catch (err: any) {
-    shareError.value = err?.message || 'No pudimos generar el enlace.'
+    shareError.value = err?.code === 'TRACKING_RECOVERY_UNAVAILABLE'
+      ? 'El secreto del servidor cambió. Usa Reemplazar enlace para crear uno nuevo; el anterior dejará de funcionar.'
+      : err?.message || 'No pudimos recuperar el enlace. Inténtalo de nuevo.'
   } finally {
     generatingLink.value = false
   }
@@ -403,6 +428,7 @@ async function generateTrackingLink() {
 
 async function copyTrackingLink() {
   try {
+    shareError.value = ''
     await navigator.clipboard.writeText(trackingUrl.value)
     copied.value = true
   } catch {
@@ -460,7 +486,7 @@ onUnmounted(() => {
           <h1>{{ order.product }}</h1>
         </div>
         <div class="header-actions">
-          <button v-if="canCorrect" class="btn-ticket" type="button" :aria-expanded="showSharePanel" @click="showSharePanel = !showSharePanel">
+          <button v-if="canCorrect" class="btn-ticket" type="button" :aria-expanded="showSharePanel" @click="openSharePanel">
             <Link2 :size="17" aria-hidden="true" /> Compartir con el cliente
           </button>
           <button class="btn-ticket" type="button" @click="showTicketModal = true">
@@ -481,25 +507,32 @@ onUnmounted(() => {
         <h2 id="share-title">Enlace de seguimiento para el cliente</h2>
         <button class="share-panel__close" type="button" aria-label="Cerrar" @click="showSharePanel = false"><X :size="18" /></button>
       </div>
-      <p class="share-panel__text">El cliente verá la estación actual, la fecha de entrega, el semáforo y las fotos de evidencia de <strong>{{ order.code }}</strong>, sin crear una cuenta. No verá datos internos ni otras órdenes.</p>
+      <p class="share-panel__text">El cliente verá el producto, la descripción, las etapas, la fecha prometida y las fotos de avance de <strong>{{ order.code }}</strong>, sin crear una cuenta. No verá datos internos ni otras órdenes.</p>
       <template v-if="trackingUrl">
         <label class="share-panel__label" for="tracking-url">Enlace privado</label>
         <div class="share-panel__row">
           <input id="tracking-url" ref="trackingInput" class="share-panel__input" type="text" readonly :value="trackingUrl" @focus="($event.target as HTMLInputElement).select()" />
-          <button class="share-panel__primary" type="button" @click="copyTrackingLink"><Copy :size="16" aria-hidden="true" /> {{ copied ? 'Copiado' : 'Copiar' }}</button>
+          <button class="share-panel__primary" type="button" :disabled="generatingLink" @click="copyTrackingLink"><Copy :size="16" aria-hidden="true" /> {{ copied ? 'Copiado' : 'Copiar' }}</button>
         </div>
         <div class="share-panel__links">
           <a :href="whatsappUrl" target="_blank" rel="noopener noreferrer">Enviar por WhatsApp</a>
           <a :href="trackingUrl" target="_blank" rel="noopener noreferrer"><ExternalLink :size="14" aria-hidden="true" /> Ver como cliente</a>
         </div>
-        <p class="share-panel__note">Guárdalo ahora: por seguridad no se puede volver a mostrar. Si lo pierdes, genera uno nuevo.</p>
+        <p class="share-panel__note">Puedes volver a abrir este panel y copiar el mismo enlace. Vence 30 días después de completar la orden; si se reabre, vuelve a estar disponible.</p>
       </template>
       <template v-else>
-        <p class="share-panel__note">Si ya enviaste un enlace de esta orden antes, generar uno nuevo lo desactiva.</p>
-        <button class="share-panel__primary" type="button" :disabled="generatingLink" @click="generateTrackingLink">
-          <Link2 :size="16" aria-hidden="true" /> {{ generatingLink ? 'Generando...' : 'Generar enlace' }}
+        <p class="share-panel__note">Recupera el enlace de esta orden. Los enlaces enviados antes seguirán funcionando hasta que los reemplaces o revoques.</p>
+        <button class="share-panel__primary" type="button" :disabled="generatingLink" @click="generateTrackingLink()">
+          <Link2 :size="16" aria-hidden="true" /> {{ generatingLink ? 'Recuperando…' : 'Recuperar o crear enlace' }}
         </button>
       </template>
+      <div class="share-panel__links">
+        <button type="button" :disabled="generatingLink" @click="generateTrackingLink('replace')">Reemplazar enlace</button>
+        <button type="button" :disabled="generatingLink" @click="generateTrackingLink('revoke')">Revocar todos los enlaces</button>
+      </div>
+      <p v-if="generatingLink" role="status">Procesando enlace…</p>
+      <p v-if="shareNotice" role="status">{{ shareNotice }}</p>
+      <p v-if="copied" role="status">Enlace copiado. Puedes volver a compartirlo.</p>
       <p v-if="shareError" class="share-panel__error" role="alert">{{ shareError }}</p>
     </section>
 
@@ -514,7 +547,7 @@ onUnmounted(() => {
       <div class="order-delivery-line">
         <StatusChip :state="order.traffic_light" />
         <span class="order-delivery-line__date">Entrega prometida <strong>{{ formatDate(order.promised_at) }}</strong></span>
-        <StitchSeam class="order-delivery-line__seam" :completed="completedStations(order)" :tone="order.traffic_light === 'LATE' ? 'late' : 'default'" />
+        <StitchSeam class="order-delivery-line__seam" :completed="completedStations(order)" :total="order.stages?.length ?? order.stage_count ?? 7" :tone="order.traffic_light === 'LATE' ? 'late' : 'default'" />
       </div>
 
       <!-- Ficha de Datos del Pedido -->
@@ -546,6 +579,8 @@ onUnmounted(() => {
         </div>
       </section>
 
+      <OrderOperationPanel :order="order" @updated="order = $event" />
+
       <!-- Flujo de Etapas de Producción (Micro-MES) con Fotos de Evidencia -->
       <section class="stages-section">
         <div class="stages-header">
@@ -567,6 +602,7 @@ onUnmounted(() => {
                 <span class="stage-num">{{ stage.position }}</span>
                 <div class="stage-text">
                   <h3>{{ stage.name }}</h3>
+                  <p v-if="stage.client_description">{{ stage.client_description }}</p>
                   <span class="stage-status-label">
                     <span v-if="stage.status === 'COMPLETED'">Completada {{ formatShortTime(stage.completed_at) }}</span>
                     <span v-else-if="stage.status === 'IN_PROGRESS'">En proceso</span>
@@ -607,7 +643,7 @@ onUnmounted(() => {
                 <button
                   v-if="stage.status === 'IN_PROGRESS' && canAdvance"
                   class="btn-complete-stage"
-                  :disabled="updatingStage === stage.position"
+                  :disabled="updatingStage === stage.position || !!order.block_reason"
                   @click="pendingAdvanceStage = stage"
                 >
                   {{ updatingStage === stage.position ? 'Guardando...' : nextStageName(stage.position) ? `Completar etapa · pasar a ${nextStageName(stage.position)?.toLocaleLowerCase('es-PE')}` : 'Completar etapa y pedido' }}
@@ -730,6 +766,12 @@ onUnmounted(() => {
             <input id="edit-quantity" v-model.number="editForm.quantity" type="number" step="any" min="0.01" required :disabled="editingOrder" />
           </div>
 
+          <div class="form-group">
+            <label for="edit-specification">Especificaciones / Diseño</label>
+            <textarea id="edit-specification" v-model="editForm.specification" maxlength="10000" rows="4" :disabled="editingOrder" />
+            <label v-if="editForm.specification !== order.specification" for="edit-change-reason">Motivo del cambio de diseño</label>
+            <textarea v-if="editForm.specification !== order.specification" id="edit-change-reason" v-model="editForm.changeReason" required minlength="5" maxlength="300" :disabled="editingOrder" />
+          </div>
           <div class="form-row-2">
             <div class="form-group">
               <label for="edit-date">Fecha de entrega</label>
@@ -1411,6 +1453,7 @@ h1 {
 .share-panel__primary:hover:not(:disabled) { background: var(--tf-primary-hover); }
 .share-panel__primary:disabled { opacity: .65; cursor: wait; }
 .share-panel__links { display: flex; flex-wrap: wrap; gap: 1.1rem; }
+.share-panel__links button { min-height: 44px; padding: .4rem .7rem; border: 1px solid var(--tf-primary-border); border-radius: var(--tf-radius-sm); background: var(--tf-surface); color: var(--tf-primary); font: inherit; cursor: pointer; }
 .share-panel__links a { display: inline-flex; align-items: center; gap: .3rem; min-height: 44px; color: var(--tf-primary-strong); font-size: .88rem; font-weight: 700; }
 .share-panel__error { margin: 0; color: var(--tf-error); font-size: .85rem; font-weight: 700; }
 .share-panel button:focus-visible, .share-panel a:focus-visible, .share-panel__input:focus-visible { outline: 3px solid var(--tf-focus); outline-offset: 2px; }

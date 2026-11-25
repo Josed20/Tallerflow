@@ -9,6 +9,7 @@ const props = defineProps<{
   product: string
   state: DeliveryState
   completed: number
+  total?: number
   station?: string
   client?: string
   due?: string
@@ -29,7 +30,7 @@ const late = computed(() => props.state === 'LATE')
         <span v-if="due">{{ due }}</span>
       </span>
       <slot />
-      <StitchSeam :completed="completed" :tone="late ? 'late' : 'default'" />
+      <StitchSeam :completed="completed" :total="total ?? 7" :tone="late ? 'late' : 'default'" />
     </span>
   </component>
 </template>

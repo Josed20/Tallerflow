@@ -100,6 +100,8 @@ func TestReopenStageRejectsWhenNextStageHasEvidence(t *testing.T) {
 	workshopID, orderID, stageID, nextID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT status FROM orders WHERE id = $1 FOR UPDATE")).WithArgs(orderID).
 		WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("ACTIVE"))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT max(position) FROM order_stages WHERE order_id = $1")).WithArgs(orderID).
+		WillReturnRows(sqlmock.NewRows([]string{"max"}).AddRow(6))
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, workshop_id, order_id, position, name, status, completed_at, completed_by FROM order_stages WHERE order_id = $1 AND position = $2 FOR UPDATE")).WithArgs(orderID, 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "workshop_id", "order_id", "position", "name", "status", "completed_at", "completed_by"}).AddRow(stageID, workshopID, orderID, 1, "CORTE", "COMPLETED", time.Now(), uuid.New()))
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, workshop_id, order_id, position, name, status, completed_at, completed_by FROM order_stages WHERE order_id = $1 AND position = $2 FOR UPDATE")).WithArgs(orderID, 2).
@@ -118,6 +120,8 @@ func TestReopenStageRecordsCorrectionAndRestoresPreviousStage(t *testing.T) {
 	repository.now = func() time.Time { return now }
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT status FROM orders WHERE id = $1 FOR UPDATE")).WithArgs(orderID).
 		WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("ACTIVE"))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT max(position) FROM order_stages WHERE order_id = $1")).WithArgs(orderID).
+		WillReturnRows(sqlmock.NewRows([]string{"max"}).AddRow(6))
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, workshop_id, order_id, position, name, status, completed_at, completed_by FROM order_stages WHERE order_id = $1 AND position = $2 FOR UPDATE")).WithArgs(orderID, 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "workshop_id", "order_id", "position", "name", "status", "completed_at", "completed_by"}).AddRow(stageID, workshopID, orderID, 1, "CORTE", "COMPLETED", now, actorID))
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, workshop_id, order_id, position, name, status, completed_at, completed_by FROM order_stages WHERE order_id = $1 AND position = $2 FOR UPDATE")).WithArgs(orderID, 2).

@@ -17,7 +17,7 @@ import BrandLogo from '../../components/BrandLogo.vue'
         <header class="legal-article__header">
           <span class="legal-badge">Protección de datos</span>
           <h1>Política de Privacidad</h1>
-          <p class="legal-date">Conforme a la Ley N° 29733 (Perú) · Octubre de 2026</p>
+          <p class="legal-date">Conforme a la Ley N° 29733 (Perú) · Noviembre de 2026</p>
         </header>
 
         <section>
@@ -29,12 +29,17 @@ import BrandLogo from '../../components/BrandLogo.vue'
 
         <section>
           <h2>2. Datos que Tratamos y Finalidad</h2>
-          <p>Tratamos únicamente los datos necesarios para brindar el servicio de trazabilidad textil:</p>
+          <p>Tratamos los siguientes datos para prestar y mejorar el servicio de trazabilidad textil:</p>
           <ul>
             <li><strong>Datos del taller y equipo:</strong> Razón social o nombre comercial, nombre y correo del propietario y miembros (operarios y administradores), para gestionar accesos y perfiles de trabajo.</li>
             <li><strong>Clientes de confección:</strong> Nombre comercial o de contacto, y teléfono de coordinación para generar los enlaces de seguimiento.</li>
             <li><strong>Órdenes y fotos de evidencia:</strong> Fichas de lote, cantidades, estaciones de avance y fotografías tomadas en planta para sustentar el control de calidad.</li>
+            <li><strong>Uso del servicio:</strong> Identificadores aleatorios de instalación, primera apertura, registro, inicio de sesión y actividad, junto con fecha, plataforma y versión. Cuando existe una sesión, estos eventos se asocian a la cuenta y al taller para medir adopción y funcionamiento. No incluyen el contenido de órdenes, mensajes ni fotografías.</li>
           </ul>
+          <p>
+            Un proceso diario elimina los eventos de uso que superan los 90 días y los informes estadísticos de Google Play que superan los 25 meses. Estos informes contienen cifras agregadas de instalaciones y desinstalaciones; no identifican a las personas que descargaron la aplicación. Las copias de seguridad siguen los plazos indicados más adelante.
+          </p>
+          <p>Puedes desactivar las estadísticas de uso desde Mi cuenta → Cuenta y privacidad. La preferencia se aplica al navegador o instalación actual; se borra la cola local y se detienen nuevos envíos. No elimina eventos que el servidor ya recibió. El identificador local permanece mientras se conserve el almacenamiento del dispositivo y las estadísticas estén activadas.</p>
         </section>
 
         <section>

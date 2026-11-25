@@ -145,19 +145,19 @@ onMounted(() => {
       </div>
     </section>
 
-    <section v-else class="clients-list">
-      <div v-for="client in filteredClients" :key="client.id" class="client-card">
-        <div class="client-info">
-          <h3>{{ client.name }}</h3>
-          <a v-if="client.phone" class="client-meta" :href="`tel:${client.phone}`"><Phone :size="15" aria-hidden="true" /> {{ client.phone }}</a>
-          <a v-if="client.email" class="client-meta" :href="`mailto:${client.email}`"><Mail :size="15" aria-hidden="true" /> {{ client.email }}</a>
-        </div>
-        <span class="status-badge" :class="{ active: client.is_active }">
-          {{ client.is_active ? 'Activo' : 'Inactivo' }}
-        </span>
-        <button v-if="isManager" type="button" class="ops-button client-edit" :aria-label="`Editar ${client.name}`" @click="openForm(client)"><Pencil :size="16" /> Editar</button>
-      </div>
-    </section>
+    <table v-else class="clients-list">
+      <caption class="sr-only">Clientes del taller</caption>
+      <thead><tr><th scope="col">Cliente</th><th scope="col">Teléfono</th><th scope="col">Correo</th><th scope="col">Estado</th><th v-if="isManager" scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
+      <tbody>
+        <tr v-for="client in filteredClients" :key="client.id" class="client-row">
+          <th scope="row" class="client-name">{{ client.name }}</th>
+          <td data-label="Teléfono"><a v-if="client.phone" class="client-meta" :href="`tel:${client.phone}`"><Phone :size="15" aria-hidden="true" /> {{ client.phone }}</a><span v-else class="missing-contact">Sin teléfono</span></td>
+          <td data-label="Correo"><a v-if="client.email" class="client-meta" :href="`mailto:${client.email}`"><Mail :size="15" aria-hidden="true" /> {{ client.email }}</a><span v-else class="missing-contact">Sin correo</span></td>
+          <td data-label="Estado"><span class="status-badge" :class="{ active: client.is_active }">{{ client.is_active ? 'Activo' : 'Inactivo' }}</span></td>
+          <td v-if="isManager" class="client-actions"><button type="button" class="ops-button client-edit" :aria-label="`Editar ${client.name}`" @click="openForm(client)"><Pencil :size="16" aria-hidden="true" /> Editar</button></td>
+        </tr>
+      </tbody>
+    </table>
 
     <!-- Modal Nuevo Cliente -->
     <div v-if="showCreateModal" class="modal-backdrop" @click.self="showCreateModal = false">
@@ -274,35 +274,6 @@ h1 {
   border-radius: 8px;
   font-size: 0.95rem;
   background: var(--tf-surface);
-}
-
-.clients-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.client-card {
-  background: var(--tf-surface);
-  border: 1px solid var(--color-border, var(--tf-border-soft));
-  border-radius: 8px;
-  padding: 1rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-}
-
-.client-info h3 {
-  margin: 0 0 0.35rem 0;
-  font-size: 1.05rem;
-  color: var(--color-text-dark, var(--tf-primary-strong));
-}
-
-.client-meta {
-  margin: 0.15rem 0;
-  font-size: 0.85rem;
-  color: var(--tf-text-subtle);
 }
 
 .status-badge {
@@ -434,17 +405,7 @@ h1 {
 .search-bar { display: flex; align-items: center; gap: .55rem; width: min(100%, 26rem); min-height: 46px; padding: 0 .75rem; border: 1px solid var(--tf-border); border-radius: .4rem; background: var(--tf-surface); color: var(--tf-text-subtle); }
 .search-bar:focus-within { border-color: var(--tf-primary); outline: 3px solid var(--tf-focus); outline-offset: 2px; }
 .search-bar .input-search { width: 100%; min-height: 42px; padding: 0; border: 0; outline: 0; }
-.input-search:focus-visible, .input-text:focus-visible { outline: 2px solid var(--tf-focus); border-color: var(--tf-primary); }
-.clients-list { display: grid; grid-template-columns: 1fr; gap: .5rem; }
-.client-card { min-height: 9rem; gap: .75rem; border-color: var(--tf-border-soft); border-radius: .5rem; box-shadow: none; }
-.client-card { min-height: 6rem; align-items: center; }
-.client-info { min-width: 0; }
-.client-info h3 { color: var(--tf-ink); overflow-wrap: anywhere; }
-.client-meta { color: var(--tf-text-subtle); overflow-wrap: anywhere; }
-.client-meta { display: flex; min-height: 44px; align-items: center; gap: .4rem; text-decoration: none; }
-.client-meta:focus-visible { outline: 3px solid var(--tf-focus); outline-offset: 2px; }
-.client-meta:hover { color: var(--tf-primary); }
-.client-edit { min-width: 6rem; }
+.input-text:focus-visible { outline: 2px solid var(--tf-focus); border-color: var(--tf-primary); }
 .status-badge.active { color: var(--tf-primary-strong); background: var(--tf-success-soft); }
 .status-badge:not(.active) { color: var(--tf-done); background: var(--tf-done-soft); }
 .clients-notice { display: flex; align-items: center; gap: .5rem; padding: .75rem; border: 1px solid var(--tf-success-border); border-radius: .4rem; color: var(--tf-primary-strong); background: var(--tf-success-soft); font-size: .85rem; font-weight: 700; }
@@ -453,5 +414,30 @@ h1 {
 .modal-header h2 { color: var(--tf-ink); }
 .input-text { min-height: 46px; border-color: var(--tf-border); border-radius: .4rem; }
 .btn-secondary { min-height: 44px; color: var(--tf-primary); border-color: var(--tf-primary-border); }
-@media (max-width: 560px) { .page-header { align-items: flex-start; flex-direction: column; } .client-card { align-items: flex-start; flex-wrap: wrap; } .client-info { flex: 1 1 100%; } .modal-actions { flex-direction: column-reverse; } .modal-actions > * { width: 100%; } }
+@media (max-width: 560px) { .page-header { align-items: flex-start; flex-direction: column; } .modal-actions { flex-direction: column-reverse; } .modal-actions > * { width: 100%; } }
+
+.clients-list { width: 100%; border-collapse: collapse; table-layout: fixed; background: var(--tf-surface); }
+.clients-list th, .clients-list td { padding: .75rem; border-bottom: 1px solid var(--tf-border); text-align: left; vertical-align: middle; overflow-wrap: anywhere; }
+.clients-list thead th { color: var(--tf-text-subtle); font-size: .85rem; }
+.clients-list thead th:first-child { width: 25%; }
+.clients-list thead th:nth-child(2) { width: 18%; }
+.clients-list thead th:nth-child(3) { width: 27%; }
+.clients-list thead th:nth-child(4) { width: 14%; }
+.client-name { color: var(--tf-ink); font-weight: 700; }
+.client-meta { display: flex; align-items: center; gap: .4rem; min-height: 48px; color: var(--tf-primary); }
+.client-meta svg { flex: 0 0 auto; }
+.client-meta:focus-visible { outline: 3px solid var(--tf-focus); outline-offset: 2px; }
+.missing-contact { color: var(--tf-text-subtle); font-size: .85rem; }
+.client-edit { min-height: 48px; }
+.search-bar { min-width: 0; box-sizing: border-box; min-height: 48px; border-radius: var(--tf-radius); }
+.search-bar .input-search { min-width: 0; max-width: none; outline: none; box-shadow: none; }
+@media (max-width: 760px) {
+  .clients-list, .clients-list tbody { display: block; }
+  .clients-list thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .clients-list .client-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; padding: 1rem; border-bottom: 1px solid var(--tf-border); }
+  .clients-list th, .clients-list td { width: auto; padding: 0; border: 0; }
+  .client-name, .clients-list td[data-label="Teléfono"], .clients-list td[data-label="Correo"] { grid-column: 1 / -1; }
+  .clients-list td[data-label="Estado"] { align-self: center; }
+  .client-actions { justify-self: end; }
+}
 </style>

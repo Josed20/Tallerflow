@@ -66,4 +66,25 @@ describe('ClientsView', () => {
     await fireEvent.click(screen.getByRole('button', { name: /guardar cambios/i }))
     expect(clientsApi.update).toHaveBeenCalledWith('client-1', { name: 'Confecciones Demo', phone: '987654321', email: null }, 'csrf-client')
   })
+  it('searches by name, phone and email and restores the complete list', async () => {
+    const base = { workshop_id: 'w1', is_active: true, created_at: '', updated_at: '' }
+    vi.mocked(clientsApi.list).mockResolvedValue({ data: [
+      { ...base, id: 'c1', name: 'Confecciones Sur', phone: '987654321', email: 'sur@example.test' },
+      { ...base, id: 'c2', name: 'Sin contacto', phone: null, email: null },
+    ] })
+    await renderClients()
+    await screen.findByRole('rowheader', { name: 'Confecciones Sur' })
+    const search = screen.getByRole('searchbox', { name: /buscar clientes/i })
+    for (const query of ['SUR', '98765', 'sur@example']) {
+      await fireEvent.update(search, query)
+      expect(screen.getByRole('rowheader', { name: 'Confecciones Sur' })).toBeTruthy()
+      expect(screen.queryByRole('rowheader', { name: 'Sin contacto' })).toBeNull()
+    }
+    await fireEvent.update(search, 'no existe')
+    await fireEvent.click(screen.getByRole('button', { name: 'Ver todos los clientes' }))
+    expect(screen.getAllByRole('rowheader')).toHaveLength(2)
+    expect(screen.getByText('Sin teléfono')).toBeTruthy()
+    expect(screen.getByText('Sin correo')).toBeTruthy()
+  })
+
 })

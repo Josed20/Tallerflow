@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { ArrowRight, Check, Columns3, List, Plus, RefreshCw, ScanLine, Search } from '@lucide/vue'
+import { ArrowRight, Check, Columns3, Download, List, Plus, RefreshCw, ScanLine, Search } from '@lucide/vue'
 import { ordersApi, type Order, type TrafficLight } from './api'
+import { productionApi, defaultStages } from './production-api'
 import { useSessionStore } from '../session/session.store'
 import { canManageOperations, canAdvanceProduction } from '../session/role-policy'
 import UiAlert from '../../components/UiAlert.vue'
+import { downloadOrdersCsv } from './order-csv'
 import { matchesOrderSearch } from './order-search'
 import { completedStations, formatOrderQuantity } from './order-display'
 import OrderTicket from '../../components/OrderTicket.vue'
@@ -14,11 +16,13 @@ import OrderScannerDialog from './OrderScannerDialog.vue'
 
 const route = useRoute()
 const session = useSessionStore()
-const stages = ['CORTE', 'COSTURA', 'ACABADO', 'CONTROL DE CALIDAD', 'PLANCHADO', 'EMPAQUE', 'ENTREGA']
-const filterOptions: { value: 'ALL' | TrafficLight; label: string }[] = [
+const templateStages = ref(defaultStages.map(stage => stage.name))
+const stages = computed(() => [...new Set([...templateStages.value, ...orders.value.filter(order => order.status === 'ACTIVE').map(order => order.current_stage || 'Sin etapa')])])
+type OrderFilter = 'ALL' | TrafficLight | 'CANCELLED'
+const filterOptions: { value: OrderFilter; label: string }[] = [
   { value: 'ALL', label: 'Todas' }, { value: 'ON_TIME', label: 'A tiempo' },
   { value: 'AT_RISK', label: 'En riesgo' }, { value: 'LATE', label: 'Atrasadas' },
-  { value: 'COMPLETED', label: 'Completadas' },
+  { value: 'COMPLETED', label: 'Completadas' }, { value: 'CANCELLED', label: 'Canceladas' },
 ]
 const orders = ref<Order[]>([])
 const loading = ref(true)
@@ -32,13 +36,23 @@ const search = ref('')
 // En el celular la lista es la vista por defecto; en escritorio, el tablero por estaciones.
 const prefersList = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 619px)').matches
 const view = ref<'board' | 'list'>(route.query.view === 'list' ? 'list' : route.query.view === 'board' ? 'board' : prefersList() ? 'list' : 'board')
-const trafficFilter = ref<'ALL' | TrafficLight>(['ON_TIME', 'AT_RISK', 'LATE', 'COMPLETED'].includes(String(route.query.filter)) ? route.query.filter as TrafficLight : 'ALL')
+const trafficFilter = ref<OrderFilter>(['ON_TIME', 'AT_RISK', 'LATE', 'COMPLETED', 'CANCELLED'].includes(String(route.query.filter)) ? route.query.filter as OrderFilter : 'ALL')
 const dueTodayOnly = ref(route.query.due === 'today')
 const isManager = computed(() => canManageOperations(session.principal?.role))
 const canAdvance = computed(() => canAdvanceProduction(session.principal?.role))
-const todayKey = () => new Date().toLocaleDateString('en-CA')
+const todayKey = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
 
-function selectTrafficFilter(value: 'ALL' | TrafficLight) {
+function exportOrders() {
+  if (!isManager.value || loading.value || error.value || !filteredOrders.value.length) return
+  try {
+    downloadOrdersCsv(filteredOrders.value, session.principal?.role)
+    notice.value = `Se inició la descarga de ${filteredOrders.value.length} órdenes en CSV.`
+  } catch {
+    error.value = 'No se pudo exportar. Vuelve a intentarlo o actualiza las órdenes.'
+  }
+}
+
+function selectTrafficFilter(value: OrderFilter) {
   trafficFilter.value = value
   dueTodayOnly.value = false
 }
@@ -55,20 +69,23 @@ function clearFilters() {
 }
 
 const filteredOrders = computed(() => orders.value.filter((order) => {
-  if (trafficFilter.value !== 'ALL' && order.traffic_light !== trafficFilter.value) return false
-  if (dueTodayOnly.value && new Date(order.promised_at).toLocaleDateString('en-CA') !== todayKey()) return false
+  if (trafficFilter.value === 'CANCELLED' && order.status !== 'CANCELLED') return false
+  if (trafficFilter.value !== 'ALL' && trafficFilter.value !== 'CANCELLED' && (order.status === 'CANCELLED' || order.traffic_light !== trafficFilter.value)) return false
+  if (dueTodayOnly.value && (order.status !== 'ACTIVE' || new Date(order.promised_at).toLocaleDateString('en-CA', { timeZone: 'America/Lima' }) !== todayKey())) return false
   return matchesOrderSearch(order, search.value)
 }))
 const columns = computed(() => [
-  ...stages.map((name, index) => ({ name, label: name.charAt(0) + name.slice(1).toLocaleLowerCase('es-PE'), index, orders: filteredOrders.value.filter((order) => order.status === 'ACTIVE' && order.current_stage?.toUpperCase() === name) })),
-  { name: 'COMPLETED', label: 'Completadas', index: stages.length, orders: filteredOrders.value.filter((order) => order.status === 'COMPLETED') },
+  ...stages.value.map((name, index) => ({ name, label: name.charAt(0) + name.slice(1).toLocaleLowerCase('es-PE'), index, orders: filteredOrders.value.filter((order) => order.status === 'ACTIVE' && (order.current_stage || 'Sin etapa') === name) })),
+  { name: 'COMPLETED', label: 'Completadas', index: stages.value.length, orders: filteredOrders.value.filter((order) => order.status === 'COMPLETED') },
+  { name: 'CANCELLED', label: 'Canceladas', index: stages.value.length + 1, orders: filteredOrders.value.filter((order) => order.status === 'CANCELLED') },
 ])
 const counts = computed(() => ({
   ALL: orders.value.length,
-  ON_TIME: orders.value.filter((order) => order.traffic_light === 'ON_TIME').length,
-  AT_RISK: orders.value.filter((order) => order.traffic_light === 'AT_RISK').length,
-  LATE: orders.value.filter((order) => order.traffic_light === 'LATE').length,
-  COMPLETED: orders.value.filter((order) => order.traffic_light === 'COMPLETED').length,
+  CANCELLED: orders.value.filter(order => order.status === 'CANCELLED').length,
+  ON_TIME: orders.value.filter((order) => order.status !== 'CANCELLED' && order.traffic_light === 'ON_TIME').length,
+  AT_RISK: orders.value.filter((order) => order.status !== 'CANCELLED' && order.traffic_light === 'AT_RISK').length,
+  LATE: orders.value.filter((order) => order.status !== 'CANCELLED' && order.traffic_light === 'LATE').length,
+  COMPLETED: orders.value.filter((order) => order.status !== 'CANCELLED' && order.traffic_light === 'COMPLETED').length,
 }))
 
 async function loadOrders(showLoading = true) {
@@ -108,11 +125,11 @@ async function advance(order: Order) {
       error.value = 'La etapa se guardó, pero no pudimos actualizar el tablero. Pulsa Actualizar para ver el estado más reciente.'
       return
     }
-    const next = stages[current.position]
+    const next = response.data.stages?.find(stage => stage.position === current.position + 1)?.name
     notice.value = next ? `${order.code} pasó a ${next.toLocaleLowerCase('es-PE')}.` : `${order.code} quedó completada.`
     if (view.value === 'board') {
       await nextTick()
-      const target = boardScroll.value?.querySelector<HTMLElement>(`[data-stage-index="${current.position}"]`)
+      const target = boardScroll.value?.querySelector<HTMLElement>(`[data-stage-index="${next ? stages.value.indexOf(next) : stages.value.length}"]`)
       if (target && boardScroll.value) {
         const container = boardScroll.value.getBoundingClientRect()
         const desiredLeft = boardScroll.value.scrollLeft + target.getBoundingClientRect().left - container.left
@@ -136,8 +153,21 @@ function formatDate(value: string) {
 }
 
 function advanceLabel(order: Order) {
-  const index = stages.indexOf(order.current_stage?.toUpperCase() ?? '')
-  return index >= 0 && index < stages.length - 1 ? `Pasar a ${stages[index + 1].toLocaleLowerCase('es-PE')}` : 'Completar pedido'
+  if (order.block_reason) return 'Producción bloqueada'
+  return 'Completar etapa'
+}
+const pendingNextStage = ref<string | null>(null)
+async function prepareAdvance(order: Order) {
+  if (order.block_reason || busyOrderId.value) return
+  busyOrderId.value = order.id
+  try {
+    const detail = (await ordersApi.getByID(order.id)).data
+    const current = detail.stages?.find(stage => stage.status === 'IN_PROGRESS')
+    if (!current || detail.block_reason) { await loadOrders(false); return }
+    pendingNextStage.value = detail.stages?.find(stage => stage.position === current.position + 1)?.name ?? null
+    pendingAdvance.value = { ...order, current_stage: current.name }
+  } catch { error.value = 'No se pudo revisar la etapa actual. Actualiza el tablero.' }
+  finally { busyOrderId.value = null }
 }
 
 function stationLabel(order: Order) {
@@ -145,7 +175,7 @@ function stationLabel(order: Order) {
   return name ? name.charAt(0) + name.slice(1).toLocaleLowerCase('es-PE') : 'En producción'
 }
 
-onMounted(loadOrders)
+onMounted(() => { loadOrders(); productionApi.get().then(res => { templateStages.value = res.data.stages.map(stage => stage.name) }).catch(() => {}) })
 </script>
 
 <template>
@@ -153,6 +183,7 @@ onMounted(loadOrders)
     <header class="board-header">
       <div><h1>Tablero de órdenes</h1><p>El avance de cada pedido, estación por estación.</p></div>
       <div class="board-header__actions">
+        <button v-if="isManager" class="ops-button" type="button" :disabled="loading || !!error || !filteredOrders.length" title="Descargar las órdenes del resultado actual" @click="exportOrders"><Download :size="17" aria-hidden="true" /> Exportar CSV ({{ filteredOrders.length }})</button>
         <button class="ops-button" type="button" @click="showScanner = true"><ScanLine :size="17" /> Escanear ficha viajera</button>
         <button class="ops-icon-button" type="button" title="Actualizar órdenes" aria-label="Actualizar órdenes" :disabled="loading" @click="loadOrders()"><RefreshCw :size="18" /></button>
         <RouterLink v-if="isManager" class="ops-button ops-button--primary" to="/app/orders/new"><Plus :size="17" /> Nueva orden</RouterLink>
@@ -177,16 +208,16 @@ onMounted(loadOrders)
     <p class="board-results" role="status">{{ filteredOrders.length }} {{ filteredOrders.length === 1 ? 'orden' : 'órdenes' }} {{ search || trafficFilter !== 'ALL' || dueTodayOnly ? 'en este resultado' : 'en total' }}</p>
 
     <div v-if="loading" class="ops-empty">Cargando tablero...</div>
-    <div v-else-if="filteredOrders.length === 0" class="ops-empty board-empty"><strong>No hay órdenes que coincidan</strong><span v-if="search || trafficFilter !== 'ALL' || dueTodayOnly">No hay pedidos en esta selección. Puedes quitar los filtros.</span><span v-else>Cuando registres una orden, aparecerá en Corte.</span><button v-if="search || trafficFilter !== 'ALL' || dueTodayOnly" class="ops-button" type="button" @click="clearFilters">Ver todas las órdenes</button><RouterLink v-if="isManager && !orders.length" class="ops-button ops-button--primary" to="/app/orders/new">Crear la primera orden</RouterLink></div>
+    <div v-else-if="filteredOrders.length === 0" class="ops-empty board-empty"><strong>No hay órdenes que coincidan</strong><span v-if="search || trafficFilter !== 'ALL' || dueTodayOnly">No hay pedidos en esta selección. Puedes quitar los filtros.</span><span v-else>Cuando registres una orden, aparecerá en su primera etapa.</span><button v-if="search || trafficFilter !== 'ALL' || dueTodayOnly" class="ops-button" type="button" @click="clearFilters">Ver todas las órdenes</button><RouterLink v-if="isManager && !orders.length" class="ops-button ops-button--primary" to="/app/orders/new">Crear la primera orden</RouterLink></div>
 
     <section v-else-if="view === 'board'" ref="boardScroll" class="kanban-scroll" aria-label="Tablero por estaciones">
-      <div class="kanban-grid">
+      <div class="kanban-grid" :style="{ '--stage-columns': columns.length }">
         <section v-for="column in columns" :key="column.name" class="kanban-column" :data-stage-index="column.index" :aria-label="`${column.label}, ${column.orders.length} órdenes`">
           <header class="kanban-column__header"><div><span class="kanban-column__number">{{ String(column.index + 1).padStart(2, '0') }}</span><h2>{{ column.label }}</h2></div><strong>{{ column.orders.length }}</strong></header>
           <div class="kanban-column__items">
-            <OrderTicket v-for="order in column.orders" :key="order.id" :code="order.code" :product="order.product" :state="order.traffic_light" :completed="completedStations(order)" :client="order.client_name" :due="`Entrega ${formatDate(order.promised_at)}`">
+            <OrderTicket v-for="order in column.orders" :key="order.id" :code="order.code" :product="order.product" :state="order.status === 'CANCELLED' ? 'CANCELLED' : order.traffic_light" :completed="completedStations(order)" :total="order.stage_count ?? 7" :client="order.client_name" :due="`Entrega ${formatDate(order.promised_at)}`">
               <span class="ticket-qty">{{ formatOrderQuantity(order.quantity, order.unit) }}</span>
-              <span class="ticket-actions"><RouterLink :to="`/app/orders/${order.id}`">Ver orden <ArrowRight :size="14" /></RouterLink><button v-if="canAdvance && order.status === 'ACTIVE'" type="button" class="ticket-advance" :disabled="busyOrderId !== null" @click="pendingAdvance = order">{{ busyOrderId === order.id ? 'Guardando...' : advanceLabel(order) }}</button></span>
+              <span class="ticket-actions"><RouterLink :to="`/app/orders/${order.id}`">Ver orden <ArrowRight :size="14" /></RouterLink><button v-if="canAdvance && order.status === 'ACTIVE'" type="button" class="ticket-advance" :disabled="busyOrderId !== null || !!order.block_reason" @click="prepareAdvance(order)">{{ busyOrderId === order.id ? 'Guardando...' : advanceLabel(order) }}</button></span>
             </OrderTicket>
             <p v-if="!column.orders.length" class="kanban-column__empty">Sin pedidos</p>
           </div>
@@ -195,21 +226,22 @@ onMounted(loadOrders)
     </section>
 
     <section v-else class="board-list" aria-label="Lista de órdenes">
-      <OrderTicket v-for="order in filteredOrders" :key="order.id" :code="order.code" :product="order.product" :state="order.traffic_light" :completed="completedStations(order)" :station="order.status === 'COMPLETED' ? 'Completada' : stationLabel(order)" :client="`${order.client_name} · ${formatOrderQuantity(order.quantity, order.unit)}`" :due="`Entrega ${formatDate(order.promised_at)}`">
-        <span class="ticket-actions ticket-actions--row"><RouterLink class="ops-button" :to="`/app/orders/${order.id}`">Ver orden</RouterLink><button v-if="canAdvance && order.status === 'ACTIVE'" class="ops-button ops-button--primary" type="button" :disabled="busyOrderId !== null" @click="pendingAdvance = order">{{ busyOrderId === order.id ? 'Guardando...' : advanceLabel(order) }}</button></span>
+      <OrderTicket v-for="order in filteredOrders" :key="order.id" :code="order.code" :product="order.product" :state="order.status === 'CANCELLED' ? 'CANCELLED' : order.traffic_light" :completed="completedStations(order)" :total="order.stage_count ?? 7" :station="order.status === 'CANCELLED' ? 'Cancelada' : order.status === 'COMPLETED' ? 'Completada' : stationLabel(order)" :client="`${order.client_name} · ${formatOrderQuantity(order.quantity, order.unit)}`" :due="`Entrega ${formatDate(order.promised_at)}`">
+        <span class="ticket-actions ticket-actions--row"><RouterLink class="ops-button" :to="`/app/orders/${order.id}`">Ver orden</RouterLink><button v-if="canAdvance && order.status === 'ACTIVE'" class="ops-button ops-button--primary" type="button" :disabled="busyOrderId !== null || !!order.block_reason" @click="prepareAdvance(order)">{{ busyOrderId === order.id ? 'Guardando...' : advanceLabel(order) }}</button></span>
       </OrderTicket>
     </section>
-    <StageAdvanceDialog v-if="pendingAdvance" :code="pendingAdvance.code" :stage="pendingAdvance.current_stage || 'etapa actual'" :next-stage="stages[stages.indexOf(pendingAdvance.current_stage?.toUpperCase() ?? '') + 1] || null" :busy="busyOrderId !== null" @cancel="pendingAdvance = null" @confirm="advance(pendingAdvance)" />
+    <StageAdvanceDialog v-if="pendingAdvance" :code="pendingAdvance.code" :stage="pendingAdvance.current_stage || 'etapa actual'" :next-stage="pendingNextStage" :busy="busyOrderId !== null" @cancel="pendingAdvance = null" @confirm="advance(pendingAdvance)" />
     <OrderScannerDialog v-if="showScanner" :orders="orders" @close="showScanner = false" />
   </main>
 </template>
 
 <style scoped>
-.board-page { width: 100%; min-width: 0; margin: 0 auto; padding: clamp(1rem, 2.5vw, 2rem); display: grid; gap: 1rem; }
+/* Keep intrinsic header widths from expanding the grid and its local scrollers. */
+.board-page { width: 100%; min-width: 0; margin: 0 auto; padding: clamp(1rem, 2.5vw, 2rem); display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
 .board-header, .board-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .board-header h1 { font-size: var(--tf-page-title-size); }
 .board-header p { margin: .3rem 0 0; color: var(--tf-text-subtle); font-size: .9rem; }
-.board-header__actions { display: flex; align-items: center; gap: .5rem; }
+.board-header__actions { display: flex; flex-wrap: wrap; min-width: 0; align-items: center; gap: .5rem; }
 .board-toolbar { padding-top: .3rem; }
 .board-view-switch { display: inline-flex; gap: .2rem; padding: .2rem; border: 1px solid var(--tf-border-soft); border-radius: .5rem; background: var(--tf-surface); }
 .board-view-switch button { display: inline-flex; min-height: 44px; align-items: center; gap: .4rem; padding: .35rem .7rem; border: 0; border-radius: .3rem; color: var(--tf-text-subtle); background: transparent; font: inherit; font-size: .82rem; font-weight: 800; cursor: pointer; }
@@ -225,8 +257,8 @@ onMounted(loadOrders)
 .board-notice { display: flex; align-items: center; gap: .5rem; padding: .7rem .8rem; border: 1px solid var(--tf-success-border); border-radius: var(--tf-radius-sm); color: var(--tf-success); background: var(--tf-success-soft); font-size: .86rem; font-weight: 700; }
 .board-notice button { display: grid; width: 44px; height: 44px; place-items: center; margin-left: auto; border: 0; background: transparent; color: inherit; font-size: 1.25rem; cursor: pointer; }
 .board-empty { padding: 3rem 1rem; border: 1px dashed var(--tf-border); border-radius: .5rem; background: var(--tf-surface); }
-.kanban-scroll { max-width: 100%; overflow-x: auto; padding-bottom: .75rem; scrollbar-color: var(--tf-border) transparent; }
-.kanban-grid { display: grid; width: max-content; grid-template-columns: repeat(8, minmax(15.5rem, 15.5rem)); gap: .7rem; }
+.kanban-scroll { min-width: 0; width: 100%; max-width: 100%; overflow-x: auto; padding-bottom: .75rem; scrollbar-color: var(--tf-border) transparent; }
+.kanban-grid { display: grid; width: max-content; grid-template-columns: repeat(var(--stage-columns), minmax(15.5rem, 15.5rem)); gap: .7rem; }
 .kanban-column { min-height: 24rem; border-radius: var(--tf-radius-sm); background: var(--tf-surface-soft); }
 .kanban-column__header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .75rem .8rem; border-bottom: 1px solid var(--tf-border-soft); }
 .kanban-column__header > div { display: flex; align-items: center; gap: .5rem; min-width: 0; }

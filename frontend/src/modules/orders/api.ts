@@ -5,6 +5,7 @@ export type StageStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED'
 export type OrderStatus = 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
 
 export interface OrderStage {
+  client_description?: string
   id: string
   workshop_id: string
   order_id: string
@@ -26,6 +27,12 @@ export interface StagePhoto {
 }
 
 export interface Order {
+  responsible_user_id?: string | null
+  responsible_name?: string
+  block_reason?: string
+  stage_count?: number
+  completed_stage_count?: number
+  changes?: { id: string; actor_user_id: string; actor_name?: string; created_at: string; changes: Record<string, { from: unknown; to: unknown; reason?: string }> }[]
   id: string
   workshop_id: string
   client_id: string
@@ -68,6 +75,8 @@ export interface CreateOrderPayload {
 }
 
 export interface UpdateOrderPayload {
+  specification?: string
+  change_reason?: string
   client_id: string
   product: string
   quantity: number

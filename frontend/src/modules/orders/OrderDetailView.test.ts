@@ -4,6 +4,9 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import OrderDetailView from './OrderDetailView.vue'
 import { ordersApi } from './api'
+import { manageTrackingLink } from '../tracking/api'
+
+vi.mock('../tracking/api', () => ({ manageTrackingLink: vi.fn() }))
 import { useSessionStore } from '../session/session.store'
 
 vi.mock('./api', () => ({ ordersApi: { getByID: vi.fn(), update: vi.fn(), updateStage: vi.fn(), reopenStage: vi.fn(), addStagePhoto: vi.fn(), createTrackingLink: vi.fn() } }))
@@ -136,16 +139,40 @@ describe('OrderDetailView', () => {
     await screen.findByText('Corte')
   }
 
-  it('lets a manager generate a customer tracking link only after confirming', async () => {
-    vi.mocked(ordersApi.createTrackingLink).mockResolvedValue({ data: { token: 'T'.repeat(43) } } as never)
+  it('recovers the same link on reopen and copies without a server mutation', async () => {
+    vi.mocked(manageTrackingLink).mockResolvedValue({ data: { token: 'T'.repeat(43) } })
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     await renderAs('OWNER')
-
     await fireEvent.click(screen.getByRole('button', { name: /compartir con el cliente/i }))
-    expect(ordersApi.createTrackingLink).not.toHaveBeenCalled()
-    await fireEvent.click(screen.getByRole('button', { name: /generar enlace/i }))
+    await waitFor(() => expect(manageTrackingLink).toHaveBeenCalledWith('order-1', 'csrf-share', 'recover'))
+    const url = `${window.location.origin}/seguimiento/${'T'.repeat(43)}`
+    expect((await screen.findByLabelText('Enlace privado') as HTMLInputElement).value).toBe(url)
+    await fireEvent.click(screen.getByRole('button', { name: /^copiar$/i }))
+    expect(writeText).toHaveBeenCalledWith(url)
+    expect(manageTrackingLink).toHaveBeenCalledTimes(1)
+    await fireEvent.click(screen.getByRole('button', { name: /^cerrar$/i }))
+    await fireEvent.click(screen.getByRole('button', { name: /compartir con el cliente/i }))
+    await waitFor(() => expect(manageTrackingLink).toHaveBeenCalledTimes(2))
+    expect((screen.getByLabelText('Enlace privado') as HTMLInputElement).value).toBe(url)
+  })
 
-    await waitFor(() => expect(ordersApi.createTrackingLink).toHaveBeenCalledWith('order-1', 'csrf-share'))
-    expect((await screen.findByLabelText('Enlace privado') as HTMLInputElement).value).toBe(`${window.location.origin}/seguimiento/${'T'.repeat(43)}`)
+  it('requires explicit confirmation to replace or revoke links', async () => {
+    vi.mocked(manageTrackingLink).mockResolvedValue({ data: { token: 'T'.repeat(43) } })
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    await renderAs('OWNER')
+    await fireEvent.click(screen.getByRole('button', { name: /compartir con el cliente/i }))
+    await screen.findByLabelText('Enlace privado')
+    await fireEvent.click(screen.getByRole('button', { name: /^reemplazar enlace$/i }))
+    expect(manageTrackingLink).toHaveBeenCalledTimes(1)
+    confirm.mockReturnValue(true)
+    await fireEvent.click(screen.getByRole('button', { name: /^reemplazar enlace$/i }))
+    await waitFor(() => expect(manageTrackingLink).toHaveBeenLastCalledWith('order-1', 'csrf-share', 'replace'))
+    vi.mocked(manageTrackingLink).mockResolvedValue({ data: { token: '' } })
+    await fireEvent.click(screen.getByRole('button', { name: /revocar todos/i }))
+    await waitFor(() => expect(manageTrackingLink).toHaveBeenLastCalledWith('order-1', 'csrf-share', 'revoke'))
+    await waitFor(() => expect(screen.queryByLabelText('Enlace privado')).toBeNull())
+    confirm.mockRestore()
   })
 
   it('does not offer customer sharing to an operator', async () => {
