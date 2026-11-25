@@ -4,7 +4,7 @@ import { pinia } from '../app/pinia'
 import { useSessionStore } from '../modules/session/session.store'
 import { isNativeApp, usesNativeToken } from './platform'
 import { readMobileToken } from './session-token'
-import { ANALYTICS_KEY, ANALYTICS_PREFERENCE_EVENT, AnalyticsQueue, analyticsAllowed } from './analytics'
+import { ANALYTICS_PREFERENCE_EVENT, AnalyticsQueue, analyticsAllowed, clearAnalytics } from './analytics'
 import { router } from '../app/router'
 
 // Dynamically loaded by main.ts after the web/mobile transport is configured.
@@ -14,7 +14,7 @@ async function start() {
   if (started) return
   if (import.meta.env.MODE === 'test' || location.hostname.startsWith('admin.') || location.pathname.startsWith('/consola') || location.pathname.startsWith('/seguimiento')) return
   const allowed = () => analyticsAllowed(localStorage, navigator)
-  if (!allowed()) { localStorage.removeItem(ANALYTICS_KEY); return }
+  if (!allowed()) { clearAnalytics(localStorage); return }
   started = true
   const session = useSessionStore(pinia)
   const channel = isNativeApp() ? 'android' : 'web'
@@ -28,7 +28,7 @@ async function start() {
   let nextActivity = 0
   let pendingAuth: 'login' | 'registration' | null = null
   const flush = async () => {
-    if (!allowed()) { localStorage.removeItem(ANALYTICS_KEY); return }
+    if (!allowed()) { clearAnalytics(localStorage); return }
     const currentActor = actor()
     const currentGeneration = generation
     await queue.flush(currentActor, async event => {

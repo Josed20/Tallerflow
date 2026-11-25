@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 FROM golang:1.27-alpine AS build
-ENV GOMAXPROCS=2
+ENV GOMAXPROCS=2 GOMEMLIMIT=512MiB
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download

@@ -67,27 +67,25 @@ describe('TrackingView', () => {
     expect(screen.getByText(/Se retiran hilos sobrantes/)).toBeTruthy()
   })
 
-  it('keeps the order during refresh failures and gives loading and success feedback', async () => {
+  it('keeps the order during an automatic refresh failure and recovers next minute', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
     await renderTracking(Response.json({ data: order }))
     await screen.findByRole('heading', { name: order.product })
-    let resolve!: (response: Response) => void
-    vi.mocked(fetch).mockImplementationOnce(() => new Promise<Response>((done) => { resolve = done }))
-    await fireEvent.click(screen.getByRole('button', { name: 'Actualizar' }))
-    expect((screen.getByRole('button', { name: 'Actualizando…' }) as HTMLButtonElement).disabled).toBe(true)
-    resolve(Response.json({ data: order }))
-    await screen.findByRole('button', { name: 'Actualizar' })
-    expect(screen.getByRole('status').textContent).toContain('Estado actualizado.')
+    expect(screen.queryByRole('button', { name: 'Actualizar' })).toBeNull()
     vi.mocked(fetch).mockRejectedValueOnce(new Error('offline'))
-    await fireEvent.click(screen.getByRole('button', { name: 'Actualizar' }))
+    await vi.advanceTimersByTimeAsync(60_000)
     await screen.findByText(/No pudimos actualizar el estado/)
     expect(screen.getByRole('heading', { name: order.product })).toBeTruthy()
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ data: order }))
+    await vi.advanceTimersByTimeAsync(60_000)
+    await waitFor(() => expect(screen.queryByText(/No pudimos actualizar el estado/)).toBeNull())
   })
 
   it('automatically refreshes every minute only while visible and stops on invalidation', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
     await renderTracking(Response.json({ data: order }))
     await screen.findByRole('heading', { name: order.product })
-    expect(screen.getByText(/automáticamente cada minuto/)).toBeTruthy()
+    expect(screen.getByText('Actualización automática')).toBeTruthy()
     vi.mocked(fetch).mockImplementation(async () => Response.json({ data: order }))
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
     await vi.advanceTimersByTimeAsync(60_000)

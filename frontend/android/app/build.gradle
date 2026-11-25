@@ -28,12 +28,19 @@ android {
         }
     }
     buildTypes {
+        debug {
+            applicationIdSuffix '.debug'
+            versionNameSuffix '-local'
+            resValue 'string', 'app_name', 'TallerFlow local'
+            resValue 'string', 'title_activity_main', 'TallerFlow local'
+        }
         release {
-            minifyEnabled false
+            minifyEnabled true
+            shrinkResources true
             if (System.getenv('TF_ANDROID_KEYSTORE_PATH')) {
                 signingConfig signingConfigs.release
             }
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 }

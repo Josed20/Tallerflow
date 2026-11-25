@@ -2,6 +2,7 @@ package orders
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Josed20/Tallerflow/backend/platform/database"
+	"github.com/Josed20/Tallerflow/backend/platform/security"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -101,6 +103,7 @@ type DashboardMetrics struct {
 }
 
 type CreateOrderInput struct {
+	ActorID       uuid.UUID `json:"-"`
 	ClientID      uuid.UUID `json:"client_id"`
 	Product       string    `json:"product"`
 	Specification string    `json:"specification"`
@@ -142,15 +145,20 @@ type Repository interface {
 }
 
 type PostgresRepository struct {
-	tenant database.TenantRunner
-	now    func() time.Time
+	trackingSecret []byte
+	tenant         database.TenantRunner
+	now            func() time.Time
 }
 
-func NewPostgresRepository(tenant database.TenantRunner) (*PostgresRepository, error) {
+func NewPostgresRepository(tenant database.TenantRunner, secret ...string) (*PostgresRepository, error) {
 	if tenant == nil {
 		return nil, errors.New("tenant runner is required")
 	}
-	return &PostgresRepository{tenant: tenant, now: time.Now}, nil
+	r := &PostgresRepository{tenant: tenant, now: time.Now}
+	if len(secret) > 0 {
+		r.trackingSecret = []byte(secret[0])
+	}
+	return r, nil
 }
 
 func (r *PostgresRepository) List(ctx context.Context, workshopID uuid.UUID) ([]Order, error) {
@@ -468,6 +476,20 @@ func (r *PostgresRepository) Create(ctx context.Context, workshopID uuid.UUID, i
 			}
 		}
 
+		// Create the recoverable tracking link in the same transaction as the order.
+		if len(r.trackingSecret) > 0 {
+			if input.ActorID == uuid.Nil {
+				return ErrOrderInvalid
+			}
+			nonce, err := security.RandomToken(rand.Reader, trackingTokenBytes)
+			if err != nil {
+				return err
+			}
+			token := recoverTrackingToken(r.trackingSecret, workshopID, orderID, nonce)
+			if err := tx.Exec("INSERT INTO order_tracking_links (workshop_id, order_id, token_hash, recovery_nonce, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)", workshopID, orderID, trackingDigest(token), nonce, input.ActorID, now).Error; err != nil {
+				return err
+			}
+		}
 		// 5. Save Idempotency Key
 		if idempotencyKey != "" {
 			if err := tx.Exec(

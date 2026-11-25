@@ -82,6 +82,7 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
+	input.ActorID = principal.UserID
 	order, err := h.service.Create(c.Request.Context(), principal.WorkshopID, input, idempotencyKey)
 	if err != nil {
 		if errors.Is(err, ErrOrderInvalid) {

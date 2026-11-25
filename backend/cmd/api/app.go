@@ -246,7 +246,7 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 		}
 	}
 
-	ordersRepo, err := orders.NewPostgresRepository(tenantRunner)
+	ordersRepo, err := orders.NewPostgresRepository(tenantRunner, cfg.SessionPepper)
 	if err != nil {
 		return nil, fmt.Errorf("create orders repository: %w", err)
 	}

@@ -1,6 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Atkinson+Hyperlegible+Mono:wght@200..800&family=Atkinson+Hyperlegible+Next:wght@200..800&display=swap');
+@import url('/fonts/dm-sans.css');
 @import 'tailwindcss';
 @import './tokens.css';
+@import './product.css';
 
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; min-height: 100vh; }
@@ -28,7 +29,7 @@ select { font: inherit; }
 .auth-brand, .brand-mark { display: flex; width: fit-content; margin: 0 auto 1.25rem; color: var(--tf-primary); }
 a.auth-brand { min-height: 44px; align-items: center; border-radius: var(--tf-radius); text-decoration: none; }
 a.auth-brand:focus-visible { outline: 3px solid var(--tf-focus); outline-offset: 2px; }
-h1, h2 { font-family: var(--tf-font-display); font-variation-settings: "wdth" 125; font-weight: 800; letter-spacing: -.005em; text-wrap: balance; }
+h1, h2 { font-family: var(--tf-font-display); font-variation-settings: normal; font-weight: 800; letter-spacing: -.005em; text-wrap: balance; }
 h1 { margin: 0; font-size: 1.5rem; line-height: 1.2; }
 .auth-subtitle { max-width: 20rem; margin: .5rem auto 1.5rem; color: var(--tf-text-muted); font-size: .875rem; line-height: 1.45; }
 .auth-form { display: grid; gap: 1rem; text-align: left; }

@@ -139,45 +139,33 @@ describe('OrderDetailView', () => {
     await screen.findByText('Corte')
   }
 
-  it('recovers the same link on reopen and copies without a server mutation', async () => {
+  it('copies the stable tracking link directly and reuses it on subsequent clicks', async () => {
     vi.mocked(manageTrackingLink).mockResolvedValue({ data: { token: 'T'.repeat(43) } })
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     await renderAs('OWNER')
-    await fireEvent.click(screen.getByRole('button', { name: /compartir con el cliente/i }))
-    await waitFor(() => expect(manageTrackingLink).toHaveBeenCalledWith('order-1', 'csrf-share', 'recover'))
-    const url = `${window.location.origin}/seguimiento/${'T'.repeat(43)}`
-    expect((await screen.findByLabelText('Enlace privado') as HTMLInputElement).value).toBe(url)
-    await fireEvent.click(screen.getByRole('button', { name: /^copiar$/i }))
-    expect(writeText).toHaveBeenCalledWith(url)
+    await fireEvent.click(screen.getByRole('button', { name: /copiar enlace de seguimiento/i }))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/seguimiento/${'T'.repeat(43)}`))
+    await fireEvent.click(screen.getByRole('button', { name: /copiar enlace de seguimiento/i }))
+    expect(writeText).toHaveBeenCalledTimes(2)
     expect(manageTrackingLink).toHaveBeenCalledTimes(1)
-    await fireEvent.click(screen.getByRole('button', { name: /^cerrar$/i }))
-    await fireEvent.click(screen.getByRole('button', { name: /compartir con el cliente/i }))
-    await waitFor(() => expect(manageTrackingLink).toHaveBeenCalledTimes(2))
-    expect((screen.getByLabelText('Enlace privado') as HTMLInputElement).value).toBe(url)
+    expect(screen.queryByText('Enviar por WhatsApp')).toBeNull()
+    expect(screen.queryByText('Ver como cliente')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Reemplazar enlace' })).toBeNull()
   })
-
-  it('requires explicit confirmation to replace or revoke links', async () => {
-    vi.mocked(manageTrackingLink).mockResolvedValue({ data: { token: 'T'.repeat(43) } })
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+  it('announces recovery failure without claiming the link was copied', async () => {
+    vi.mocked(manageTrackingLink).mockRejectedValue(new Error('No se pudo recuperar el enlace.'))
+    const writeText = vi.fn()
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     await renderAs('OWNER')
-    await fireEvent.click(screen.getByRole('button', { name: /compartir con el cliente/i }))
-    await screen.findByLabelText('Enlace privado')
-    await fireEvent.click(screen.getByRole('button', { name: /^reemplazar enlace$/i }))
-    expect(manageTrackingLink).toHaveBeenCalledTimes(1)
-    confirm.mockReturnValue(true)
-    await fireEvent.click(screen.getByRole('button', { name: /^reemplazar enlace$/i }))
-    await waitFor(() => expect(manageTrackingLink).toHaveBeenLastCalledWith('order-1', 'csrf-share', 'replace'))
-    vi.mocked(manageTrackingLink).mockResolvedValue({ data: { token: '' } })
-    await fireEvent.click(screen.getByRole('button', { name: /revocar todos/i }))
-    await waitFor(() => expect(manageTrackingLink).toHaveBeenLastCalledWith('order-1', 'csrf-share', 'revoke'))
-    await waitFor(() => expect(screen.queryByLabelText('Enlace privado')).toBeNull())
-    confirm.mockRestore()
+    await fireEvent.click(screen.getByRole('button', { name: /copiar enlace de seguimiento/i }))
+    await waitFor(() => expect(writeText).not.toHaveBeenCalled())
+    expect(await screen.findByRole('alert')).toBeTruthy()
   })
 
   it('does not offer customer sharing to an operator', async () => {
     await renderAs('OPERATOR')
-    expect(screen.queryByRole('button', { name: /compartir con el cliente/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /copiar enlace de seguimiento/i })).toBeNull()
   })
   it('lets a manager open edit modal and submit order updates', async () => {
     vi.mocked(ordersApi.update).mockResolvedValue({ data: { ...order, product: 'Polo Pique Actualizado', quantity: 24 } } as never)

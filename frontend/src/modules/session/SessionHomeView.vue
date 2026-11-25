@@ -10,7 +10,7 @@ import { completedStations, formatOrderQuantity } from '../orders/order-display'
 import UiAlert from '../../components/UiAlert.vue'
 import UiButton from '../../components/UiButton.vue'
 import OrderTicket from '../../components/OrderTicket.vue'
-import ProductionSettingsPanel from '../orders/ProductionSettingsPanel.vue'
+
 
 const session = useSessionStore()
 const metrics = ref<DashboardMetrics>({ active: 0, on_time: 0, at_risk: 0, late: 0, completed: 0 })
@@ -188,6 +188,12 @@ onMounted(() => {
       <small>Ver tablero <ArrowRight :size="15" aria-hidden="true" /></small>
     </RouterLink>
 
+    <section v-if="!loading && !error" class="report-summary" aria-label="Resumen de órdenes">
+      <RouterLink to="/app/orders"><span>En producción</span><strong>{{ metrics.active }}</strong><small>Pedidos activos</small></RouterLink>
+      <RouterLink class="report-summary__late" to="/app/orders?filter=LATE"><span>Atrasadas</span><strong>{{ metrics.late }}</strong><small>Requieren atención</small></RouterLink>
+      <RouterLink class="report-summary__risk" to="/app/orders?filter=AT_RISK"><span>En riesgo</span><strong>{{ metrics.at_risk }}</strong><small>Próximas a vencer</small></RouterLink>
+      <RouterLink class="report-summary__done" to="/app/orders?filter=COMPLETED"><span>Completadas</span><strong>{{ metrics.completed }}</strong><small>Producción terminada</small></RouterLink>
+    </section>
     <!-- Primeros pasos (Sprint 3 - Lucero) -->
     <section v-if="showFirstSteps && !error && !loading" class="first-steps" aria-labelledby="first-steps-title">
       <div class="first-steps__header">
@@ -287,7 +293,7 @@ onMounted(() => {
       <div class="overview-section__head"><h2 id="flow-title">Trabajo por estación</h2><RouterLink to="/app/orders?view=board">Abrir tablero <ArrowRight :size="16" /></RouterLink></div>
       <ol class="overview-flow">
         <li v-for="stage in stageCounts" :key="stage.name" :class="{ 'is-busiest': !loading && stage.count > 0 && stage.count === busiestCount }">
-          <button type="button" @click="selectedStage = stage.name; queueFilter = 'ALL'"><strong>{{ loading ? '—' : stage.count }} pedidos</strong><span>{{ stage.name }}</span><span>{{ stage.quantities }}</span></button>
+          <button type="button" :aria-pressed="selectedStage === stage.name" @click="selectedStage = selectedStage === stage.name ? '' : stage.name; queueFilter = 'ALL'"><strong>{{ loading ? '—' : stage.count }} {{ stage.count === 1 ? 'pedido' : 'pedidos' }}</strong><span>{{ stage.name }}</span><span>{{ stage.quantities }}</span><span class="workload-track" aria-hidden="true"><i :style="{ width: `${busiestCount ? stage.count / busiestCount * 100 : 0}%` }"/></span></button>
         </li>
       </ol>
     </section>
@@ -296,17 +302,17 @@ onMounted(() => {
       <h2 id="queue-title">Acciones de producción</h2>
       <p>{{ activeOrders.length }} pedidos activos · {{ quantitySummary(activeOrders) }}</p>
       <div class="queue-controls">
-        <button type="button" @click="queueFilter = 'ALL'; selectedStage = ''">Todos</button>
-        <button type="button" @click="queueFilter = 'BLOCKED'; selectedStage = ''">Bloqueados ({{ blockedOrders.length }})</button>
-        <button type="button" @click="queueFilter = 'UNASSIGNED'; selectedStage = ''">Sin responsable ({{ unassignedOrders.length }})</button>
+        <button type="button" :aria-pressed="queueFilter === 'ALL' && !selectedStage" @click="queueFilter = 'ALL'; selectedStage = ''">Todos</button>
+        <button type="button" :aria-pressed="queueFilter === 'BLOCKED'" @click="queueFilter = 'BLOCKED'; selectedStage = ''">En pausa ({{ blockedOrders.length }})</button>
+        <button type="button" :aria-pressed="queueFilter === 'UNASSIGNED'" @click="queueFilter = 'UNASSIGNED'; selectedStage = ''">Sin responsable asignado ({{ unassignedOrders.length }})</button>
       </div>
       <p v-if="selectedStage">Etapa seleccionada: {{ selectedStage }}</p>
       <p v-if="!loading && !queueOrders.length">No hay pedidos para esta selección.</p>
       <ul class="production-queue">
-        <li v-for="order in queueOrders" :key="order.id"><RouterLink :to="`/app/orders/${order.id}`"><strong>{{ order.code }} · {{ order.product }}</strong><span>{{ formatOrderQuantity(order.quantity, order.unit) }} · {{ order.current_stage }}</span><span>{{ order.traffic_light === 'LATE' ? 'Atrasada · ' : '' }}Entrega: {{ formatDate(order.promised_at) }}</span><span v-if="order.block_reason">Bloqueo: {{ order.block_reason }}</span><span v-if="!order.responsible_user_id">Asignar responsable</span></RouterLink></li>
+        <li v-for="order in queueOrders" :key="order.id"><RouterLink :to="`/app/orders/${order.id}`"><strong>{{ order.code }} · {{ order.product }}</strong><span>{{ formatOrderQuantity(order.quantity, order.unit) }} · {{ order.current_stage }}</span><span>{{ order.traffic_light === 'LATE' ? 'Atrasada · ' : '' }}Entrega: {{ formatDate(order.promised_at) }}</span><span v-if="order.block_reason">En pausa: {{ order.block_reason }}</span><span v-if="!order.responsible_user_id">Sin responsable asignado (opcional)</span></RouterLink></li>
       </ul>
     </section>
-    <ProductionSettingsPanel v-if="isManager" />
+
     <!-- Modal Exportar Datos (Sprint 4 - Lucero) -->
     <Teleport to="body">
       <div v-if="showExportModal" class="export-modal-backdrop" @click.self="showExportModal = false">
@@ -586,4 +592,25 @@ onMounted(() => {
 .overview-flow button { display: grid; gap: .35rem; width: 100%; min-height: 80px; padding: .5rem; background: transparent; border: 0; cursor: pointer; font: inherit; text-align: left; }
 .queue-controls { display: flex; flex-wrap: wrap; gap: .5rem; } .queue-controls button { min-height: 44px; padding: .5rem; cursor: pointer; }
 .production-queue { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); list-style: none; padding: 0; gap: .75rem; } .production-queue a { display: grid; gap: .4rem; padding: 1rem; border: 1px solid var(--tf-border); border-radius: .4rem; color: var(--tf-ink); text-decoration: none; }
+
+.queue-controls { border-bottom: 1px solid var(--tf-border-soft); margin-top: 1rem; }
+.queue-controls button { border: 0; border-bottom: 2px solid transparent; padding: .65rem .8rem; background: transparent; color: var(--tf-text-subtle); font: inherit; font-size: .875rem; }
+.queue-controls button[aria-pressed="true"] { color: var(--tf-primary); border-bottom-color: var(--tf-primary); font-weight: 700; }
+.queue-controls button:focus-visible { outline: 2px solid var(--tf-focus); outline-offset: 2px; }
+.production-queue { grid-template-columns: minmax(0, 1fr); gap: 0; }
+.production-queue a { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); border: 0; border-bottom: 1px solid var(--tf-border-soft); border-radius: 0; padding: 1rem 0; }
+.production-queue a:hover { background: var(--tf-primary-soft); }
+.production-queue span { font-size: .875rem; color: var(--tf-text-subtle); }
+@media(max-width:600px) { .production-queue a { grid-template-columns: minmax(0, 1fr); } }
+
+.alarm strong { font-family: var(--tf-font-body); font-variation-settings: normal; font-size: clamp(1.5rem, 3vw, 2.25rem); letter-spacing: -.02em; }
+
+.overview-page{max-width:1500px}.overview-section,.first-steps{border:1px solid var(--tf-border-soft);border-radius:16px;background:white}.alarm{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem 1.25rem;border-radius:14px}.alarm strong{font-size:1.1rem;text-transform:none}.alarm span{font-size:.9rem;font-weight:500}.alarm small{margin:0}.report-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1rem}.report-summary a{display:grid;gap:.3rem;padding:1.25rem;border-radius:16px;background:white;border:1px solid var(--tf-border-soft);color:var(--tf-primary);text-decoration:none}.report-summary a:hover{border-color:currentColor;transform:translateY(-2px)}.report-summary span{font-size:.85rem;font-weight:600}.report-summary strong{font-size:2.25rem;line-height:1.3;font-weight:700;letter-spacing:-.05em}.report-summary small{color:var(--tf-text-subtle);font-size:.75rem}.report-summary .report-summary__late{background:#fff4f5;color:#a51c38;border-color:#f4dce2}.report-summary .report-summary__risk{background:#fffaf0;color:#936212;border-color:#ede1c4}.report-summary .report-summary__done{background:#effaf6;color:#17705a;border-color:#d4ebe2}.overview-flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:.75rem}.overview-flow li{border-radius:12px;padding:.25rem;background:#f6f8fb}.overview-flow button{padding:.85rem;gap:.35rem}.overview-flow button strong{font-size:1.25rem}.overview-flow button span{font-size:.8rem}.overview-flow button[aria-pressed="true"]{outline:2px solid var(--tf-primary);border-radius:10px}.workload-track{display:block;height:7px;border-radius:99px;background:#e0e7f0;margin-top:.4rem;overflow:hidden}.workload-track i{display:block;height:100%;background:var(--tf-accent-text);border-radius:99px}.first-steps{padding:1.25rem}.first-steps__items{gap:.75rem}.first-step{border-radius:12px}.overview-tickets{gap:.75rem}
+@media(max-width:700px){.report-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem}.report-summary a{padding:1rem}.report-summary strong{font-size:1.8rem}.alarm{display:grid;gap:.25rem}.first-steps__items{grid-template-columns:1fr 1fr}}
+
+.overview-page{min-width:0;grid-template-columns:minmax(0,1fr)}.overview-header>*{min-width:0}.overview-header__actions{flex-wrap:wrap}.overview-section,.first-steps{min-width:0}.overview-header h1{overflow-wrap:anywhere}
+@media(max-width:520px){.overview-header__actions{display:grid;grid-template-columns:minmax(0,1fr) 44px}.overview-header__actions>a{grid-column:1/-1;width:100%}.overview-header__actions .ops-button{font-size:.8rem}.overview-section__head{flex-wrap:wrap}.report-summary a{min-width:0}}
+
+.first-steps__header{flex-wrap:wrap}.first-steps__header>div{min-width:0;flex:1 1 200px}.first-steps__items,.first-step__text{min-width:0}.first-step{min-width:0;overflow-wrap:anywhere}
+@media(max-width:520px){.first-steps__items{grid-template-columns:minmax(0,1fr)}}
 </style>

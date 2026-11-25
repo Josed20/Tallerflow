@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import UiNotice from '../../components/UiNotice.vue'
 import { computed, nextTick, ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ordersApi, type Order, type OrderStage, type StageStatus, type StagePhoto } from './api'
@@ -8,7 +9,7 @@ import { canAdvanceProduction } from '../session/role-policy'
 import { compressImageFile } from '../../utils/image'
 import { capturePhoto } from '../../native/camera'
 import { isNativeApp } from '../../native/platform'
-import { Camera, Check, Copy, ExternalLink, Link2, Pencil, Printer, RotateCcw, X } from '@lucide/vue'
+import { Camera, Check, Link2, Pencil, Printer, RotateCcw, X } from '@lucide/vue'
 import { clientsApi, type Client } from '../clients/api'
 import UiField from '../../components/UiField.vue'
 import UiButton from '../../components/UiButton.vue'
@@ -38,13 +39,10 @@ const correctionReason = ref('')
 const correctionError = ref('')
 const correcting = ref(false)
 const pendingAdvanceStage = ref<OrderStage | null>(null)
-const showSharePanel = ref(false)
 const trackingUrl = ref('')
 const generatingLink = ref(false)
 const shareError = ref('')
-const shareNotice = ref('')
 const copied = ref(false)
-const trackingInput = ref<HTMLInputElement | null>(null)
 const clock = ref(Date.now())
 const undoingPosition = ref<number | null>(null)
 const showCancelDialog = ref(false)
@@ -386,40 +384,33 @@ function formatShortTime(iso: string | null) {
   return d.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
 }
 
-const whatsappUrl = computed(() => order.value && trackingUrl.value
-  ? `https://wa.me/?text=${encodeURIComponent(`Hola, puedes ver el avance de tu pedido ${order.value.code} (${order.value.product}) aquí: ${trackingUrl.value}`)}`
-  : '')
 
 async function openSharePanel() {
-  showSharePanel.value = !showSharePanel.value
-  if (showSharePanel.value) await generateTrackingLink()
+  notice.value = ''
+  error.value = ''
+  await nextTick()
+  if (!trackingUrl.value) await generateTrackingLink()
+  if (trackingUrl.value && !shareError.value) { await copyTrackingLink(); if (copied.value) notice.value = 'Enlace de seguimiento copiado.' }
+  if (shareError.value) error.value = shareError.value
 }
 
-async function generateTrackingLink(action: 'recover' | 'replace' | 'revoke' = 'recover') {
+async function generateTrackingLink() {
   if (!order.value || generatingLink.value) return
   if (!session.csrfToken) {
     shareError.value = 'Tu sesión necesita renovarse. Vuelve a iniciar sesión.'
     return
   }
-  if (action !== 'recover' && !window.confirm(action === 'replace'
-    ? '¿Reemplazar el enlace? Los enlaces enviados antes dejarán de funcionar.'
-    : '¿Revocar los enlaces? El cliente ya no podrá consultar esta orden.')) return
   generatingLink.value = true
   shareError.value = ''
-  shareNotice.value = ''
   copied.value = false
   try {
-    const response = await manageTrackingLink(order.value.id, session.csrfToken, action)
+    const response = await manageTrackingLink(order.value.id, session.csrfToken, 'recover')
     const publicOrigin = (import.meta.env.VITE_API_BASE_URL || window.location.origin).replace(/\/+$/, '')
     trackingUrl.value = response.data.token ? `${publicOrigin}/seguimiento/${response.data.token}` : ''
-    shareNotice.value = action === 'revoke'
-      ? 'Todos los enlaces quedaron revocados. Los enlaces enviados ya no permiten consultar esta orden.'
-      : action === 'replace'
-        ? 'Enlace reemplazado. Los enlaces anteriores ya no funcionan; comparte este nuevo enlace.'
-        : 'Enlace listo para compartir. Copiarlo no cambia el enlace.'
+    if (!trackingUrl.value) throw new Error('El enlace no está disponible. Inténtalo nuevamente.')
   } catch (err: any) {
     shareError.value = err?.code === 'TRACKING_RECOVERY_UNAVAILABLE'
-      ? 'El secreto del servidor cambió. Usa Reemplazar enlace para crear uno nuevo; el anterior dejará de funcionar.'
+      ? 'El enlace necesita ser recuperado por soporte. Contacta a TallerFlow.'
       : err?.message || 'No pudimos recuperar el enlace. Inténtalo de nuevo.'
   } finally {
     generatingLink.value = false
@@ -432,8 +423,8 @@ async function copyTrackingLink() {
     await navigator.clipboard.writeText(trackingUrl.value)
     copied.value = true
   } catch {
-    trackingInput.value?.select()
-    shareError.value = 'No pudimos copiar automáticamente. El enlace quedó seleccionado: cópialo con Ctrl+C.'
+    copied.value = false
+    shareError.value = 'El navegador no permitió copiar. Habilita el permiso del portapapeles e inténtalo nuevamente.'
   }
 }
 
@@ -486,8 +477,8 @@ onUnmounted(() => {
           <h1>{{ order.product }}</h1>
         </div>
         <div class="header-actions">
-          <button v-if="canCorrect" class="btn-ticket" type="button" :aria-expanded="showSharePanel" @click="openSharePanel">
-            <Link2 :size="17" aria-hidden="true" /> Compartir con el cliente
+          <button v-if="canCorrect" class="btn-ticket" type="button" :disabled="generatingLink" @click="openSharePanel">
+            <Link2 :size="17" aria-hidden="true" /> Copiar enlace de seguimiento
           </button>
           <button class="btn-ticket" type="button" @click="showTicketModal = true">
             <Printer :size="17" aria-hidden="true" /> Imprimir ficha viajera
@@ -502,42 +493,10 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <section v-if="showSharePanel && order" class="share-panel" aria-labelledby="share-title">
-      <div class="share-panel__head">
-        <h2 id="share-title">Enlace de seguimiento para el cliente</h2>
-        <button class="share-panel__close" type="button" aria-label="Cerrar" @click="showSharePanel = false"><X :size="18" /></button>
-      </div>
-      <p class="share-panel__text">El cliente verá el producto, la descripción, las etapas, la fecha prometida y las fotos de avance de <strong>{{ order.code }}</strong>, sin crear una cuenta. No verá datos internos ni otras órdenes.</p>
-      <template v-if="trackingUrl">
-        <label class="share-panel__label" for="tracking-url">Enlace privado</label>
-        <div class="share-panel__row">
-          <input id="tracking-url" ref="trackingInput" class="share-panel__input" type="text" readonly :value="trackingUrl" @focus="($event.target as HTMLInputElement).select()" />
-          <button class="share-panel__primary" type="button" :disabled="generatingLink" @click="copyTrackingLink"><Copy :size="16" aria-hidden="true" /> {{ copied ? 'Copiado' : 'Copiar' }}</button>
-        </div>
-        <div class="share-panel__links">
-          <a :href="whatsappUrl" target="_blank" rel="noopener noreferrer">Enviar por WhatsApp</a>
-          <a :href="trackingUrl" target="_blank" rel="noopener noreferrer"><ExternalLink :size="14" aria-hidden="true" /> Ver como cliente</a>
-        </div>
-        <p class="share-panel__note">Puedes volver a abrir este panel y copiar el mismo enlace. Vence 30 días después de completar la orden; si se reabre, vuelve a estar disponible.</p>
-      </template>
-      <template v-else>
-        <p class="share-panel__note">Recupera el enlace de esta orden. Los enlaces enviados antes seguirán funcionando hasta que los reemplaces o revoques.</p>
-        <button class="share-panel__primary" type="button" :disabled="generatingLink" @click="generateTrackingLink()">
-          <Link2 :size="16" aria-hidden="true" /> {{ generatingLink ? 'Recuperando…' : 'Recuperar o crear enlace' }}
-        </button>
-      </template>
-      <div class="share-panel__links">
-        <button type="button" :disabled="generatingLink" @click="generateTrackingLink('replace')">Reemplazar enlace</button>
-        <button type="button" :disabled="generatingLink" @click="generateTrackingLink('revoke')">Revocar todos los enlaces</button>
-      </div>
-      <p v-if="generatingLink" role="status">Procesando enlace…</p>
-      <p v-if="shareNotice" role="status">{{ shareNotice }}</p>
-      <p v-if="copied" role="status">Enlace copiado. Puedes volver a compartirlo.</p>
-      <p v-if="shareError" class="share-panel__error" role="alert">{{ shareError }}</p>
-    </section>
+
 
     <UiAlert v-if="error" :message="error" />
-    <p v-if="notice" class="detail-notice" role="status">{{ notice }}</p>
+    <UiNotice :message="notice" />
 
     <section v-if="loading" class="loading-state">
       <p>Cargando detalle de la orden...</p>
@@ -564,7 +523,7 @@ onUnmounted(() => {
           <div>
             <span class="label">Estado de la Orden:</span>
             <span class="val status-pill" :class="'status-' + order.status.toLowerCase()">
-              {{ order.status === 'ACTIVE' ? 'En producción' : order.status === 'COMPLETED' ? 'Completada' : 'Cancelada' }}
+              {{ order.status === 'ACTIVE' ? (order.block_reason ? 'En pausa' : 'En producción') : order.status === 'COMPLETED' ? 'Completada' : 'Cancelada' }}
             </span>
           </div>
           <div>
@@ -1441,23 +1400,7 @@ h1 {
 .header-left h1 { font-size: var(--tf-page-title-size); color: var(--tf-ink); }
 .btn-ticket { min-height: 44px; color: var(--tf-primary); border-color: var(--tf-primary-border); background: var(--tf-surface); display: inline-flex; align-items: center; gap: .45rem; }
 .header-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
-.share-panel { display: grid; gap: .75rem; margin: 0 0 1rem; padding: 1rem 1.1rem; border: 1px solid var(--tf-primary-border); border-radius: .5rem; background: var(--tf-primary-soft); }
-.share-panel__head { display: flex; justify-content: space-between; align-items: center; gap: .75rem; }
-.share-panel__head h2 { margin: 0; color: var(--tf-ink); font-size: var(--tf-section-title-size); }
-.share-panel__close { display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: .4rem; color: var(--tf-ink-soft); background: transparent; cursor: pointer; }
-.share-panel__text, .share-panel__note { margin: 0; color: var(--tf-text-subtle); font-size: .88rem; line-height: 1.5; }
-.share-panel__label { color: var(--tf-ink); font-size: .82rem; font-weight: 700; }
-.share-panel__row { display: flex; gap: .5rem; }
-.share-panel__input { flex: 1; min-width: 0; min-height: 44px; padding: .5rem .7rem; border: 1px solid var(--tf-border); border-radius: .4rem; color: var(--tf-ink); background: var(--tf-surface); font: inherit; font-size: .85rem; }
-.share-panel__primary { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; min-height: 44px; padding: .5rem 1rem; border: 0; border-radius: .4rem; color: var(--tf-on-primary); background: var(--tf-primary); font: inherit; font-size: .88rem; font-weight: 750; cursor: pointer; justify-self: start; white-space: nowrap; }
-.share-panel__primary:hover:not(:disabled) { background: var(--tf-primary-hover); }
-.share-panel__primary:disabled { opacity: .65; cursor: wait; }
-.share-panel__links { display: flex; flex-wrap: wrap; gap: 1.1rem; }
-.share-panel__links button { min-height: 44px; padding: .4rem .7rem; border: 1px solid var(--tf-primary-border); border-radius: var(--tf-radius-sm); background: var(--tf-surface); color: var(--tf-primary); font: inherit; cursor: pointer; }
-.share-panel__links a { display: inline-flex; align-items: center; gap: .3rem; min-height: 44px; color: var(--tf-primary-strong); font-size: .88rem; font-weight: 700; }
-.share-panel__error { margin: 0; color: var(--tf-error); font-size: .85rem; font-weight: 700; }
-.share-panel button:focus-visible, .share-panel a:focus-visible, .share-panel__input:focus-visible { outline: 3px solid var(--tf-focus); outline-offset: 2px; }
-@media (max-width: 480px) { .share-panel__row { flex-direction: column; } .header-actions, .header-actions .btn-ticket { width: 100%; justify-content: center; } }
+@media (max-width: 480px) { .header-actions, .header-actions .btn-ticket { width: 100%; justify-content: center; } }
 .order-summary-card, .stages-section { border-radius: .5rem; box-shadow: none; }
 .stage-card.stage-in_progress { border-color: var(--tf-primary-border); background: var(--tf-primary-soft); box-shadow: none; }
 .stage-in_progress .stage-num { background: var(--tf-primary); }
@@ -1543,4 +1486,6 @@ h1 {
 .ticket-route { width: 100%; border-top: 1px solid var(--tf-border-soft); padding-top: 1rem; font-size: .82rem; }
 .ticket-route h3 { margin: 0 0 .35rem; font-size: .85rem; }
 .ticket-route p { margin: 0; line-height: 1.5; }
+
+@media(max-width:480px){.header-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);width:100%}.header-actions .btn-ticket{width:100%;font-size:.75rem}.header-actions .btn-ticket:first-child{grid-column:1/-1}}
 </style>

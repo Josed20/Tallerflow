@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import UiNotice from '../../components/UiNotice.vue'
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowRight, Check, Columns3, Download, List, Plus, RefreshCw, ScanLine, Search } from '@lucide/vue'
@@ -153,7 +154,7 @@ function formatDate(value: string) {
 }
 
 function advanceLabel(order: Order) {
-  if (order.block_reason) return 'Producción bloqueada'
+  if (order.block_reason) return 'Pedido en pausa'
   return 'Completar etapa'
 }
 const pendingNextStage = ref<string | null>(null)
@@ -191,7 +192,7 @@ onMounted(() => { loadOrders(); productionApi.get().then(res => { templateStages
     </header>
 
     <UiAlert v-if="error" :message="error" />
-    <div v-if="notice" class="board-notice" role="status"><Check :size="18" /> {{ notice }} <button type="button" aria-label="Cerrar aviso" @click="notice = ''">×</button></div>
+    <UiNotice :message="notice" />
 
     <div class="board-toolbar">
       <div class="board-view-switch" role="group" aria-label="Vista de órdenes">
@@ -282,4 +283,6 @@ onMounted(() => { loadOrders(); productionApi.get().then(res => { templateStages
 .board-list { display: grid; gap: .6rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr)); }
 
 @media (max-width: 620px) { .board-header { align-items: start; flex-direction: column; } .board-header__actions { width: 100%; } .board-header__actions .ops-button { flex: 1; } .board-toolbar { align-items: stretch; flex-direction: column; } .board-search { width: 100%; } }
+
+.kanban-grid{grid-template-columns:repeat(var(--stage-columns),minmax(290px,290px));gap:1rem}.kanban-column{background:#edf1f7;border-radius:16px;min-height:22rem;border:1px solid #e4eaf2}.kanban-column__header{border-bottom:0;padding:1rem;position:sticky;top:0;z-index:1;background:#edf1f7;border-radius:16px 16px 0 0}.kanban-column__number{display:none}.kanban-column__header h2{font-size:.9rem;text-transform:capitalize;font-variation-settings:normal}.kanban-column__header>strong{border-radius:999px;background:white;min-width:28px;height:28px;color:var(--tf-primary)}.kanban-column__items{padding:0 .75rem .75rem;gap:.75rem}.ticket-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5rem;border-top:1px solid var(--tf-border-soft);padding-top:.65rem;margin-top:.15rem}.ticket-actions a{font-size:.8rem;min-height:44px}.ticket-actions .ticket-advance{width:auto;min-height:44px;padding:.45rem .65rem;border-radius:8px;border:0;color:var(--tf-primary);background:var(--tf-primary-soft);font-size:.75rem;font-weight:600}.ticket-qty{font-size:.8rem}.board-filters button{border-color:transparent;background:transparent;border-radius:999px;padding:.4rem .8rem}.board-filters button.active{background:var(--tf-primary);color:white;border-color:var(--tf-primary)}.board-filters button.active strong{color:white}.board-filters button:not(.active):hover{background:var(--tf-primary-soft)}.board-filters strong{padding:.1rem .3rem;font-size:.75rem}.board-view-switch{border-radius:12px}.board-search{border-radius:12px}.board-search input:focus-visible{outline:0;box-shadow:none}
 </style>

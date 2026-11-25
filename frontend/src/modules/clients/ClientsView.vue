@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue'
-import { Check, Mail, Pencil, Phone, Plus, Search, X } from '@lucide/vue'
+import { Pencil, Plus, Search, X } from '@lucide/vue'
 import { clientsApi, type Client } from './api'
 import { useSessionStore } from '../session/session.store'
 import { canManageOperations } from '../session/role-policy'
 import UiButton from '../../components/UiButton.vue'
 import UiAlert from '../../components/UiAlert.vue'
+import UiNotice from '../../components/UiNotice.vue'
 
 const session = useSessionStore()
 
@@ -16,6 +17,16 @@ const error = ref('')
 const showCreateModal = ref(false)
 const editing = ref<Client | null>(null)
 const notice = ref('')
+const archived = ref(false)
+const archiveCandidate = ref<Client | null>(null)
+async function archiveClient() {
+  const client = archiveCandidate.value
+  if (!client || submitting.value || !session.csrfToken) return
+  submitting.value = true
+  try { const response = await clientsApi.update(client.id, { is_active: !client.is_active }, session.csrfToken); clients.value = clients.value.map(item => item.id === client.id ? response.data : item); notice.value = client.is_active ? 'Cliente archivado. Sus órdenes se conservan.' : 'Cliente restaurado.'; archiveCandidate.value = null }
+  catch { error.value = 'No se pudo actualizar el cliente. Inténtalo nuevamente.' }
+  finally { submitting.value = false }
+}
 const nameInput = ref<HTMLInputElement | null>(null)
 
 // Form fields
@@ -40,8 +51,9 @@ async function openForm(client: Client | null = null) {
 
 const filteredClients = computed(() => {
   const q = search.value.trim().toLowerCase()
-  if (!q) return clients.value
-  return clients.value.filter(
+  const visible = clients.value.filter(client => archived.value ? !client.is_active : client.is_active)
+  if (!q) return visible
+  return visible.filter(
     (c) =>
       c.name.toLowerCase().includes(q) ||
       (c.phone && c.phone.includes(q)) ||
@@ -118,8 +130,9 @@ onMounted(() => {
     </header>
 
     <UiAlert v-if="error" :message="error" />
-    <div v-if="notice" class="clients-notice" role="status"><Check :size="17" /> {{ notice }} <button type="button" aria-label="Cerrar aviso" @click="notice = ''"><X :size="16" /></button></div>
+    <UiNotice :message="notice" />
 
+    <label class="archive-filter"><input v-model="archived" type="checkbox" /> Ver clientes archivados</label>
     <section class="search-bar">
       <Search :size="17" aria-hidden="true" />
       <input
@@ -138,8 +151,8 @@ onMounted(() => {
     <section v-else-if="filteredClients.length === 0" class="empty-state">
       <div v-if="search"><p>No se encontraron clientes con "{{ search }}".</p><button type="button" class="ops-button" @click="search = ''">Ver todos los clientes</button></div>
       <div v-else>
-        <p>Aún no hay clientes registrados en este taller.</p>
-        <UiButton v-if="isManager" @click="openForm()">
+        <p>{{ archived ? 'No hay clientes archivados.' : 'Aún no hay clientes registrados en este taller.' }}</p>
+        <UiButton v-if="isManager && !archived" @click="openForm()">
           Registrar el primer cliente
         </UiButton>
       </div>
@@ -147,18 +160,19 @@ onMounted(() => {
 
     <table v-else class="clients-list">
       <caption class="sr-only">Clientes del taller</caption>
-      <thead><tr><th scope="col">Cliente</th><th scope="col">Teléfono</th><th scope="col">Correo</th><th scope="col">Estado</th><th v-if="isManager" scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
+      <thead><tr><th scope="col">Cliente</th><th scope="col">Teléfono</th><th scope="col">Correo</th><th v-if="isManager" scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
       <tbody>
         <tr v-for="client in filteredClients" :key="client.id" class="client-row">
           <th scope="row" class="client-name">{{ client.name }}</th>
-          <td data-label="Teléfono"><a v-if="client.phone" class="client-meta" :href="`tel:${client.phone}`"><Phone :size="15" aria-hidden="true" /> {{ client.phone }}</a><span v-else class="missing-contact">Sin teléfono</span></td>
-          <td data-label="Correo"><a v-if="client.email" class="client-meta" :href="`mailto:${client.email}`"><Mail :size="15" aria-hidden="true" /> {{ client.email }}</a><span v-else class="missing-contact">Sin correo</span></td>
-          <td data-label="Estado"><span class="status-badge" :class="{ active: client.is_active }">{{ client.is_active ? 'Activo' : 'Inactivo' }}</span></td>
-          <td v-if="isManager" class="client-actions"><button type="button" class="ops-button client-edit" :aria-label="`Editar ${client.name}`" @click="openForm(client)"><Pencil :size="16" aria-hidden="true" /> Editar</button></td>
+          <td data-label="Teléfono"><span v-if="client.phone" class="client-contact">{{ client.phone }}</span><span v-else class="missing-contact">Sin teléfono</span></td>
+          <td data-label="Correo"><span v-if="client.email" class="client-contact">{{ client.email }}</span><span v-else class="missing-contact">Sin correo</span></td>
+
+          <td v-if="isManager" class="client-actions"><button type="button" class="ops-button client-edit" :aria-label="`Editar ${client.name}`" @click="openForm(client)"><Pencil :size="16" aria-hidden="true" /> Editar</button><button type="button" class="ops-button" @click="archiveCandidate = client">{{ client.is_active ? 'Archivar' : 'Restaurar' }}</button></td>
         </tr>
       </tbody>
     </table>
 
+    <div v-if="archiveCandidate" class="modal-backdrop"><section class="modal-card" role="alertdialog" aria-modal="true" aria-labelledby="archive-title"><h2 id="archive-title">{{ archiveCandidate.is_active ? 'Archivar cliente' : 'Restaurar cliente' }}</h2><p>{{ archiveCandidate.name }}</p><p>Sus órdenes y el historial se conservan. Un cliente archivado no se utiliza para pedidos nuevos.</p><div class="modal-actions"><button type="button" class="ops-button" @click="archiveCandidate = null">Cancelar</button><UiButton :disabled="submitting" @click="archiveClient">{{ submitting ? 'Guardando…' : 'Confirmar' }}</UiButton></div></section></div>
     <!-- Modal Nuevo Cliente -->
     <div v-if="showCreateModal" class="modal-backdrop" @click.self="showCreateModal = false">
       <div class="modal-card">
@@ -403,7 +417,7 @@ h1 {
 .btn-back { color: var(--tf-primary); min-height: 44px; }
 .input-search { max-width: 25rem; min-height: 46px; border-color: var(--tf-border); border-radius: .4rem; }
 .search-bar { display: flex; align-items: center; gap: .55rem; width: min(100%, 26rem); min-height: 46px; padding: 0 .75rem; border: 1px solid var(--tf-border); border-radius: .4rem; background: var(--tf-surface); color: var(--tf-text-subtle); }
-.search-bar:focus-within { border-color: var(--tf-primary); outline: 3px solid var(--tf-focus); outline-offset: 2px; }
+.search-bar:focus-within { border-color: var(--tf-primary); box-shadow: 0 0 0 1px var(--tf-primary); }
 .search-bar .input-search { width: 100%; min-height: 42px; padding: 0; border: 0; outline: 0; }
 .input-text:focus-visible { outline: 2px solid var(--tf-focus); border-color: var(--tf-primary); }
 .status-badge.active { color: var(--tf-primary-strong); background: var(--tf-success-soft); }
@@ -440,4 +454,15 @@ h1 {
   .clients-list td[data-label="Estado"] { align-self: center; }
   .client-actions { justify-self: end; }
 }
+
+.search-bar .input-search:focus, .search-bar .input-search:focus-visible { border: 0; outline: none; box-shadow: none; appearance: none; background: transparent; }
+.clients-list thead th:first-child { width: 29%; }
+.clients-list thead th:nth-child(2) { width: 17%; }
+.clients-list thead th:nth-child(3) { width: 29%; }
+.clients-list thead th:nth-child(4) { width: 25%; }
+.client-actions { white-space: nowrap; }
+.client-actions button + button { margin-left: .5rem; }
+.archive-filter { display: flex; align-items: center; gap: .5rem; min-height: 44px; color: var(--tf-text-subtle); font-size: .875rem; }
+.archive-filter input { width: 18px; height: 18px; accent-color: var(--tf-primary); }
+@media(max-width:760px) { .client-actions { grid-column: 1 / -1; padding-top: .5rem !important; } }
 </style>

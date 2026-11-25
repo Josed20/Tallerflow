@@ -166,3 +166,51 @@ func TestPostgresIntegrationStableTrackingLifecycle(t *testing.T) {
 	_, err = orderRepo.ReopenStage(ctx, w, orderID, 1, actor, "Intento de reabrir pedido cancelado")
 	require.ErrorIs(t, err, ErrOrderInvalid)
 }
+
+func TestPostgresIntegrationAutoTracking(t *testing.T) {
+	appURL, adminURL := os.Getenv("TF_TEST_DATABASE_URL"), os.Getenv("TF_TEST_ADMIN_DATABASE_URL")
+	if appURL == "" || adminURL == "" {
+		t.Skip("requires isolated PostgreSQL")
+	}
+	db, err := platformdb.Open(appURL)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, platformdb.Close(db)) })
+	admin, err := platformdb.Open(adminURL)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, platformdb.Close(admin)) })
+	tenant, err := platformdb.NewTenantRunner(db)
+	require.NoError(t, err)
+	repo, err := NewPostgresRepository(tenant, "automatic-link-test-secret")
+	require.NoError(t, err)
+	tracking, err := NewPostgresTrackingRepository(db, tenant, "automatic-link-test-secret")
+	require.NoError(t, err)
+	w, actor, client := uuid.New(), uuid.New(), uuid.New()
+	require.NoError(t, admin.Exec("INSERT INTO users (id,email,name) VALUES (?,?,'Local test')", actor, actor.String()+"@autolink.test").Error)
+	require.NoError(t, admin.Exec("INSERT INTO workshops (id,name) VALUES (?,'Automatic link test')", w).Error)
+	require.NoError(t, admin.Exec("INSERT INTO clients (id,workshop_id,name) VALUES (?,?,'Local test client')", client, w).Error)
+	t.Cleanup(func() {
+		for _, q := range []string{"DELETE FROM audit_events WHERE workshop_id = ?", "DELETE FROM orders WHERE workshop_id = ?", "DELETE FROM clients WHERE workshop_id = ?", "DELETE FROM workshops WHERE id = ?"} {
+			require.NoError(t, admin.Exec(q, w).Error)
+		}
+		require.NoError(t, admin.Exec("DELETE FROM users WHERE id = ?", actor).Error)
+	})
+	input := CreateOrderInput{ActorID: actor, ClientID: client, Product: "Automatic link", Quantity: 24, Unit: "UNITS", PromisedAt: time.Now().Add(72 * time.Hour)}
+	order, err := repo.Create(context.Background(), w, input, "auto-link-on-create")
+	require.NoError(t, err)
+	var count int64
+	require.NoError(t, admin.Raw("SELECT count(*) FROM order_tracking_links WHERE order_id = ? AND recovery_nonce IS NOT NULL", order.ID).Scan(&count).Error)
+	require.EqualValues(t, 1, count, "link must exist before any recovery request")
+	token, err := tracking.ManageLink(context.Background(), w, order.ID, actor, "recover")
+	require.NoError(t, err)
+	again, err := repo.Create(context.Background(), w, input, "auto-link-on-create")
+	require.NoError(t, err)
+	require.Equal(t, order.ID, again.ID)
+	repeated, err := tracking.ManageLink(context.Background(), w, order.ID, actor, "recover")
+	require.NoError(t, err)
+	require.Equal(t, token, repeated)
+	input.ActorID = uuid.New()
+	_, err = repo.Create(context.Background(), w, input, "auto-link-invalid-actor")
+	require.Error(t, err)
+	require.NoError(t, admin.Raw("SELECT count(*) FROM orders WHERE workshop_id = ?", w).Scan(&count).Error)
+	require.EqualValues(t, 1, count, "a failed link insert must roll back its order")
+}

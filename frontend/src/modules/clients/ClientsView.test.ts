@@ -87,4 +87,24 @@ describe('ClientsView', () => {
     expect(screen.getByText('Sin correo')).toBeTruthy()
   })
 
+  it('shows contacts as text and archives a client only after confirmation', async () => {
+    const client = { id: 'c1', workshop_id: 'w1', name: 'Taller prueba', phone: '900000000', email: 'cliente@example.test', is_active: true, created_at: '', updated_at: '' }
+    vi.mocked(clientsApi.list).mockResolvedValue({ data: [client] })
+    vi.mocked(clientsApi.update).mockResolvedValue({ data: { ...client, is_active: false } })
+    await renderClients()
+    await screen.findByRole('rowheader', { name: client.name })
+    expect(screen.getByText(client.phone).closest('a')).toBeNull()
+    expect(screen.getByText(client.email).closest('a')).toBeNull()
+    expect(screen.queryByRole('columnheader', { name: 'Estado' })).toBeNull()
+    await fireEvent.click(screen.getByRole('button', { name: 'Archivar' }))
+    expect(clientsApi.update).not.toHaveBeenCalled()
+    await fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }))
+    await screen.findByText('Cliente archivado. Sus órdenes se conservan.')
+    expect(clientsApi.update).toHaveBeenCalledWith('c1', { is_active: false }, 'csrf-client')
+    expect(screen.queryByRole('rowheader', { name: client.name })).toBeNull()
+    await fireEvent.click(screen.getByLabelText('Ver clientes archivados'))
+    expect(screen.getByRole('rowheader', { name: client.name })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Restaurar' })).toBeTruthy()
+  })
+
 })

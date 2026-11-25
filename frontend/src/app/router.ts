@@ -11,6 +11,8 @@ import ResetPasswordView from '../modules/password-reset/ResetPasswordView.vue'
 import SessionHomeView from '../modules/session/SessionHomeView.vue'
 import TeamView from '../modules/team/TeamView.vue'
 import AccountView from '../modules/account/AccountView.vue'
+import AccountDocumentView from '../modules/account/AccountDocumentView.vue'
+import ProductionSettingsView from '../modules/orders/ProductionSettingsView.vue'
 import ClientsView from '../modules/clients/ClientsView.vue'
 import OrdersListView from '../modules/orders/OrdersListView.vue'
 import OrderCreateView from '../modules/orders/OrderCreateView.vue'
@@ -54,6 +56,10 @@ export const routes = [
   { path: '/verificar-correo', name: 'verify-email', component: VerifyEmailView, meta: { public: true, allowAuthenticated: true } },
   { path: '/app', name: 'app', component: SessionHomeView },
   { path: '/app/account', name: 'account', component: AccountView },
+  { path: '/app/account/terms', name: 'account-terms', component: AccountDocumentView, props: { kind: 'terms' } },
+  { path: '/app/account/privacy', name: 'account-privacy', component: AccountDocumentView, props: { kind: 'privacy' } },
+  { path: '/app/account/delete', name: 'account-delete', component: AccountDocumentView, props: { kind: 'deletion' } },
+  { path: '/app/settings', name: 'settings', component: ProductionSettingsView, meta: { roles: ['OWNER', 'ADMIN'] } },
   { path: '/app/production', redirect: '/app/orders' },
   { path: '/app/clients', name: 'clients', component: ClientsView, meta: { roles: ['OWNER', 'ADMIN'] } },
   { path: '/app/orders', name: 'orders', component: OrdersListView },
@@ -81,7 +87,11 @@ const pageTitles: Record<string, string> = {
   'change-password': 'Cambiar contraseña',
   tracking: 'Seguimiento de tu pedido',
   app: 'Panel',
-  account: 'Cuenta y privacidad',
+  account: 'Mi cuenta',
+  'account-terms': 'Términos de servicio',
+  'account-privacy': 'Privacidad',
+  'account-delete': 'Eliminar cuenta',
+  settings: 'Configuración del taller',
   clients: 'Clientes',
   orders: 'Órdenes',
   'orders-new': 'Nueva orden',

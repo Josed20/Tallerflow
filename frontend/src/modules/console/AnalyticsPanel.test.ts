@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/vue'
+import { fireEvent, render, screen, within } from '@testing-library/vue'
 import { beforeEach, expect, it, vi } from 'vitest'
 import ConsoleView from './ConsoleView.vue'
 import AnalyticsPanel from './AnalyticsPanel.vue'
@@ -21,10 +21,12 @@ it('preserves all chosen filters when including demos and reclassifying a worksh
   api.get.mockImplementation(async (path: string) => {
     if (path.startsWith('/api/v1/console/analytics?')) return result()
     if (path.startsWith('/api/v1/console/workshops?')) return { data: [workshop] }
+    if (path === '/api/v1/console/workshops/workshop-1') return { data: workshop }
     if (path === '/api/v1/console/audit') return { data: [] }
     return { data: {} }
   })
   api.post.mockResolvedValue(undefined)
+  sessionStorage.setItem('tallerflow_console_csrf','test-csrf')
   render(ConsoleView)
   await screen.findByRole('button', { name: 'Aplicar filtros' })
   await fireEvent.update(screen.getByLabelText('Desde'), '2026-01-01')
@@ -35,12 +37,13 @@ it('preserves all chosen filters when including demos and reclassifying a worksh
   await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/v1/console/analytics?start=2026-01-01&end=2026-01-02&channel=android&version=3&include_demo=false'))
   await screen.findByRole('button', { name: 'Aplicar filtros' })
   const previousRequests = api.get.mock.calls.filter(([path]) => path.startsWith('/api/v1/console/analytics?')).length
-  await fireEvent.click(screen.getByRole('checkbox', { name: /Incluir talleres demo/ }))
+  await fireEvent.click(screen.getByRole('checkbox', { name: /Incluir talleres de demostración/ }))
   const expected = '/api/v1/console/analytics?start=2026-01-01&end=2026-01-02&channel=android&version=3&include_demo=true'
   await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith(expected))
-  await fireEvent.click(screen.getByRole('button', { name: 'Marcar demo' }))
+  await fireEvent.click(screen.getByRole('button', { name: 'Administrar Taller Demo' }))
+  await fireEvent.click(await screen.findByRole('switch', { name: /Taller de demostración/ }))
   await vi.waitFor(() => expect(api.get.mock.calls.filter(([path]) => path === expected)).toHaveLength(2))
-  expect(api.post).toHaveBeenCalledWith('/api/v1/console/workshops/workshop-1/demo', { is_demo: true }, '')
+  expect(api.post).toHaveBeenCalledWith('/api/v1/console/workshops/workshop-1/demo', { is_demo: true }, 'test-csrf')
   expect((screen.getByLabelText('Desde') as HTMLInputElement).value).toBe('2026-01-01')
   expect((screen.getByLabelText('Hasta') as HTMLInputElement).value).toBe('2026-01-02')
   expect((screen.getByLabelText('Canal') as HTMLSelectElement).value).toBe('android')
@@ -51,17 +54,25 @@ it('preserves all chosen filters when including demos and reclassifying a worksh
 it('sums observed events only with complete coverage and keeps server period distinct counts', async () => {
   api.get.mockResolvedValue(result())
   const view = render(AnalyticsPanel, { props: { csrf: 'csrf', includeDemo: false, revision: 0 } })
-  const total = (label: string) => screen.getByText(label).closest('article')!.querySelector('strong')!
-  await screen.findByText('Usuarios únicos activos en todo el período')
-  expect(total('Primeras aperturas observadas en el período').textContent).toBe('5')
-  expect(total('Registros verificados en el período').textContent).toBe('3')
-  expect(total('Usuarios únicos activos en todo el período').textContent).toBe('1')
+  const total = (label: string) => within(view.container.querySelector('.totals') as HTMLElement).getByText(label).closest('article')!.querySelector('strong')!
+  await screen.findByText('Usuarios activos únicos')
+  expect(total('Primeras aperturas').textContent).toBe('5')
+  expect(total('Registros verificados').textContent).toBe('3')
+  expect(total('Usuarios activos únicos').textContent).toBe('1')
   api.get.mockResolvedValue(result(false))
   await view.rerender({ revision: 1 })
-  await vi.waitFor(() => expect(total('Primeras aperturas observadas en el período').textContent).toBe('Sin datos'))
-  expect(total('Registros verificados en el período').textContent).toBe('Sin datos')
+  await vi.waitFor(() => expect(total('Primeras aperturas').textContent).toBe('Sin datos'))
+  expect(total('Registros verificados').textContent).toBe('Sin datos')
   api.get.mockResolvedValue({ ...result(), data: [day('2026-01-01', null, null)] })
   await view.rerender({ revision: 2 })
   await vi.waitFor(() => expect(api.get).toHaveBeenCalledTimes(3))
-  expect(total('Primeras aperturas observadas en el período').textContent).toBe('Sin datos')
+  expect(total('Primeras aperturas').textContent).toBe('Sin datos')
+})
+
+
+it('requires a fresh sign-in in a tab without the mutation token', async () => {
+  render(ConsoleView)
+  expect(await screen.findByRole('button', { name: 'Ingresar' })).toBeTruthy()
+  expect(screen.queryByRole('heading', { name: 'Vista general' })).toBeNull()
+  expect(api.get).not.toHaveBeenCalled()
 })

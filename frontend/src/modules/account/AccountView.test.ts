@@ -26,12 +26,13 @@ describe('account access and privacy navigation', () => {
   it.each(['OWNER', 'ADMIN', 'SUPERVISOR', 'OPERATOR'] as const)('opens account and public deletion for %s', async role => {
     const { pinia, router } = await setup(role)
     expect(router.currentRoute.value.name).toBe('account')
-    expect(document.title).toBe('Cuenta y privacidad · TallerFlow')
+    expect(document.title).toBe('Mi cuenta · TallerFlow')
     render(AccountView, { global: { plugins: [pinia, router] } })
     expect(screen.getByText('ana@example.test')).toBeTruthy()
     expect(screen.getByText({ OWNER: 'Propietario', ADMIN: 'Administrador', SUPERVISOR: 'Supervisor', OPERATOR: 'Operador' }[role])).toBeTruthy()
-    await fireEvent.click(screen.getByRole('link', { name: 'Solicitar eliminación de cuenta' }))
-    await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('delete-account'))
+    await fireEvent.click(screen.getByRole('link', { name: /Solicitar eliminación de cuenta/ }))
+    await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('account-delete'))
+    expect(screen.queryByRole('button', { name: 'Cerrar información' })).toBeNull()
   })
   it('uses a short readable fallback for an unknown role', async () => {
     const { pinia, router } = await setup()
@@ -51,12 +52,8 @@ describe('account access and privacy navigation', () => {
     const { pinia, router } = await setup('OPERATOR')
     const { container } = render(AppShell, { slots: { default: '<p>Contenido</p>' }, global: { plugins: [pinia, router] } })
     expect(container.querySelector('.account-help')).toBeNull()
-    const summary = screen.getByText('Mi cuenta')
-    const details = summary.closest('details')!
-    details.open = true
-    expect(within(details).getByRole('link', { name: 'Cuenta y privacidad' }).getAttribute('href')).toBe('/app/account')
-    await fireEvent.keyDown(summary, { key: 'Escape' })
-    expect(details.open).toBe(false)
+    expect(screen.getByRole('link', { name: 'Mi cuenta' }).getAttribute('href')).toBe('/app/account')
+    expect(container.querySelector('.user-menu')).toBeNull()
   })
   it('turns analytics off immediately through the runtime setter and can enable it again', async () => {
     localStorage.setItem(ANALYTICS_KEY, '{"queue":["pending"]}')

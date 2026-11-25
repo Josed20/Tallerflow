@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { Columns3, LayoutDashboard, LogOut, Plus, UserRound, Users, UsersRound } from '@lucide/vue'
+import { Columns3, Settings, LayoutDashboard, LogOut, Plus, Users, UsersRound } from '@lucide/vue'
 import BrandLogo from '../../components/BrandLogo.vue'
 import { useSessionStore } from './session.store'
 import { canManageOperations } from './role-policy'
@@ -28,16 +28,10 @@ async function signOut() {
         <RouterLink v-if="canManage" to="/app/clients"><Users :size="18" aria-hidden="true" /> Clientes</RouterLink>
         <RouterLink v-if="canManage" class="app-shell__nav-action" to="/app/orders/new"><Plus :size="18" aria-hidden="true" /> Nueva orden</RouterLink>
         <RouterLink v-if="canManage" to="/app/team"><UsersRound :size="18" aria-hidden="true" /> Equipo</RouterLink>
+        <RouterLink v-if="canManage" to="/app/settings"><Settings :size="18" aria-hidden="true" /> Ajustes</RouterLink>
       </nav>
       <div class="app-shell__footer">
-        <details class="user-menu" @keydown.esc="($event.currentTarget as HTMLDetailsElement).open = false">
-          <summary><UserRound :size="18" aria-hidden="true" /><span>Mi cuenta</span></summary>
-          <nav aria-label="Menú de usuario">
-            <RouterLink to="/app/account" @click="($event.currentTarget as HTMLElement).closest('details')?.removeAttribute('open')">Cuenta y privacidad</RouterLink>
-            <RouterLink to="/privacidad">Política de privacidad</RouterLink>
-          </nav>
-        </details>
-        <div class="app-shell__user"><span class="app-shell__avatar" aria-hidden="true">{{ (session.principal?.displayName || session.principal?.email || 'U').charAt(0).toUpperCase() }}</span><span><strong>{{ session.principal?.displayName || session.principal?.email }}</strong><small>{{ session.principal?.role === 'OWNER' ? 'Propietario' : session.principal?.role === 'ADMIN' ? 'Administrador' : 'Operador' }}</small></span></div>
+<RouterLink to="/app/account" class="app-shell__user" aria-label="Mi cuenta" title="Mi cuenta"><span class="app-shell__avatar" aria-hidden="true">{{ (session.principal?.displayName || session.principal?.email || 'U').charAt(0).toUpperCase() }}</span><span><strong>{{ session.principal?.displayName || session.principal?.email }}</strong><small>{{ session.principal?.role === 'OWNER' ? 'Propietario' : session.principal?.role === 'ADMIN' ? 'Administrador' : 'Operador' }}</small></span></RouterLink>
         <button class="app-shell__logout" type="button" title="Cerrar sesión" @click="signOut"><LogOut :size="17" aria-hidden="true" /> Cerrar sesión</button>
       </div>
     </aside>
@@ -46,6 +40,12 @@ async function signOut() {
 </template>
 
 <style scoped>
+.app-shell__content :deep(h1),.app-shell__content :deep(h2),.app-shell__content :deep(h3){font-family:var(--tf-font-body);font-variation-settings:normal;letter-spacing:-.025em}
+.app-shell__content :deep(h1){font-weight:700}.app-shell__content :deep(h2){font-weight:650}
+.app-shell .app-shell__workshop{background:transparent;border:0;border-bottom:1px solid var(--tf-shell-line);border-radius:0;padding:.75rem .25rem}.app-shell .app-shell__workshop::before,.app-shell .app-shell__workshop::after{display:none}.app-shell .app-shell__workshop strong{text-transform:none;letter-spacing:normal;font-family:var(--tf-font-body);font-size:.9rem}
+.app-shell__content :deep(.clients-notice),.app-shell__content :deep(.detail-notice){position:fixed;top:1.25rem;right:1.25rem;width:min(420px,calc(100vw - 2.5rem));z-index:300;box-shadow:0 8px 30px rgb(15 35 60 / 16%);border-radius:12px;padding:1rem}
+
+.app-shell .app-shell__user{display:flex;text-decoration:none;min-height:52px;padding:.5rem;border-radius:8px}.app-shell__user:hover{background:var(--tf-shell-hover)}
 .app-shell { min-height: 100vh; background: var(--tf-page); color: var(--tf-ink); }
 .app-shell__sidebar { position: relative; display: flex; flex-direction: column; gap: 1rem; padding: 1.2rem; color: var(--tf-on-shell-muted); background: var(--tf-shell); border-bottom: 3px solid var(--tf-shell-thread); }
 .app-shell__brand { display: inline-flex; width: fit-content; min-height: 44px; align-items: center; color: var(--tf-on-shell); font-size: 1.05rem; text-decoration: none; }
@@ -74,17 +74,17 @@ async function signOut() {
 @media (min-width: 900px) { .app-shell { display: grid; grid-template-columns: 14.5rem minmax(0, 1fr); } .app-shell__sidebar { position: sticky; top: 0; height: 100vh; border-bottom: 0; border-right: 3px solid var(--tf-shell-thread); } .app-shell__nav { flex-direction: column; } .app-shell__footer { width: 100%; flex-direction: column; align-items: stretch; gap: .6rem; margin: auto 0 0; padding-top: 1rem; border-top: 1px solid var(--tf-shell-line); } .app-shell__logout { width: 100%; } }
 @media (max-width: 899px) { .app-shell__sidebar { gap: .75rem; } .app-shell__workshop { order: 2; padding: .4rem 1rem .35rem; } .app-shell__workshop small { display: none; } .app-shell__nav a.router-link-exact-active::before { left: 25%; right: 25%; top: auto; bottom: 0; width: auto; height: 3px; } .app-shell__footer { margin-left: 0; } .app-shell__user { display: none; } .app-shell__nav { order: 3; display: flex; flex-wrap: nowrap; gap: .35rem; margin: 0 -1.2rem; padding: 0 1.2rem .1rem; overflow-x: auto; scrollbar-width: none; } .app-shell__nav::-webkit-scrollbar { display: none; } .app-shell__nav a { flex: 1 1 0; flex-direction: column; justify-content: center; min-width: 0; padding: .4rem .25rem; font-size: .75rem; gap: .15rem; white-space: nowrap; } .app-shell__nav a svg { flex: 0 0 auto; } .app-shell__nav .app-shell__nav-action { display: none; } .app-shell__logout { position: absolute; top: .7rem; right: 1rem; font-size: 0; } .app-shell__logout svg { width: 20px; height: 20px; } }
 
-.user-menu { position: relative; }
-.user-menu summary { display: flex; align-items: center; gap: .5rem; min-height: 48px; padding: 0 .75rem; color: var(--tf-on-shell); font-weight: 700; cursor: pointer; border-radius: var(--tf-radius); }
-.user-menu summary::marker { content: ''; }
-.user-menu summary::-webkit-details-marker { display: none; }
-.user-menu summary:hover { background: var(--tf-shell-hover); }
-.user-menu summary:focus-visible, .user-menu a:focus-visible { outline: 3px solid var(--tf-on-shell); outline-offset: 2px; }
-.user-menu nav { position: absolute; bottom: 100%; left: 0; z-index: 20; display: grid; width: max-content; max-width: calc(100vw - 3rem); padding: .5rem; border: 1px solid var(--tf-shell-line); border-radius: var(--tf-radius); background: var(--tf-shell); }
-.user-menu a { display: flex; align-items: center; min-height: 48px; padding: 0 .75rem; color: var(--tf-on-shell); }
-@media (max-width: 899px) {
-  .user-menu { position: absolute; top: .7rem; right: 4rem; }
-  .user-menu nav { top: 100%; bottom: auto; left: auto; right: 0; }
-  .app-shell__brand { max-width: calc(100% - 11rem); }
+.app-shell__user:focus-visible { outline: 3px solid var(--tf-shell-accent); outline-offset: 2px; }
+.app-shell__user.router-link-active { background: var(--tf-shell-raised); }
+@media(max-width:899px) {
+  .app-shell__sidebar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; padding: .75rem 1rem; }
+  .app-shell__brand { max-width: 100%; }
+  .app-shell__footer { grid-column: 2; grid-row: 1; gap: .25rem; }
+  .app-shell .app-shell__user { padding: .25rem; min-height: 44px; }
+  .app-shell__user > span:last-child { display: none; }
+  .app-shell__logout { position: static; padding: .5rem; }
+  .app-shell__workshop, .app-shell__nav { grid-column: 1 / -1; }
+  .app-shell .app-shell__workshop { padding: .35rem 0 .6rem; }
+  .app-shell__nav { margin: 0; padding: 0; }
 }
 </style>

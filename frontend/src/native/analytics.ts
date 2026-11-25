@@ -1,13 +1,20 @@
 export const ANALYTICS_KEY = 'tallerflow.analytics.v1'
 export const ANALYTICS_DISABLED_KEY = 'tallerflow.analytics.disabled'
 export const ANALYTICS_PREFERENCE_EVENT = 'tallerflow:analytics-preference'
+export const ANALYTICS_EVENT_PREFIX = `${ANALYTICS_KEY}.event.`
+
+export function clearAnalytics(storage: Storage): void {
+  const keys = Array.from({ length: storage.length }, (_, index) => storage.key(index))
+  for (const key of keys) if (key?.startsWith(ANALYTICS_EVENT_PREFIX)) storage.removeItem(key)
+  storage.removeItem(ANALYTICS_KEY)
+}
 
 // Importing preferences never starts telemetry. Runtime listeners synchronously
 // clear memory and abort pending delivery when this setter disables it.
 export function setAnalyticsDisabled(disabled: boolean): void {
   if (disabled) {
     localStorage.setItem(ANALYTICS_DISABLED_KEY, 'true')
-    localStorage.removeItem(ANALYTICS_KEY)
+    clearAnalytics(localStorage)
   } else localStorage.removeItem(ANALYTICS_DISABLED_KEY)
   window.dispatchEvent(new CustomEvent(ANALYTICS_PREFERENCE_EVENT, { detail: { disabled } }))
 }
@@ -43,26 +50,54 @@ export class AnalyticsQueue {
   private sending = false
   private enabled = true
   constructor(private storage: Storage, private now = () => Date.now(), private random = () => crypto.randomUUID()) {
+    this.state = this.read()
+    // Migrate the former shared array once. Events now have independent keys:
+    // a different tab can never replace an event while saving its own queue.
+    for (const pending of this.state.queue) this.store(pending)
+    this.state.queue = []
+    this.save()
+  }
+  private read(): State {
     let stored: State | null = null
-    try { stored = JSON.parse(storage.getItem(ANALYTICS_KEY) || 'null') } catch { /* corrupt storage starts a fresh installation */ }
-    this.state = stored && UUID.test(stored.installation) && typeof stored.opened === 'boolean' && Array.isArray(stored.queue)
-      ? { installation: stored.installation, opened: stored.opened, queue: stored.queue.filter(p => validPending(p, now())).slice(-100) }
-      : { installation: random(), opened: false, queue: [] }
+    try { stored = JSON.parse(this.storage.getItem(ANALYTICS_KEY) || 'null') } catch { /* corrupt storage starts a fresh installation */ }
+    return stored && UUID.test(stored.installation) && typeof stored.opened === 'boolean' && Array.isArray(stored.queue)
+      ? { installation: stored.installation, opened: stored.opened, queue: stored.queue.filter(p => validPending(p, this.now())).slice(-100) }
+      : { installation: this.random(), opened: false, queue: [] }
   }
   private save() { if (this.enabled) this.storage.setItem(ANALYTICS_KEY, JSON.stringify(this.state)) }
+  private store(pending: Pending) {
+    this.storage.setItem(`${ANALYTICS_EVENT_PREFIX}${pending.event.id}`, JSON.stringify(pending))
+  }
+  private pending(): Pending[] {
+    const keys = Array.from({ length: this.storage.length }, (_, index) => this.storage.key(index))
+    const pending: Pending[] = []
+    for (const key of keys) {
+      if (!key?.startsWith(ANALYTICS_EVENT_PREFIX)) continue
+      let item: Pending | null = null
+      try { item = JSON.parse(this.storage.getItem(key) || 'null') } catch { /* discard corrupt metadata */ }
+      if (item && validPending(item, this.now()) && key === `${ANALYTICS_EVENT_PREFIX}${item.event.id}`) pending.push(item)
+      else this.storage.removeItem(key)
+    }
+    pending.sort((a, b) => a.event.occurred_at.localeCompare(b.event.occurred_at) || a.event.id.localeCompare(b.event.id))
+    for (const item of pending.slice(0, -100)) this.storage.removeItem(`${ANALYTICS_EVENT_PREFIX}${item.event.id}`)
+    return pending.slice(-100)
+  }
   disable(): void {
     this.enabled = false
     this.state = { installation: this.random(), opened: false, queue: [] }
-    this.storage.removeItem(ANALYTICS_KEY)
+    clearAnalytics(this.storage)
   }
   enable(): void { this.enabled = true }
   enqueue(type: AnalyticsEvent['type'], channel: AnalyticsEvent['channel'], version: string, actor: string | null): void {
     if (!this.enabled) return
+    this.state = this.read()
     if (type === 'first_open' && this.state.opened) return
     const pending: Pending = { event: { id: this.random(), installation_id: this.state.installation, type, occurred_at: new Date(this.now()).toISOString(), channel, version }, actor }
     if (!validPending(pending, this.now())) return
-    this.state.queue = this.state.queue.filter(p => validPending(p, this.now())).slice(-99)
-    this.state.queue.push(pending)
+    const previous = this.pending()
+    if (previous.length >= 100) this.storage.removeItem(`${ANALYTICS_EVENT_PREFIX}${previous[0]!.event.id}`)
+    this.store(pending)
+    this.state.queue = []
     if (type === 'first_open') this.state.opened = true
     this.save()
   }
@@ -70,17 +105,14 @@ export class AnalyticsQueue {
     if (this.sending || !this.enabled) return
     this.sending = true
     try {
-      this.state.queue = this.state.queue.filter(p => validPending(p, this.now()))
-      for (const p of [...this.state.queue]) {
+      for (const p of this.pending()) {
         // Never attribute another account's queued event to the current session.
         if (p.actor !== null && p.actor !== actor) continue
         const result = await send(p.event).catch(() => 'retry' as const)
         if (!this.enabled) return
         if (result === 'retry') break
-        this.state.queue = this.state.queue.filter(item => item.event.id !== p.event.id)
-        this.save()
+        this.storage.removeItem(`${ANALYTICS_EVENT_PREFIX}${p.event.id}`)
       }
-      this.save()
     } finally { this.sending = false }
   }
 }

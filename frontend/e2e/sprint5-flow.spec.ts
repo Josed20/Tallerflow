@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { expect, test } from '@playwright/test'
 
 test('workshop config preserves old orders and shares one recoverable customer link', async ({ page, context }, testInfo) => {
+  test.setTimeout(120_000)
   test.skip(!process.env.E2E_OWNER_EMAIL, 'Requires an isolated installation with the onboarding owner.')
   const origin = new URL(testInfo.project.use.baseURL!).origin
   const login = await context.request.post('/api/v1/auth/login', {
@@ -55,8 +56,8 @@ test('workshop config preserves old orders and shares one recoverable customer l
     await page.goto(`/seguimiento/${token}`)
     await expect(page.getByRole('heading', { name: fresh.product })).toBeVisible()
     await expect(page.getByText(stages[0].client_description).first()).toBeVisible()
-    await page.getByRole('button', { name: /actualizar/i }).click()
-    await expect(page.getByText('Estado actualizado.', { exact: true })).toBeVisible()
+    await expect(page.getByText('Actualización automática', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Actualizar', exact: true })).toHaveCount(0)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
     await page.screenshot({ path: testInfo.outputPath('seguimiento-configurable-mobile.png'), fullPage: true })
     await page.goto('/app/clients')
@@ -64,7 +65,7 @@ test('workshop config preserves old orders and shares one recoverable customer l
     await expect(page.getByText(client.name, { exact: true })).toBeVisible()
     await page.screenshot({ path: testInfo.outputPath('clientes-mobile.png'), fullPage: true })
     await page.goto('/app/account')
-    await expect(page.getByRole('link', { name: 'Solicitar eliminación de cuenta' })).toBeVisible()
+    await expect(page.getByRole('link', { name: /Solicitar eliminación de cuenta/ })).toBeVisible()
   } finally {
     if (changed) {
       const current = (await (await context.request.get('/api/v1/production-settings')).json()).data

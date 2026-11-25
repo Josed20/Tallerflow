@@ -71,3 +71,9 @@ jobs:
           name: TallerFlow-android-play-bundle
           path: frontend/android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
+      - name: Upload R8 mapping for crash diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: TallerFlow-android-mapping
+          path: frontend/android/app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: error

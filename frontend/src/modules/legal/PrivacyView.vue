@@ -1,18 +1,19 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
 import BrandLogo from '../../components/BrandLogo.vue'
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 </script>
 
 <template>
   <div class="legal-page">
-    <header class="legal-header">
+    <header v-if="!embedded" class="legal-header">
       <div class="legal-container legal-header__inner">
         <BrandLogo :size="32" />
         <RouterLink to="/" class="legal-back-link">← Volver al inicio</RouterLink>
       </div>
     </header>
 
-    <main class="legal-container legal-content">
+    <component :is="embedded ? 'div' : 'main'" class="legal-container legal-content">
       <article class="legal-article">
         <header class="legal-article__header">
           <span class="legal-badge">Protección de datos</span>
@@ -70,17 +71,17 @@ import BrandLogo from '../../components/BrandLogo.vue'
 
         <section>
           <h2>6. Derechos ARCO y Contacto</h2>
-          <p>Para eliminar tu cuenta y los datos asociados, consulta los <RouterLink to="/eliminar-cuenta">pasos para solicitar la eliminación</RouterLink>.</p>
+          <p>Para eliminar tu cuenta y los datos asociados, consulta los <RouterLink :to="embedded ? '/app/account/delete' : '/eliminar-cuenta'">pasos para solicitar la eliminación</RouterLink>.</p>
           <p>
             Puedes ejercer en cualquier momento tus derechos de Acceso, Rectificación, Cancelación y Oposición (ARCO) enviando un mensaje a <a href="mailto:tallerflow.pe@gmail.com">tallerflow.pe@gmail.com</a> con el asunto "Derechos ARCO", indicando el correo de tu cuenta registrada.
           </p>
         </section>
       </article>
-    </main>
+    </component>
 
-    <footer class="legal-footer">
+    <footer v-if="!embedded" class="legal-footer">
       <div class="legal-container">
-        <p>© 2026 TallerFlow · <RouterLink to="/terminos">Términos de servicio</RouterLink> · Contacto: tallerflow.pe@gmail.com</p>
+        <p>© 2026 TallerFlow · <RouterLink :to="embedded ? '/app/account/terms' : '/terminos'">Términos de servicio</RouterLink> · Contacto: tallerflow.pe@gmail.com</p>
       </div>
     </footer>
   </div>

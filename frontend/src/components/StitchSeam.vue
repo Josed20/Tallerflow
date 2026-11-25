@@ -20,13 +20,13 @@ watch(() => props.completed, (now, before) => {
 
 <style scoped>
 .seam { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)) auto; align-items: center; gap: 3px; }
-.seam__stitch { position: relative; height: 3px; overflow: hidden; border-radius: 2px; background: repeating-linear-gradient(90deg, var(--tf-border-soft) 0 4px, transparent 4px 7px); }
+.seam__stitch { position: relative; height: 4px; overflow: hidden; border-radius: 2px; background: var(--tf-border-soft); }
 .seam__stitch::after { content: ""; position: absolute; inset: 0; background: var(--tf-primary); transform: scaleX(0); transform-origin: left; }
 .seam__stitch.is-done::after { transform: scaleX(1); }
 .seam__stitch.is-sewing::after { animation: seam-sew .45s ease-out both; }
 .seam__knot { width: 7px; height: 7px; border: 2px solid var(--tf-border-soft); border-radius: 50%; }
 .seam__knot.is-done { border-color: var(--tf-primary); background: var(--tf-primary); }
-.seam--late .seam__stitch { background: repeating-linear-gradient(90deg, var(--tf-danger-border) 0 4px, transparent 4px 7px); }
+.seam--late .seam__stitch { background: var(--tf-danger-border); }
 @keyframes seam-sew { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @media (prefers-reduced-motion: reduce) { .seam__stitch.is-sewing::after { animation: none; transform: scaleX(1); } }
 </style>

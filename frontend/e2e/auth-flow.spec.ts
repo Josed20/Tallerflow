@@ -39,11 +39,29 @@ test('owner completes the secure Sprint 1 authentication journey', async ({ page
   await expect(page).toHaveURL(/\/app$/)
 
   const browserState = await page.evaluate(() => ({
-    local: Object.keys(localStorage),
+    local: Object.fromEntries(Object.entries(localStorage)),
     session: Object.keys(sessionStorage),
     cookie: document.cookie,
   }))
-  expect(browserState.local).toEqual([])
+  const eventKey = /^tallerflow\.analytics\.v1\.event\.[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  for (const [key, value] of Object.entries(browserState.local)) {
+    expect(['tallerflow.analytics.v1', 'tallerflow.analytics.disabled'].includes(key) || eventKey.test(key)).toBe(true)
+    if (key === 'tallerflow.analytics.disabled') { expect(value).toBe('true'); continue }
+    const stored = JSON.parse(value)
+    if (key === 'tallerflow.analytics.v1') {
+      expect(Object.keys(stored).sort()).toEqual(['installation', 'opened', 'queue'])
+      expect(stored.queue).toEqual([])
+    } else {
+      expect(key).toBe(`tallerflow.analytics.v1.event.${stored.event.id}`)
+      expect(Object.keys(stored).sort()).toEqual(['actor', 'event'])
+      expect(Object.keys(stored.event).sort()).toEqual(['channel', 'id', 'installation_id', 'occurred_at', 'type', 'version'])
+    }
+  }
+  const persisted = JSON.stringify(browserState.local)
+  expect(persisted).not.toContain(ownerEmail)
+  expect(persisted).not.toContain(temporaryPassword)
+  expect(persisted).not.toContain(replacementPassword)
+  expect(persisted).not.toMatch(/csrf|session_token|password_hash|Bearer /i)
   expect(browserState.session).toEqual([])
   expect(browserState.cookie).not.toContain('tallerflow_session')
 

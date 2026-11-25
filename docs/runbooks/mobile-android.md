@@ -30,7 +30,7 @@ Push-Location frontend/android
 Pop-Location
 ```
 
-El archivo resultante es `frontend/android/app/build/outputs/apk/debug/app-debug.apk`. Solo la vista previa creada con `TF_ANDROID_LOCAL_PREVIEW=1` puede usar Docker local por USB; el APK de produccion requiere la API HTTPS y la sesion movil de Jose.
+El archivo resultante es `frontend/android/app/build/outputs/apk/debug/app-debug.apk`. El paquete debug es `pe.tallerflow.app.debug`, se llama «TallerFlow local» y se instala junto a la versión de Play Store. Solo la vista previa creada con `TF_ANDROID_LOCAL_PREVIEW=1` puede usar Docker local por USB; el APK de produccion requiere la API HTTPS y la sesion movil de Jose.
 
 Para volver al build móvil normal en la misma terminal, quita `TF_ANDROID_LOCAL_PREVIEW`, configura una URL HTTPS real y ejecuta `android:sync`:
 
@@ -54,6 +54,31 @@ The Android app uses encrypted storage backed by Android Keystore for the opaque
 The `Android APK` workflow runs manually or on a `v*` tag and targets `https://tallerflowpe.com`. Set GitHub Actions secrets `TF_ANDROID_KEYSTORE_B64`, `TF_ANDROID_KEYSTORE_PASSWORD`, `TF_ANDROID_KEY_ALIAS`, and `TF_ANDROID_KEY_PASSWORD`. The keystore must also be stored securely outside GitHub by José; losing it prevents signing future updates with the same identity. The workflow builds both a signed APK and an Android App Bundle (AAB), verifies both signatures, and prints their SHA-256 digests. Download the APK artifact `TallerFlow-<run_number>-android` and test it on an older and a current Android phone before distributing it. For Google Play, download `TallerFlow-android-play-bundle`, containing `app-release.aab` from `frontend/android/app/build/outputs/bundle/release/`. A GitHub Actions artifact is for the team and is not a permanent public download URL for the landing page; choose an approved release host before Lucero links it.
 
 Never commit a `.jks`, `.keystore`, APK, password, or `.env`. The Android project ignores them. Check the installed icon and splash on both test phones before release.
+
+## Optimización y avisos de Play Console
+
+La compilación release aplica R8 y reducción de recursos. CI compila tanto debug
+como release; el workflow firmado conserva `mapping.txt` en el artefacto
+`TallerFlow-android-mapping` para interpretar fallas de código ofuscado. El AAB
+incluye los metadatos de desofuscación generados por Android Gradle Plugin.
+
+La revisión directa de Console del 24 de noviembre de 2026 identificó en 1.0.1:
+
+- Ofuscación del 1 %, con fecha indicada de febrero de 2027. Se habilitó R8;
+  el porcentaje nuevo debe verificarse tras el análisis del AAB en Play.
+- APIs antiguas en Material y `IONCAMRImageEditorActivity`. Material se actualizó
+  a 1.14.0, que protege esas llamadas en Android 15+. El editor de Ionic todavía
+  usa `getStatusBarColor` y `getNavigationBarColor` en el código publicado de
+  1.0.3; no se considera eliminado este aviso upstream. La captura de TallerFlow
+  no solicita edición de fotos. No se suprimen diagnósticos para ocultarlo.
+- Orientación vertical heredada de `GmsBarcodeScanningDelegateActivity`. El
+  manifiesto de la app reemplaza esa restricción por orientación no especificada
+  y permite redimensionar la actividad. Debe comprobarse el escaneo en vertical,
+  horizontal y pantalla grande antes de distribuir.
+
+Referencias: [R8](https://developer.android.com/build/enable-app-optimization),
+[corrección de Material](https://github.com/material-components/material-components-android/issues/4507)
+y [fuentes publicadas de Ionic](https://repo1.maven.org/maven2/io/ionic/libs/ioncamera-android/1.0.3/).
 
 ## Inicio y marca móvil
 

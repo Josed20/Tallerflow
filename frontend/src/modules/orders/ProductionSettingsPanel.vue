@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import UiNotice from '../../components/UiNotice.vue'
 import { onMounted, ref } from 'vue'
 import { productionApi, type ProductionSettings } from './production-api'
 import { useSessionStore } from '../session/session.store'
@@ -33,10 +34,10 @@ function useConfectionExample() {
 onMounted(load)
 </script>
 <template>
-  <details class="production-settings">
+  <details class="production-settings" open>
     <summary>Configurar etapas de producción</summary>
     <p>La plantilla se copia al crear una orden. Las órdenes anteriores conservan sus etapas. Puedes definir de una a veinte etapas.</p>
-    <p role="status">{{ message }}</p>
+    <UiNotice :message="message" />
     <button v-if="!settings" class="ops-button" type="button" @click="load">Volver a cargar la plantilla</button>
     <form v-if="settings" @submit.prevent="save">
       <fieldset :disabled="busy">

@@ -29,6 +29,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       strictPort: true,
+      watch: { ignored: ['**/android/**', '**/dist/**', '**/test-results/**', '**/playwright-report/**'] },
       proxy: { '/api': proxy, '/health': proxy },
     },
   }
