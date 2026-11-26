@@ -30,6 +30,7 @@ type RequestLimiter interface {
 
 type HandlerConfig struct {
 	AllowedOrigin string
+	MobileOrigins []string
 	Environment   string
 	Secure        bool
 	// Each endpoint has its own per-IP budget, so a burst of resends cannot
@@ -84,7 +85,7 @@ type emailInput struct {
 }
 
 func (h *Handler) Register(c *gin.Context) {
-	if !security.ValidRequestOrigin(c.Request, h.config.AllowedOrigin) {
+	if !h.validRegistrationOrigin(c) {
 		h.fail(c, http.StatusForbidden, "ORIGIN_INVALID", "Request origin is not allowed.", gin.H{})
 		return
 	}
@@ -114,7 +115,7 @@ func (h *Handler) Register(c *gin.Context) {
 }
 
 func (h *Handler) Resend(c *gin.Context) {
-	if !security.ValidRequestOrigin(c.Request, h.config.AllowedOrigin) {
+	if !h.validRegistrationOrigin(c) {
 		h.fail(c, http.StatusForbidden, "CSRF_INVALID", "CSRF validation failed.", gin.H{})
 		return
 	}
@@ -136,6 +137,13 @@ func (h *Handler) Resend(c *gin.Context) {
 	default:
 		h.fail(c, http.StatusInternalServerError, "INTERNAL_ERROR", "An unexpected error occurred.", gin.H{})
 	}
+}
+
+// Registration and resend do not issue sessions. Email verification still
+// requires the web origin because it sets a browser session cookie.
+func (h *Handler) validRegistrationOrigin(c *gin.Context) bool {
+	return security.ValidRequestOrigin(c.Request, h.config.AllowedOrigin) ||
+		security.MobileOriginAllowed(c.GetHeader("Origin"), h.config.MobileOrigins)
 }
 
 func (h *Handler) Verify(c *gin.Context) {

@@ -224,6 +224,7 @@ func buildApplication(cfg config.Config, options ...applicationOption) (*applica
 	}
 	signupHandler, err := signup.NewHandler(signupService, signup.HandlerConfig{
 		AllowedOrigin: cfg.AllowedOrigin, Environment: cfg.Environment, Secure: cfg.Environment != "development",
+		MobileOrigins:   cfg.MobileOrigins,
 		RegisterLimiter: signupLimiter("register", 5), ResendLimiter: signupLimiter("resend", 5), VerifyLimiter: signupLimiter("verify", 10),
 	})
 	if err != nil {
