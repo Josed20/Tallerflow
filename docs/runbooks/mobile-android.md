@@ -2,6 +2,22 @@
 
 The Vue application is packaged with Capacitor 8. The release APK connects to `https://tallerflowpe.com` through the mobile bearer session and CORS contract already merged in Sprint 3.
 
+## Registro de talleres desde Android
+
+El registro y el reenvío del correo de activación aceptan tanto el origen web
+(`TF_ALLOWED_ORIGIN`) como los orígenes exactos de la app (`TF_MOBILE_ORIGINS`).
+En producción, Android utiliza `https://localhost`. La configuración se comparte
+con el inicio de sesión móvil; no debe sustituirse por un comodín.
+
+Estos dos endpoints no crean una sesión ni emiten cookies. Se mantienen la
+validación de datos y los límites por IP. La activación se completa abriendo el
+enlace HTTPS del correo en el navegador e introduciendo la contraseña registrada;
+después se puede iniciar sesión en Android.
+
+Si el registro devuelve `ORIGIN_INVALID` desde Android y funciona desde la web,
+comprobar que el handler de registro recibe `TF_MOBILE_ORIGINS`. Esta corrección
+requiere desplegar la API, sin recompilar ni publicar otro AAB.
+
 ## Vista previa local por USB
 
 Esta modalidad sirve para recorrer las pantallas actuales, iniciar sesión en el Docker local y probar los botones nativos de cámara y escáner. Usa temporalmente la sesión web con cookie; no prueba el token bearer ni el servidor final. El celular y la laptop se conectan por USB con depuración habilitada. No hace falta conocer la IP de ninguno ni estar en la misma red Wi-Fi.

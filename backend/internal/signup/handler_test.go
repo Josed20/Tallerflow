@@ -51,7 +51,7 @@ func (l *countingLimiter) Allow(string) bool {
 	return l.seen <= l.limit
 }
 
-func newTestRouter(t *testing.T, service UseCases, limiter RequestLimiter) *gin.Engine {
+func newTestRouter(t *testing.T, service UseCases, limiter RequestLimiter, mobileOrigins ...string) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	if limiter == nil {
@@ -59,6 +59,7 @@ func newTestRouter(t *testing.T, service UseCases, limiter RequestLimiter) *gin.
 	}
 	handler, err := NewHandler(service, HandlerConfig{
 		AllowedOrigin: testOrigin, Environment: "production", Secure: true,
+		MobileOrigins:   mobileOrigins,
 		RegisterLimiter: limiter, ResendLimiter: limiter, VerifyLimiter: limiter,
 	})
 	require.NoError(t, err)
@@ -91,6 +92,46 @@ func errorCode(t *testing.T, recorder *httptest.ResponseRecorder) string {
 }
 
 const signupBody = `{"workshop_name":"Confecciones Lucho","owner_name":"Lucho","email":"lucho@taller.pe","password":"Secure signup password 2026!","accept_terms":true}`
+
+func TestSignupAndResendAllowOnlyConfiguredMobileOrigins(t *testing.T) {
+	for _, path := range []string{"/api/v1/signup", "/api/v1/auth/email-verifications/resend"} {
+		for _, origin := range []string{testOrigin, "https://localhost", "capacitor://localhost", "https://evil.example", "https://localhost.evil.example", "https://localhost:9999", "null", ""} {
+			t.Run(path+"/"+origin, func(t *testing.T) {
+				service := &stubUseCases{}
+				router := newTestRouter(t, service, nil, "https://localhost", "capacitor://localhost")
+				body := signupBody
+				if strings.HasSuffix(path, "/resend") {
+					body = `{"email":"lucho@taller.pe"}`
+				}
+				recorder := post(router, path, origin, body)
+				if origin == testOrigin || origin == "https://localhost" || origin == "capacitor://localhost" {
+					require.Equal(t, http.StatusAccepted, recorder.Code)
+				} else {
+					require.Equal(t, http.StatusForbidden, recorder.Code)
+					require.Empty(t, service.input.Email)
+				}
+				require.Empty(t, recorder.Result().Cookies())
+			})
+		}
+	}
+}
+
+func TestMobileSignupDoesNotBypassConfigurationOrRateLimit(t *testing.T) {
+	recorder := post(newTestRouter(t, &stubUseCases{}, nil), "/api/v1/signup", "https://localhost", signupBody)
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+	for _, path := range []string{"/api/v1/signup", "/api/v1/auth/email-verifications/resend"} {
+		recorder = post(newTestRouter(t, &stubUseCases{}, &countingLimiter{limit: 0}, "https://localhost"), path, "https://localhost", signupBody)
+		require.Equal(t, http.StatusTooManyRequests, recorder.Code)
+	}
+}
+
+func TestEmailVerificationRemainsRestrictedToWebOrigin(t *testing.T) {
+	service := &stubUseCases{}
+	recorder := post(newTestRouter(t, service, nil, "https://localhost"), "/api/v1/auth/email-verifications/consume", "https://localhost", `{"token":"token","password":"Owner password 2026!"}`)
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+	require.Empty(t, recorder.Result().Cookies())
+	require.Empty(t, service.verified)
+}
 
 func TestSignupAcceptsAValidRequestWith202AndNoCookie(t *testing.T) {
 	service := &stubUseCases{}

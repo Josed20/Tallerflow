@@ -71,6 +71,32 @@ func TestBuildApplicationAnswersMobilePreflightOnly(t *testing.T) {
 	require.Empty(t, foreign.Header().Get("Access-Control-Allow-Origin"))
 }
 
+func TestBuildApplicationPassesMobileOriginsToSignup(t *testing.T) {
+	db, mock, cleanup := applicationDatabase(t)
+	defer cleanup()
+	cfg := applicationConfig()
+	cfg.SignupEnabled = true
+	cfg.MobileOrigins = []string{"https://localhost"}
+	app, err := buildApplication(cfg, applicationTestOptions(db)...)
+	require.NoError(t, err)
+
+	for _, path := range []string{"/api/v1/signup", "/api/v1/auth/email-verifications/resend"} {
+		request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Origin", "https://localhost")
+		response := httptest.NewRecorder()
+		app.handler.ServeHTTP(response, request)
+		if path == "/api/v1/signup" {
+			require.Equal(t, http.StatusUnprocessableEntity, response.Code, response.Body.String())
+		} else {
+			require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
+		}
+		require.Equal(t, "https://localhost", response.Header().Get("Access-Control-Allow-Origin"))
+		require.Empty(t, response.Result().Cookies())
+	}
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestBuildApplicationRegistersOnboardingRoutesWithSeparateBootstrapURL(t *testing.T) {
 	db, _, cleanup := applicationDatabase(t)
 	defer cleanup()
